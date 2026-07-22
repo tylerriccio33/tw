@@ -41,6 +41,19 @@ twice filled the volume to the point that no shell command could run. Before any
 editor run, check free space; run it in the background and kill it if free space
 drops below ~3 GB.
 
+## Pre-commit (prek)
+
+`.pre-commit-config.yaml` runs `py-test`, `py-sim`, `cpp-test`, and
+`cargo clippy` on every commit via [`prek`](https://github.com/j178/prek), the
+Rust reimplementation of pre-commit — invoke it with `uvx prek`. This is the
+local, enforced substitute for CI: there is no GitHub Actions workflow in this
+repo, so these four checks are ~90% of what "correctness" means here.
+`unreal-test` is deliberately excluded — a full editor build is too slow for a
+commit hook — so it stays a manual step (see Workflow below).
+
+- `make pre-commit-install` — wire it into `.git/hooks/pre-commit` (one-time per clone).
+- `make pre-commit` — run every hook by hand, e.g. after editing the config itself.
+
 ## Architecture
 
 ```
