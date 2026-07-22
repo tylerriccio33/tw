@@ -24,8 +24,7 @@ unreal/*.VC.db
 unreal/*.VC.opendb
 
 # Baked geometry output (regenerate with `make bake`)
-# Uncomment if generated content should not be tracked:
-# unreal/Content/Map/
+unreal/Content/Map/
 
 # Editors
 .vscode/
