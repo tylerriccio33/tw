@@ -39,6 +39,12 @@ public:
 private:
     void HandleEvents(const TArray<FSimEvent>& Events);
 
+    /// The milestone-2 chrome: a stone control bar pinned to the bottom edge,
+    /// showing the selected army's regiments, the selected city's buildings, and
+    /// a right-hand cluster of treasury / turn / action buttons. Purely visual —
+    /// nothing here sends a command yet.
+    void DrawControlBar();
+
     struct FFeedLine
     {
         FString Text;
