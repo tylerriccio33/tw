@@ -1,0 +1,31 @@
+# Campaign balance — every tuning knob for the rules lives here.
+# Edit a value and rebuild; `engine/src/config.rs` loads this at startup.
+
+# --- economy ---
+# Recruitment: cavalry cost the most, then archers, then melee. A unit's gold
+# cost is also its battlefield "capability" — the most capable army wins.
+melee_cost: 30            # gold to queue one melee regiment
+archer_cost: 60           # gold to queue one archer regiment
+cav_cost: 100             # gold to queue one cavalry regiment
+recruit_pop_per_unit: 3000 # population per unit of per-turn training throughput
+regiment_upkeep: 10       # per-turn upkeep for a regiment in a field army
+garrison_upkeep: 3        # per-turn upkeep for a regiment garrisoned in a city
+farm_income: 10           # income per farm level
+market_income: 15         # income per market level
+trade_bonus: 25           # flat income per bordering trade partner
+tax_per_thousand: 20      # tax gold levied per 1000 population (the crown's income)
+
+# --- construction ---
+build_cost_per_level: 100 # gold to build to level N is N * this
+max_building_level: 3     # farm / market / barracks cap
+max_walls: 2              # wall level cap
+
+# --- war ---
+wall_defense_pct: 20      # defender strength bonus per wall level in an assault
+army_mp: 2                # movement points per army per turn; each hop costs 1
+siege_attrition_after: 2  # sieges starve the garrison after lasting this many turns
+
+# --- start & victory ---
+starting_treasury: 300    # gold each non-rebel faction begins with
+starting_army: 8          # regiments in each faction's founding army
+win_provinces: 12         # hold this many provinces to win the campaign

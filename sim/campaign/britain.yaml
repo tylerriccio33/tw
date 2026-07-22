@@ -1,0 +1,60 @@
+# The Britain campaign: England, Scotland, Wales and Ireland contest the isles,
+# with rebels holding the frontier lands. Edit here and rebuild — `data.rs` turns
+# this into the opening GameState.
+#
+# Faction order is authoritative: the FactionId constants in data.rs
+# (ENGLAND = 0, SCOTLAND = 1, ...) are indices into this list, rebels last.
+# `owner` on a province and `capital` on a faction reference a faction / province
+# by name. `capital` is a *province* name (Lothian), not the city on it (Edinburgh).
+
+factions:
+  - name: England
+    player: true
+    capital: London
+    generals: [Godwin, Aethelred, Harold, Edmund]
+  - name: Scotland
+    capital: Lothian
+    generals: [Malcolm, Duncan, William, Robert]
+  - name: Wales
+    capital: Cardiff
+    generals: [Llywelyn, Owain, Gruffudd, Rhys]
+  - name: Ireland
+    capital: Leinster
+    generals: [Brian, Conor, Diarmait, Niall]
+  - name: Rebels
+    rebel: true
+    generals: [Roger, Fulk, Gerald, Hugh]
+
+# tier: Village | Town | City | Capital
+provinces:
+  - { name: London,     city: London,     tier: Capital, owner: England,  base_income: 60, garrison: 5, walls: 1 }
+  - { name: York,       city: York,       tier: City,    owner: England,  base_income: 45, garrison: 3, walls: 1 }
+  - { name: Norwich,    city: Norwich,    tier: Town,    owner: England,  base_income: 40, garrison: 3, walls: 1 }
+  - { name: Exeter,     city: Exeter,     tier: Town,    owner: England,  base_income: 35, garrison: 3, walls: 1 }
+  - { name: Chester,    city: Chester,    tier: Town,    owner: Rebels,   base_income: 35, garrison: 4, walls: 1 }
+  - { name: Cardiff,    city: Cardiff,    tier: Capital, owner: Wales,    base_income: 45, garrison: 5, walls: 1 }
+  - { name: Caernarfon, city: Caernarfon, tier: Village, owner: Wales,    base_income: 25, garrison: 3, walls: 1 }
+  - { name: Lothian,    city: Edinburgh,  tier: Capital, owner: Scotland, base_income: 50, garrison: 5, walls: 1 }
+  - { name: Stirling,   city: Stirling,   tier: Town,    owner: Scotland, base_income: 35, garrison: 3, walls: 1 }
+  - { name: Highlands,  city: Inverness,  tier: Village, owner: Rebels,   base_income: 20, garrison: 4, walls: 0 }
+  - { name: Leinster,   city: Dublin,     tier: Capital, owner: Ireland,  base_income: 50, garrison: 5, walls: 1 }
+  - { name: Munster,    city: Cork,       tier: Town,    owner: Ireland,  base_income: 35, garrison: 3, walls: 1 }
+
+# Undirected adjacency by province name. Sea lanes (Exeter–Cardiff across the
+# Bristol Channel, Caernarfon–Leinster and Exeter–Munster across the Irish Sea)
+# read no differently from land borders here.
+edges:
+  - [London, York]
+  - [London, Norwich]
+  - [London, Exeter]
+  - [York, Chester]
+  - [York, Lothian]
+  - [Exeter, Cardiff]
+  - [Chester, Cardiff]
+  - [Chester, Caernarfon]
+  - [Cardiff, Caernarfon]
+  - [Lothian, Stirling]
+  - [Stirling, Highlands]
+  - [Caernarfon, Leinster]
+  - [Exeter, Munster]
+  - [Leinster, Munster]

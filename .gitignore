@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+
+# Rust
+/target/
+**/target/
+
+# Python
+sim/.venv/
+**/__pycache__/
+*.pyc
+sim/.sim-port
+.pytest_cache/
+*.egg-info/
+
+# Unreal Engine
+unreal/Binaries/
+unreal/Intermediate/
+unreal/DerivedDataCache/
+unreal/Saved/
+unreal/.vs/
+unreal/*.sln
+unreal/*.VC.db
+unreal/*.VC.opendb
+
+# Baked geometry output (regenerate with `make bake`)
+# Uncomment if generated content should not be tracked:
+# unreal/Content/Map/
+
+# Editors
+.vscode/
+.idea/
+*.swp

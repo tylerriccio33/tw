@@ -1,0 +1,398 @@
+//! Offline geometry bake: run the derived-geometry generators **once** and write
+//! standard assets into `unreal/Content/Map/`.
+//!
+//! ```text
+//! cargo run -p tw-bake --bin bake      # or: make bake
+//! ```
+//!
+//! Nothing here computes geometry. It calls `terrain`, `regions`, `rivers` and
+//! `forests` — the generators inherited from the retired Godot client, now
+//! living in `src/geom/` — converts the
+//! result into Unreal's coordinate system, and writes it out. That code is
+//! deterministic, it works, and it is throwaway once this has run — so it is
+//! reused rather than ported. The point is that none of it ever runs at runtime
+//! again: an unoptimized `terrain.rs` takes ~70 s just for the 960x720 mesh.
+//!
+//! # Why this is its own crate
+//!
+//! The geometry files import no engine or renderer types at all — they are pure
+//! computation over `geo.rs` + `elev.bin`. Keeping them in a standalone crate
+//! means the bake links nothing but serde, and the whole thing builds and runs
+//! in ~12 s from cold.
+//!
+//! # Coordinate systems
+//!
+//! Godot is Y-up, -Z forward, right-handed, with the map spanning +-620 x +-470
+//! world units. Unreal is Z-up, X forward, **left-handed**, and 1 unit = 1 cm.
+//! The conversion happens here, once, rather than at load in C++:
+//!
+//! ```text
+//! ue.x = -godot.z * SCALE
+//! ue.y =  godot.x * SCALE
+//! ue.z =  godot.y * SCALE
+//! ```
+//!
+//! That mapping has determinant -1, which is exactly the right-to-left-handed
+//! flip. It also inverts triangle orientation for free, so the indices are
+//! emitted in their original order and come out right-hand-rule consistent with
+//! the normals — asserted by `check_winding`, not assumed.
+
+// The inherited files carry a few helpers that only the retired Godot client
+// called (`faction_color`, `province_at`, `sea_extent`, ...). Pruning them would
+// mean editing generated/ported geometry code for no functional gain.
+#![allow(dead_code)]
+
+// The geometry generators, declared at the crate root so the `crate::geo` /
+// `crate::terrain` paths inside these files resolve unchanged.
+#[path = "geom/config.rs"]
+mod config;
+#[path = "geom/forests.rs"]
+mod forests;
+#[path = "geom/geo.rs"]
+mod geo;
+#[path = "geom/mapdata.rs"]
+mod mapdata;
+#[path = "geom/regions.rs"]
+mod regions;
+#[path = "geom/rivers.rs"]
+mod rivers;
+#[path = "geom/terrain.rs"]
+mod terrain;
+
+use std::fs::{self, File};
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
+
+use serde_json::{json, Value};
+
+use config::config;
+use mapdata::{coastline, map_extent};
+
+/// Unreal units per Godot unit. Godot's 1240 x 940 map at 1 uu = 1 cm would be a
+/// 12.4 m diorama; x100 makes it 1.24 km across, so a province reads as the
+/// kilometres of ground it is meant to be.
+const SCALE: f32 = 100.0;
+
+/// Province names in engine order, for readable assertion failures. Mirrors the
+/// table in `mapdata.rs`'s tests, which is about to be deleted with it.
+const NAMES: [&str; 12] = [
+    "London",
+    "York",
+    "Norwich",
+    "Exeter",
+    "Chester",
+    "Cardiff",
+    "Caernarfon",
+    "Lothian",
+    "Stirling",
+    "Highlands",
+    "Leinster",
+    "Munster",
+];
+
+/// Godot world XZ(Y) -> Unreal world XYZ, in centimetres.
+fn to_ue(p: [f32; 3]) -> [f32; 3] {
+    [-p[2] * SCALE, p[0] * SCALE, p[1] * SCALE]
+}
+
+/// A direction (normal) rides the same basis change. It carries no translation
+/// and the map is orthogonal up to the uniform scale, so this stays unit-length.
+fn dir_to_ue(n: [f32; 3]) -> [f32; 3] {
+    [-n[2], n[0], n[1]]
+}
+
+/// A ground-plane point, for things that only have XZ.
+fn xz_to_ue(x: f32, z: f32) -> [f32; 2] {
+    [-z * SCALE, x * SCALE]
+}
+
+fn main() {
+    let out = out_dir();
+    fs::create_dir_all(&out).expect("could not create the output directory");
+    println!("baking into {}", out.display());
+
+    let polys = coastline();
+    check_coastline(&polys);
+    check_cities_on_land();
+
+    bake_terrain(&out);
+    bake_borders(&out);
+    bake_rivers(&out);
+    bake_forests(&out);
+    bake_provinces(&out);
+
+    println!("done.");
+}
+
+/// `unreal/Content/Map/`, resolved relative to this crate rather than to
+/// whatever directory cargo was invoked from.
+fn out_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("bake has a parent directory")
+        .join("unreal/Content/Map")
+}
+
+// --- assertions ------------------------------------------------------------
+
+/// Every province must sit on dry land — the terrain surface at the city is
+/// above sea level. Ported from `mapdata.rs`'s `every_city_is_on_land` test as a
+/// hard assertion, because after this bake there is no test suite left to run
+/// it: a city that has slipped into the sea would ship as an unreachable
+/// settlement frozen into a static asset.
+fn check_cities_on_land() {
+    assert_eq!(
+        geo::POS.len(),
+        NAMES.len(),
+        "position table and province table disagree in length"
+    );
+    for (p, &name) in NAMES.iter().enumerate() {
+        let (x, z) = geo::POS[p];
+        let h = terrain::height(x, z);
+        assert!(
+            h > 0.0,
+            "{name} (province {p}) is under water at ({x:.1}, {z:.1}), height {h:.2}"
+        );
+    }
+    println!("  all {} cities are on dry land", NAMES.len());
+}
+
+/// The coastline mask must be well-formed: real loops with finite points.
+fn check_coastline(polys: &[Vec<(f32, f32)>]) {
+    assert!(!polys.is_empty(), "no coastline rings");
+    for (i, ring) in polys.iter().enumerate() {
+        assert!(ring.len() >= 3, "ring {i} has fewer than 3 points");
+        for &(x, z) in ring {
+            assert!(
+                x.is_finite() && z.is_finite(),
+                "ring {i} has non-finite point"
+            );
+        }
+    }
+}
+
+/// After the basis change, a triangle's right-hand-rule normal must agree with
+/// the per-vertex normals we emit alongside it.
+///
+/// This is the one thing about the conversion that is easy to get backwards and
+/// impossible to notice in a diff: get it wrong and the mesh imports with every
+/// face pointing into the hill, which reads as a lighting bug three phases
+/// later. The determinant of the Godot-to-Unreal map is -1, so the flip happens
+/// whether or not you think about it — assert the result instead of reasoning
+/// about the convention.
+fn check_winding(t: &terrain::TerrainData) {
+    let mut checked = 0;
+    for tri in t.indices.chunks_exact(3) {
+        let [a, b, c] = [
+            to_ue(t.positions[tri[0] as usize]),
+            to_ue(t.positions[tri[1] as usize]),
+            to_ue(t.positions[tri[2] as usize]),
+        ];
+        let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let g = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        let n = dir_to_ue(t.normals[tri[0] as usize]);
+        let dot = g[0] * n[0] + g[1] * n[1] + g[2] * n[2];
+        // Degenerate triangles (flat sea floor slivers) have a zero-length
+        // cross product and nothing to say either way.
+        if dot.abs() > 1e-3 {
+            assert!(
+                dot > 0.0,
+                "triangle winding disagrees with the emitted normals: every \
+                 face would import inside-out"
+            );
+            checked += 1;
+        }
+        if checked >= 10_000 {
+            break;
+        }
+    }
+    println!("  winding agrees with normals over {checked} triangles");
+}
+
+// --- the five outputs ------------------------------------------------------
+
+fn bake_terrain(out: &Path) {
+    let t = terrain::build();
+    let expected = terrain::COLS * terrain::ROWS;
+    assert_eq!(
+        t.positions.len(),
+        expected,
+        "terrain grid is not {}x{}",
+        terrain::COLS,
+        terrain::ROWS
+    );
+    assert_eq!(t.normals.len(), t.positions.len());
+    assert_eq!(t.indices.len() % 3, 0);
+
+    check_winding(&t);
+
+    let path = out.join("terrain.obj");
+    let mut w = BufWriter::with_capacity(1 << 20, File::create(&path).unwrap());
+    writeln!(
+        w,
+        "# Baked by `cargo run -p tw-bake`. Do not edit; regenerate."
+    )
+    .unwrap();
+    writeln!(
+        w,
+        "# {}x{} grid, Unreal space (Z-up, left-handed), 1 unit = 1 cm, \
+         vertical exaggeration EXAG={}.",
+        terrain::COLS,
+        terrain::ROWS,
+        terrain::EXAG
+    )
+    .unwrap();
+    writeln!(w, "o TerrainBritain").unwrap();
+    for p in &t.positions {
+        let [x, y, z] = to_ue(*p);
+        writeln!(w, "v {x:.2} {y:.2} {z:.2}").unwrap();
+    }
+    for n in &t.normals {
+        let [x, y, z] = dir_to_ue(*n);
+        writeln!(w, "vn {x:.4} {y:.4} {z:.4}").unwrap();
+    }
+    // Winding is *not* reversed. The source order is clockwise for Godot's
+    // front face, and the right-to-left-handed flip already inverts triangle
+    // orientation, so the indices come out the other side right-hand-rule
+    // consistent with the `vn` normals — which is what an OBJ consumer expects
+    // and what the bake asserts below. Reversing here as well would flip it
+    // back and leave every face pointing into the hill.
+    for tri in t.indices.chunks_exact(3) {
+        let (a, b, c) = (tri[0] + 1, tri[1] + 1, tri[2] + 1);
+        writeln!(w, "f {a}//{a} {b}//{b} {c}//{c}").unwrap();
+    }
+    w.flush().unwrap();
+    report(
+        &path,
+        &format!(
+            "{} vertices, {} triangles",
+            t.positions.len(),
+            t.indices.len() / 3
+        ),
+    );
+}
+
+fn bake_borders(out: &Path) {
+    let borders = regions::borders();
+    let v: Vec<Value> = borders
+        .iter()
+        .map(|b| {
+            json!({
+                "a": b.a,
+                "b": b.b,
+                "points": b.points.iter().map(|&p| to_ue(p).to_vec()).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    let path = out.join("province_borders.json");
+    write_json(&path, &Value::Array(v));
+    report(&path, &format!("{} border runs", borders.len()));
+}
+
+fn bake_rivers(out: &Path) {
+    let rivers = rivers::build();
+    let v: Vec<Value> = rivers
+        .iter()
+        .map(|r| {
+            json!({
+                "points": r.points.iter().map(|&p| to_ue(p).to_vec()).collect::<Vec<_>>(),
+                // A half-width is a length, so it takes the scale but not the
+                // basis change.
+                "width": r.width * SCALE,
+            })
+        })
+        .collect();
+    let path = out.join("rivers.json");
+    write_json(&path, &Value::Array(v));
+    report(&path, &format!("{} rivers", rivers.len()));
+}
+
+fn bake_forests(out: &Path) {
+    let trees = forests::build();
+    let v: Vec<Value> = trees
+        .iter()
+        .map(|t| {
+            json!({
+                "pos": to_ue(t.pos).to_vec(),
+                // Uniform scale is dimensionless: the tree mesh is authored in
+                // Unreal units, so it must not pick up the world scale.
+                "scale": t.scale,
+                // Yaw is about Godot's +Y / Unreal's +Z — the same axis — but
+                // the handedness flip reverses its sense.
+                "yaw_deg": -t.yaw.to_degrees(),
+            })
+        })
+        .collect();
+    let path = out.join("forests.json");
+    write_json(&path, &Value::Array(v));
+    report(&path, &format!("{} trees", trees.len()));
+}
+
+/// Province positions, the map extent, the faction palette — and the bake's own
+/// metadata, so the next person to touch any of it can see what it was made with.
+fn bake_provinces(out: &Path) {
+    let c = config();
+    let (ew, eh) = map_extent();
+    let provinces: Vec<Value> = NAMES
+        .iter()
+        .enumerate()
+        .map(|(i, &name)| {
+            let (x, z) = geo::POS[i];
+            json!({ "id": i, "name": name, "pos": xz_to_ue(x, z).to_vec() })
+        })
+        .collect();
+    let colors: Vec<Value> = c
+        .faction_colors
+        .iter()
+        .map(|c| json!({ "r": c.r, "g": c.g, "b": c.b }))
+        .collect();
+
+    let doc = json!({
+        "meta": {
+            "generator": "tw-bake",
+            "space": "unreal",
+            "units": "cm",
+            "godot_to_unreal": "ue = (-gz, gx, gy) * scale",
+            "world_scale": SCALE,
+            // EXAG is why the terrain has any readable relief at all, and every
+            // height and slope threshold in the terrain material is calibrated
+            // against it. Carried here so the coupling is visible on the Unreal
+            // side of the language boundary instead of only in a Rust const.
+            "terrain_exag": terrain::EXAG,
+            "terrain_grid": [terrain::COLS, terrain::ROWS],
+        },
+        // Sea-plane half-extents, converted: Godot's half-width runs along X and
+        // its half-height along Z, which swap under the basis change.
+        "map_extent": { "x": eh * SCALE, "y": ew * SCALE },
+        "provinces": provinces,
+        "faction_colors": colors,
+    });
+    let path = out.join("provinces.json");
+    write_json(&path, &doc);
+    report(
+        &path,
+        &format!("{} provinces, {} colours", provinces.len(), colors.len()),
+    );
+}
+
+// --- plumbing --------------------------------------------------------------
+
+fn write_json(path: &Path, v: &Value) {
+    let mut w = BufWriter::with_capacity(1 << 20, File::create(path).unwrap());
+    serde_json::to_writer(&mut w, v).unwrap();
+    w.flush().unwrap();
+}
+
+fn report(path: &Path, what: &str) {
+    let bytes = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+    println!(
+        "  {:<22} {what} ({:.1} MB)",
+        path.file_name().unwrap().to_string_lossy(),
+        bytes as f64 / 1e6
+    );
+}

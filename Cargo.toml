@@ -1,0 +1,9 @@
+[workspace]
+members = ["bake"]
+resolver = "2"
+
+# The one-shot geometry bake runs coastline point-in-polygon scans over 691200
+# vertices; unoptimized that is minutes rather than seconds. Profiles are only
+# honoured at the workspace root, so it lives here.
+[profile.dev.package.tw-bake]
+opt-level = 3

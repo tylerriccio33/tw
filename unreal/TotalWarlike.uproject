@@ -1,0 +1,13 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.8",
+	"Category": "",
+	"Description": "Total War-like campaign map. The rules live in ../sim (Python); this project only displays them.",
+	"Modules": [
+		{
+			"Name": "TotalWarlike",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}

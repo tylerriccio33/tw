@@ -1,0 +1,34 @@
+# Client-side presentation config that the pure engine deliberately omits.
+# Loaded by bake/src/geom/config.rs at bake time (edit + re-bake to change).
+
+# Faction fill colours (sRGB, 0-255), in the faction order from
+# engine/campaign/britain.yaml — England, Scotland, Wales, Ireland, then rebels.
+faction_colors:
+  - { r: 192, g: 57,  b: 43  }   # England   red
+  - { r: 46,  g: 107, b: 191 }   # Scotland  blue
+  - { r: 46,  g: 139, b: 111 }   # Wales     green
+  - { r: 224, g: 162, b: 25  }   # Ireland   gold
+  - { r: 122, g: 106, b: 85  }   # Rebels    mud
+
+# Half-extents of the sea plane, in world units. Deliberately far larger than the
+# land so the water's edge falls beyond the fog. (The land mesh extents are a
+# separate knob — see half_w/half_h in bake/config/geo.yaml.)
+map_extent: { w: 950.0, h: 900.0 }
+
+# Forests (presentation only; see bake/src/geom/forests.rs).
+#   density  — 0..1 master dial on the procedural cluster mask (wild woodland).
+#   named    — hand-placed woods (world XZ centre, radius, fill density). Used by
+#              the Hybrid and Manual placement modes; each is still gated on
+#              land/height/slope so it can't wade into the sea or climb a peak.
+# World XZ reference: z=0 ≈ 48N, +Z south, ~33 units/degree; province centres are
+# in bake/src/geom/geo.rs (POS) — e.g. London (266,314), York (208,57).
+forests:
+  density: 0.7
+  named:
+    - { name: "The Weald",           x: 305.0, z: 345.0, radius: 55.0, density: 0.8 }
+    - { name: "Sherwood",            x: 190.0, z: 145.0, radius: 42.0, density: 0.8 }
+    - { name: "Forest of Dean",      x: 105.0, z: 300.0, radius: 34.0, density: 0.8 }
+    - { name: "Snowdon woods",       x: 45.0,  z: 175.0, radius: 40.0, density: 0.75 }
+    - { name: "Caledonian Forest",   x: 40.0,  z: -255.0, radius: 60.0, density: 0.7 }
+    - { name: "Galloway",            x: 55.0,  z: -110.0, radius: 38.0, density: 0.75 }
+    - { name: "Wicklow woods",       x: -120.0, z: 165.0, radius: 40.0, density: 0.75 }

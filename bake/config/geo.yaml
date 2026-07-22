@@ -1,0 +1,51 @@
+# Inputs to gen_geo.py, which generates bake/src/geom/geo.rs + elev.bin from
+# public-domain Natural Earth + terrarium DEM data. Edit here, then run:
+#   python3 bake/gen_geo.py
+
+# Map projection about a centre (equirectangular). Framed on Britain & Ireland.
+projection:
+  lon0: -4.5
+  lat0: 54.5
+  k: 105.0          # degrees -> world units; bigger = the isles fill more of the map
+
+# Lon/lat clip box. Deliberately overshoots the mesh so the coast does not end in
+# a straight cliff mid-view; land beyond the provinces is just scenery.
+bbox:
+  lon_min: -11.5
+  lon_max: 2.0
+  lat_min: 49.7
+  lat_max: 59.6
+
+# A point that lands inside the continental (France/Belgium) fragment left in the
+# southeast corner after clipping. Any ring containing it is dropped, so only the
+# British Isles remain.
+continent_point:
+  lon: 1.9
+  lat: 49.9
+
+# Land-mesh extents (world units) and elevation grid. half_w/half_h are emitted
+# into geo.rs and MUST match terrain.rs's mesh; changing them means retuning EXAG
+# and the shader bands (see terrain.rs). elev_zoom is the terrarium tile zoom.
+mesh:
+  half_w: 620.0
+  half_h: 470.0
+  elev_w: 512
+  elev_h: 384
+  elev_zoom: 6
+  elev_blur: 1
+
+# Province cities at their real (lon, lat). ORDER MUST MATCH the provinces list in
+# engine/campaign/britain.yaml — geo.rs POS is indexed by ProvinceId.
+cities:
+  - { name: London,     lon: -0.13, lat: 51.51 }
+  - { name: York,       lon: -1.08, lat: 53.96 }
+  - { name: Norwich,    lon:  1.30, lat: 52.63 }
+  - { name: Exeter,     lon: -3.53, lat: 50.72 }
+  - { name: Chester,    lon: -2.89, lat: 53.19 }
+  - { name: Cardiff,    lon: -3.18, lat: 51.48 }
+  - { name: Caernarfon, lon: -4.27, lat: 53.14 }
+  - { name: Edinburgh,  lon: -3.19, lat: 55.95 }
+  - { name: Stirling,   lon: -3.94, lat: 56.12 }
+  - { name: Inverness,  lon: -4.22, lat: 57.48 }
+  - { name: Dublin,     lon: -6.26, lat: 53.35 }
+  - { name: Cork,       lon: -8.47, lat: 51.90 }
