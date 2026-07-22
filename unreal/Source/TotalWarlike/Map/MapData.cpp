@@ -109,7 +109,15 @@ bool ParseObj(const FString& Path, TArray<FVector>& OutVerts, TArray<FVector>& O
                 OutError = FString::Printf(TEXT("%s has a non-triangular face: %s"), *Path, *Line);
                 return false;
             }
-            for (int32 i = 1; i <= 3; ++i)
+            // Read the face back-to-front. OBJ winds counter-clockwise about the
+            // right-hand-rule normal — which is what the baker emits and asserts
+            // (`check_winding` in bake/src/main.rs) — but UProceduralMeshComponent
+            // is left-handed and takes the *clockwise* order as front-facing, the
+            // same order tw::BuildRibbon emits for rivers and borders. Handing the
+            // OBJ order through unreversed makes every terrain triangle back-face
+            // and vanish, silently: collision traces ignore winding, so the map
+            // still takes clicks and nothing logs a complaint.
+            for (int32 i = 3; i >= 1; --i)
             {
                 FString Vertex = Parts[i];
                 int32 Slash = INDEX_NONE;
