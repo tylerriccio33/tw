@@ -4,7 +4,8 @@
 SEED ?= 42
 ROUNDS ?= 120
 .PHONY: help fmt clippy clean bake \
-        py-sim py-test py-server cpp-test unreal-build unreal-play unreal-test
+        py-sim py-test py-server cpp-test unreal-build unreal-play unreal-test \
+        pre-commit-install pre-commit
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -69,3 +70,11 @@ unreal-test: unreal-build ## Run the Unreal-side bridge tests headless
 		-ExecCmds="Automation RunTests TotalWarlike.Sim" \
 		-unattended -nullrhi -nosplash -nopause \
 		-testexit="Automation Test Queue Empty"
+
+# --- pre-commit (prek) — the local CI gate; see CLAUDE.md ---
+
+pre-commit-install: ## Install the prek git hook (one-time per clone)
+	uvx prek install
+
+pre-commit: ## Run all prek hooks against the whole repo
+	uvx prek run --all-files

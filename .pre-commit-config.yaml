@@ -1,0 +1,30 @@
+repos:
+  - repo: local
+    hooks:
+      - id: py-test
+        name: py-test (sim/tests via pytest)
+        entry: make py-test
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: py-sim
+        name: py-sim (headless all-AI balance check)
+        entry: make py-sim
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: cpp-test
+        name: cpp-test (engine-free Unreal bridge protocol test)
+        entry: make cpp-test
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: cargo-clippy
+        name: cargo clippy (bake, warnings as errors)
+        entry: cargo clippy --all-targets -- -D warnings
+        language: system
+        pass_filenames: false
+        always_run: true
