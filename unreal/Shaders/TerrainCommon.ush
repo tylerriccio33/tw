@@ -71,11 +71,30 @@ float3 TWTerrainShade(float3 WorldPos, float3 WorldNormal, float WorldScale,
     const float n2 = TW_FBM(w_pos.xz * 0.14);
 
     // Latitude biome. Europe is not one green: Iberia and the Mezzogiorno are
-    // dry ochre, the Baltic and Scandinavia dark boreal. World Z maps to
-    // latitude (z=0 is 48N, +Z south, ~33 units per degree), so a single
-    // gradient down the map buys most of the variation the eye expects.
-    const float dry  = smoothstep(70.0, 400.0, w_pos.z + (n - 0.5) * 90.0);
-    const float cold = smoothstep(-90.0, -330.0, w_pos.z + (n - 0.5) * 90.0);
+    // dry ochre, the Baltic and Scandinavia dark boreal. A single gradient down
+    // the map buys most of the variation the eye expects.
+    //
+    // These thresholds are in DEGREES, not world units, and that is the whole
+    // point. Main.gd expressed them in raw Z against a Europe-wide projection —
+    // 48N at z=0, ~33 units per degree — but this bake is Britain-only on a
+    // different projection, and the same raw numbers then drop the Mezzogiorno
+    // ochre onto Wessex (London sits at z=+314, halfway up the `dry` ramp).
+    // Recovering latitude first makes the gradient survive a re-projection.
+    //
+    // LAT0/K are gen_geo.py's projection constants, and `lat` below is its
+    // unproject(): lat = LAT0 - z/K. Confirmed against the real city positions
+    // in bake/src/geom/geo.rs (POS) — Inverness, Edinburgh, London and Cork all
+    // land within 0.03 degrees. Re-run gen_geo.py with a different bbox and
+    // these two constants are what must follow it.
+    const float LAT0 = 54.5;
+    const float LAT_K = 105.0;
+    // The jitter is the same ragged ~1.4-degree biome edge Main.gd got from
+    // (n - 0.5) * 90 at 33 units per degree; carried across as degrees it no
+    // longer silently rescales with the projection.
+    const float lat = LAT0 - w_pos.z / LAT_K - (n - 0.5) * 2.73;
+
+    const float dry  = smoothstep(45.9, 35.9, lat);   // Iberia, the Mezzogiorno
+    const float cold = smoothstep(50.7, 58.0, lat);   // the Baltic, Scandinavia
 
     // Deep, saturated map greens — a rich temperate sward, not pale clay.
     float3 grass = lerp(float3(0.30, 0.42, 0.13), float3(0.54, 0.46, 0.17), dry);
