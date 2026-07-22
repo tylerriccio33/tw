@@ -31,8 +31,16 @@ only reason there is still a Cargo workspace.
   engine-free half (`Sim/MsgPack.cpp`, `Map/ProvinceLookup.cpp`) with plain
   `clang++`, starts a real sidecar, exercises the whole protocol in ~2 s.
 - `make unreal-build` / `make unreal-play` / `make unreal-test` — compile, play,
-  and run the `TotalWarlike.Sim` automation tests (slow confirmation of `cpp-test`).
+  and run the `TotalWarlike` automation tests — `.Sim` (slow confirmation of
+  `cpp-test`) and `.Map` (the baked-map reader, incl. terrain winding).
   Override the engine with `UE=<dir>`; default `/Users/Shared/Epic Games/UE_5.8`.
+- `make unreal-shots` — **the visual loop.** Renders five fixed-camera preset
+  screenshots of the campaign map headlessly into `unreal/Shots/current/` in
+  ~10s; `make shots-diff` compares them against the committed `golden/` set and
+  `make shots-bless` accepts a new baseline. Two runs diff to exactly zero, so
+  any number it prints is a real change. `make unreal-live` is the same thing
+  interactively, with the console and shader hot-reload wired up for a ~2s
+  edit/view loop on `TerrainCommon.ush`. See `unreal/Shots/README.md`.
 - `make bake` — regenerate `unreal/Content/Map/`. Only needed when the coastline,
   elevation or derived-geometry code changes.
 

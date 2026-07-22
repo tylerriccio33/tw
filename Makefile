@@ -5,6 +5,7 @@ SEED ?= 42
 ROUNDS ?= 120
 .PHONY: help fmt clippy clean bake \
         py-sim py-test py-server cpp-test unreal-build unreal-play unreal-test \
+        unreal-shots unreal-shot unreal-live shots-diff shots-bless \
         pre-commit-install pre-commit
 
 help: ## Show this help
@@ -64,12 +65,84 @@ unreal-play: unreal-build ## Play the Unreal campaign map (WASD pan, wheel zoom,
 	"$(UE)/Engine/Binaries/Mac/UnrealEditor" "$(CURDIR)/unreal/TotalWarlike.uproject" \
 		-game -windowed -ResX=1600 -ResY=900
 
-# Runs the TotalWarlike.Sim automation tests, which spawn a real Python sidecar.
-unreal-test: unreal-build ## Run the Unreal-side bridge tests headless
-	"$(UE)/Engine/Binaries/Mac/UnrealEditor-Cmd" "$(CURDIR)/unreal/TotalWarlike.uproject" \
-		-ExecCmds="Automation RunTests TotalWarlike.Sim" \
-		-unattended -nullrhi -nosplash -nopause \
-		-testexit="Automation Test Queue Empty"
+# --- the visual loop (see unreal/Shots/README.md) ---
+#
+# Editing how the game LOOKS is edit -> view -> iterate, and "view" has to be one
+# command with a fixed camera or the iteration is not comparable. UShotDirector
+# takes named preset shots headlessly and writes them to unreal/Shots/current/;
+# unreal/Shots/golden/ is what they are compared against.
+
+SHOTS ?= overview,lowlands,coast,mountain,border
+SHOT_RES ?= 1600 900
+comma := ,
+
+# The `-` and the check afterwards are not laziness. UnrealEditor on macOS
+# reliably SIGTRAPs inside FMacApplication's destructor on the way out of a
+# windowed -game session, *after* every PNG has been written — an engine
+# teardown bug we cannot fix and should not be blocked by. So the exit code is
+# ignored and the actual contract, "every requested shot is on disk", is checked
+# directly. If a shot is missing, this fails.
+unreal-shots: unreal-build ## Render the preset campaign screenshots to unreal/Shots/current/
+	@rm -f $(foreach s,$(subst $(comma), ,$(SHOTS)),unreal/Shots/current/$(s).png)
+	-"$(UE)/Engine/Binaries/Mac/UnrealEditor" "$(CURDIR)/unreal/TotalWarlike.uproject" \
+		-game -windowed -ResX=$(word 1,$(SHOT_RES)) -ResY=$(word 2,$(SHOT_RES)) -ForceRes \
+		-TWShots=$(SHOTS) -TWShotDir="$(CURDIR)/unreal/Shots/current" \
+		-nosplash -unattended -nopause
+	@missing=""; for s in $(subst $(comma), ,$(SHOTS)); do \
+		[ -f unreal/Shots/current/$$s.png ] || missing="$$missing $$s"; done; \
+	if [ -n "$$missing" ]; then \
+		echo "shots MISSING:$$missing (see ~/Library/Logs/TotalWarlike/TotalWarlike.log)"; exit 1; \
+	fi; \
+	echo "shots written to unreal/Shots/current/: $(SHOTS)"
+
+# The live loop. Keeps ONE process up and drives it from the console, so a .ush
+# edit costs a shader recompile (~2s) instead of a relaunch (~20s):
+#   ~ (in the game window)  `recompileshaders changed`  then  TWView mountain
+#                           TWShot mountain
+# The console is the backtick key. -AllowConsoleInGame is what puts it there in
+# a -game build, where it is off by default.
+unreal-live: unreal-build ## Play with the console + shader hot-reload wired up (the tight visual loop)
+	@echo "console: backtick. try:  TWShotsList | TWView mountain | recompileshaders changed | TWShot try1"
+	"$(UE)/Engine/Binaries/Mac/UnrealEditor" "$(CURDIR)/unreal/TotalWarlike.uproject" \
+		-game -windowed -ResX=1600 -ResY=900 \
+		-AllowConsoleInGame -TWShotDir="$(CURDIR)/unreal/Shots/current"
+
+# One preset, for a tight loop on a single thing: make unreal-shot SHOT=mountain
+unreal-shot: ## Render a single preset (SHOT=mountain)
+	$(MAKE) unreal-shots SHOTS=$(SHOT)
+
+shots-diff: ## Compare unreal/Shots/current/ against golden/ and report what moved
+	uv run --with pillow python unreal/Shots/diff.py
+
+shots-bless: ## Accept unreal/Shots/current/ as the new golden set
+	uv run --with pillow python unreal/Shots/diff.py --bless
+
+# Runs every TotalWarlike automation test: .Sim spawns a real Python sidecar,
+# .Map reads the baked Content/Map (and skips itself if it has not been baked).
+#
+# UnrealEditor-Cmd exits 0 whether the tests passed or failed — it reports the
+# run, not the result — so a red suite used to look exactly like a green one from
+# here. The results only exist in the log, so read them out of the log: print
+# every verdict, then fail on any {Fail}. `Ran no tests` is also a failure; a
+# filter that matches nothing must not read as success.
+UNREAL_TEST_LOG = $(CURDIR)/unreal/Saved/automation.log
+unreal-test: unreal-build ## Run the Unreal-side automation tests headless
+	@mkdir -p $(dir $(UNREAL_TEST_LOG))
+	@"$(UE)/Engine/Binaries/Mac/UnrealEditor-Cmd" "$(CURDIR)/unreal/TotalWarlike.uproject" \
+		-ExecCmds="Automation RunTests TotalWarlike" \
+		-unattended -nullrhi -nosplash -nopause -stdout -FullStdOutLogOutput \
+		-testexit="Automation Test Queue Empty" > $(UNREAL_TEST_LOG) 2>&1 || true
+	@sed -n 's/.*Test Completed\. Result={\([^}]*\)} Name={\([^}]*\)}.*/  \1  \2/p' \
+		$(UNREAL_TEST_LOG) || true
+	@if grep -q "Result={Fail}" $(UNREAL_TEST_LOG); then \
+		echo "unreal-test FAILED — full log: $(UNREAL_TEST_LOG)"; \
+		sed -n 's/.*LogAutomationController: Error: /  /p' $(UNREAL_TEST_LOG); \
+		exit 1; \
+	elif ! grep -q "Test Completed" $(UNREAL_TEST_LOG); then \
+		echo "unreal-test ran no tests — full log: $(UNREAL_TEST_LOG)"; exit 1; \
+	else \
+		echo "unreal-test passed"; \
+	fi
 
 # --- pre-commit (prek) — the local CI gate; see CLAUDE.md ---
 

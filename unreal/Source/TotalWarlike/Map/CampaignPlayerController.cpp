@@ -122,6 +122,16 @@ void ACampaignPlayerController::PlaceCamera()
     CameraRig->SetActorRotation((CameraTarget - Location).Rotation());
 }
 
+void ACampaignPlayerController::SetView(const FVector2D& GroundXY, double Distance)
+{
+    // Same Z as BeginPlay's opening view: the ground plane the camera orbits is
+    // nominal, not the traced terrain height, so a preset over a mountain and a
+    // preset over a plain are framed the same way.
+    CameraTarget = FVector(GroundXY.X, GroundXY.Y, 30.0 * GodotToUU);
+    CameraDistance = FMath::Clamp(Distance, MinDistance, MaxDistance);
+    PlaceCamera();
+}
+
 void ACampaignPlayerController::OnZoomIn()
 {
     CameraDistance = FMath::Clamp(CameraDistance - ZoomStep, MinDistance, MaxDistance);

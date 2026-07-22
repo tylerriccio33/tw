@@ -30,3 +30,6 @@ unreal/Content/Map/
 .vscode/
 .idea/
 *.swp
+
+# Rendered preset shots — regenerate with `make unreal-shots`. Shots/golden/ IS committed.
+unreal/Shots/current/
