@@ -129,6 +129,11 @@ frozen baseline, and widen them only with a deliberate balance change in hand.
   sending it and letting `rules.py` refuse. The one exception is a cheap
   pre-filter on adjacency, which answers what the click *meant*, not what is legal.
 - `Map/CampaignHUD`, `EventText`, `MarkerActors`, `Ribbon` — presentation.
+  The HUD draws with `Canvas->DrawText` using `GEngine->GetMediumFont()`, which
+  is **ASCII-only** — any emoji or box-drawing glyph renders as a tofu box. Keep
+  canvas labels to plain ASCII (`>>`, `-`, `Gold`), not `▶`/`•`/`⚒`. The `hud`
+  shot preset selects London so the control bar's panels render populated —
+  `make unreal-shots` catches a broken glyph or layout.
 - `Tests/SimTransportTest.cpp` — automation tests (spawn a real sidecar).
   Note `unreal/Tests/wire_test.cpp` lives **outside** `Source/` because UBT
   compiles every `.cpp` under a module and that file has its own `main()`.
