@@ -36,6 +36,23 @@ public:
     /// transport failure. Same feed, different source.
     void Note(const FString& Text, const FLinearColor& Color);
 
+    /// The control-bar buttons, in the vocabulary the controller speaks: a
+    /// gesture, not a command. The controller turns the choice into the actual
+    /// FSimCommand, so the "input decides which, rules decide whether" split holds
+    /// for a button press exactly as it does for a click on the map.
+    enum class EControlAction : uint8
+    {
+        None,
+        EndTurn,
+        Construct,
+        Recruit,
+    };
+
+    /// Which button, if any, sits under a screen point — the bar's hit-test
+    /// against the rectangles it drew last frame. Returns None for a click that
+    /// missed every button (including one below the bar's own rows).
+    EControlAction ControlActionAt(const FVector2D& Screen) const;
+
 private:
     void HandleEvents(const TArray<FSimEvent>& Events);
 
@@ -54,6 +71,16 @@ private:
     /// Newest last. Capped so a 400-turn campaign does not grow without bound.
     TArray<FFeedLine> Feed;
     static constexpr int32 MaxFeedLines = 24;
+
+    /// A clickable region of the control bar, recorded as it is drawn so the
+    /// controller can hit-test it. Rebuilt every DrawControlBar, since the bar's
+    /// layout depends on the canvas size.
+    struct FControlHit
+    {
+        FBox2D Rect = FBox2D(ForceInit);
+        EControlAction Action = EControlAction::None;
+    };
+    TArray<FControlHit> ControlHits;
 
     ACampaignMap* FindMap() const;
     USimSubsystem* Sim() const;
