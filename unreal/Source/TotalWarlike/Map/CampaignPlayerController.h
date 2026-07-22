@@ -40,6 +40,18 @@ public:
     virtual void SetupInputComponent() override;
     virtual void PlayerTick(float DeltaTime) override;
 
+    /// Frame a point on the ground from a given distance, as a preset shot does.
+    /// The camera is the controller's, so this is the one door into it —
+    /// UShotDirector drives the view through here rather than reaching for the
+    /// rig, which keeps "how the campaign camera is oriented" in one place.
+    void SetView(const FVector2D& GroundXY, double Distance);
+
+    double GetViewDistance() const { return CameraDistance; }
+
+    /// Not `GetViewTarget`: APlayerController already has one, returning the
+    /// view target ACTOR — the same collision `CameraRig` works around below.
+    FVector2D GetViewFocus() const { return FVector2D(CameraTarget.X, CameraTarget.Y); }
+
 private:
     void OnLeftClick();
     void OnEndTurn();

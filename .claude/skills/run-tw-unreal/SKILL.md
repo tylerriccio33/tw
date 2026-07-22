@@ -46,6 +46,33 @@ Reach for this first for anything touching `unreal/Source/TotalWarlike/Sim/`
 or `Map/ProvinceLookup.*` — it is what CLAUDE.md calls out as the fast path
 before a full `unreal-build`.
 
+## See the visuals (agent path): `make unreal-shots`
+
+**This is how to look at the game.** Do NOT use `osascript activate` +
+`screencapture` for this any more — that path is described further down only
+because it is still the way to watch a live session.
+
+```
+make unreal-shots            # all five presets -> unreal/Shots/current/, ~10s
+make unreal-shot SHOT=mountain
+make shots-diff              # what moved vs unreal/Shots/golden/
+make shots-bless             # accept current/ as the new golden/
+```
+
+Verified here: five 1600x900 PNGs written in under 10s, and two independent
+runs diff to **exactly 0.00 mean / 0.00% moved on every preset** — so any
+non-zero number in `shots-diff` is a real change, not renderer noise. Presets:
+`overview`, `lowlands`, `coast`, `mountain`, `border` (see
+`unreal/Shots/README.md`, or `TWShotsList` in the console).
+
+`make unreal-shots` ignores UnrealEditor's exit code on purpose — the editor
+SIGTRAPs in `FMacApplication`'s destructor on the way out, *after* writing every
+PNG — and instead fails if any requested shot is missing from disk.
+
+For a tight shader loop without paying a relaunch, `make unreal-live` opens one
+session with the console (backtick) and `r.ShaderDevelopmentMode=1`:
+`recompileshaders changed`, then `TWView mountain`, then `TWShot try1`.
+
 ## Run (human path, verified here): full editor build + play
 
 Requires the engine at `/Users/Shared/Epic Games/UE_5.8` (override with
@@ -78,9 +105,9 @@ look for the one running `-game -windowed`, not `UnrealEditorServices`) and
 
 ## Test: `make unreal-test`
 
-Runs the `TotalWarlike.Sim` automation suite headless
-(`-ExecCmds="Automation RunTests TotalWarlike.Sim"`) against a real spawned
-sidecar. Not run in this session (same disk-risk profile as
+Runs the `TotalWarlike` automation suite headless
+(`-ExecCmds="Automation RunTests TotalWarlike"`): `.Sim` against a real spawned
+sidecar, `.Map` against the baked `Content/Map`. Not run in this session (same disk-risk profile as
 `unreal-build`/`unreal-play`, and `cpp-test` already covers the same bridge
 surface faster) — attempt it the same way as `unreal-play` above
 (background + `df -h /` polling) if you specifically need the in-editor
