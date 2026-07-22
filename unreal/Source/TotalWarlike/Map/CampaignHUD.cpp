@@ -222,6 +222,9 @@ void ACampaignHUD::DrawControlBar()
     }
     const FWorldSnapshot& Snapshot = Subsystem->GetSnapshot();
 
+    // The bar is redrawn every frame; its clickable regions are too.
+    ControlHits.Reset();
+
     const float W = Canvas->SizeX;
     const float H = Canvas->SizeY;
     constexpr float BarH = 150.0f;
@@ -311,11 +314,24 @@ void ACampaignHUD::DrawControlBar()
     // --------------------------------------------------------------- actions
     // Right cluster, laid out from the right edge inward: two action buttons,
     // then treasury and turn readouts, then the end-turn button.
-    auto Button = [&](float X, float Y, float BW, float BH, const FString& Text) {
+    auto Button = [&](float X, float Y, float BW, float BH, const FString& Text,
+                      EControlAction Action, bool bEnabled) {
         Panel(Canvas, X, Y, BW, BH, PanelInset);
         Fill(Canvas, X, Y, BW, 3.0f, StoneLight);
-        Label(Canvas, Font, Text, X + 10.0f, Y + BH * 0.5f - 8.0f, GoldText);
+        Label(Canvas, Font, Text, X + 10.0f, Y + BH * 0.5f - 8.0f, bEnabled ? GoldText : DimText);
+        if (bEnabled)
+        {
+            ControlHits.Add({FBox2D(FVector2D(X, Y), FVector2D(X + BW, Y + BH)), Action});
+        }
     };
+
+    // A button only acts when the press could actually turn into a command: on
+    // the player's turn, with the sim idle and the game unwon. Off-turn or mid-
+    // resolution it greys out and stops taking the click, so the bar never offers
+    // an order the rules would only refuse.
+    const bool bReady = Snapshot.IsPlayerTurn() && !Subsystem->IsBusy() &&
+                        Snapshot.Winner == TW_NONE && !Map->IsAnimating();
+    const bool bHasCity = Prov != nullptr && !Prov->City.IsEmpty();
 
     const float EndW = 150.0f;
     const float EndX = W - Pad - EndW;
@@ -323,7 +339,7 @@ void ACampaignHUD::DrawControlBar()
 
     // End turn — the biggest target, top-right.
     const float EndH = 44.0f;
-    Button(EndX, RowTop, EndW, EndH, TEXT("End Turn  >>"));
+    Button(EndX, RowTop, EndW, EndH, TEXT("End Turn  >>"), EControlAction::EndTurn, bReady);
 
     // Treasury and turn, stacked below the buttons.
     const FFactionState* Player =
@@ -345,6 +361,20 @@ void ACampaignHUD::DrawControlBar()
     // Construction / Recruit, to the left of the readouts.
     const float ActW = 130.0f;
     const float ActX = EndX - 12.0f - ActW;
-    Button(ActX, RowTop, ActW, 40.0f, TEXT("Construct"));
-    Button(ActX, RowTop + 48.0f, ActW, 40.0f, TEXT("Recruit"));
+    Button(ActX, RowTop, ActW, 40.0f, TEXT("Construct"), EControlAction::Construct,
+           bReady && bHasCity);
+    Button(ActX, RowTop + 48.0f, ActW, 40.0f, TEXT("Recruit"), EControlAction::Recruit,
+           bReady && bHasCity);
+}
+
+ACampaignHUD::EControlAction ACampaignHUD::ControlActionAt(const FVector2D& Screen) const
+{
+    for (const FControlHit& Hit : ControlHits)
+    {
+        if (Hit.Rect.bIsValid && Hit.Rect.IsInside(Screen))
+        {
+            return Hit.Action;
+        }
+    }
+    return EControlAction::None;
 }

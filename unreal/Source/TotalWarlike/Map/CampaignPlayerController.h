@@ -58,6 +58,12 @@ private:
     void OnZoomIn();
     void OnZoomOut();
 
+    /// Order the selected city to raise a regiment / put down a building. The
+    /// control bar's Recruit / Construct buttons route here; the choice of unit
+    /// and building is the controller's, the legality the simulation's.
+    void OnRecruit();
+    void OnConstruct();
+
     /// Move the camera rig to match `CameraTarget` and `CameraDistance`.
     void PlaceCamera();
 

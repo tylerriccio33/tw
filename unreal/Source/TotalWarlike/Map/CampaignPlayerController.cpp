@@ -188,6 +188,33 @@ void ACampaignPlayerController::OnLeftClick()
     {
         return;
     }
+
+    // The control bar sits on top of the map, so a click over one of its buttons
+    // is a button press, not an order to the province underneath. Ask the HUD
+    // first; a hit consumes the click and never falls through to a world trace.
+    if (ACampaignHUD* Hud = GetCampaignHUD())
+    {
+        float MouseX = 0.0f;
+        float MouseY = 0.0f;
+        if (GetMousePosition(MouseX, MouseY))
+        {
+            switch (Hud->ControlActionAt(FVector2D(MouseX, MouseY)))
+            {
+            case ACampaignHUD::EControlAction::EndTurn:
+                OnEndTurn();
+                return;
+            case ACampaignHUD::EControlAction::Construct:
+                OnConstruct();
+                return;
+            case ACampaignHUD::EControlAction::Recruit:
+                OnRecruit();
+                return;
+            case ACampaignHUD::EControlAction::None:
+                break;
+            }
+        }
+    }
+
     // A click while a turn is resolving, or while a marker is still marching,
     // would race the snapshot it is being interpreted against.
     if (Subsystem->IsBusy() || Map->IsAnimating())
@@ -271,4 +298,47 @@ void ACampaignPlayerController::OnEndTurn()
             Hud->Note(TEXT("… still resolving"), FLinearColor(0.7f, 0.7f, 0.7f));
         }
     }
+}
+
+void ACampaignPlayerController::OnRecruit()
+{
+    USimSubsystem* Subsystem = Sim();
+    if (Subsystem == nullptr || Subsystem->IsBusy() || SelectedProvince == INDEX_NONE)
+    {
+        return;
+    }
+    // The bar has one Recruit button, not a unit menu yet, so it raises the basic
+    // regiment (UnitType.MELEE == 0). An unaffordable or off-turn order comes back
+    // as a refusal on the feed, exactly as a bad move does.
+    constexpr int32 UnitMelee = 0;
+    Subsystem->SendCommand(FSimCommand::Recruit(SelectedProvince, UnitMelee));
+}
+
+void ACampaignPlayerController::OnConstruct()
+{
+    USimSubsystem* Subsystem = Sim();
+    if (Subsystem == nullptr || Subsystem->IsBusy() || SelectedProvince == INDEX_NONE)
+    {
+        return;
+    }
+    const FWorldSnapshot& Snapshot = Subsystem->GetSnapshot();
+    if (!Snapshot.Provinces.IsValidIndex(SelectedProvince))
+    {
+        return;
+    }
+    const FProvinceState& Prov = Snapshot.Provinces[SelectedProvince];
+
+    // One Construct button, no build menu yet, so it puts money where the town is
+    // weakest: the lowest of its four buildings. Ties resolve in enum order
+    // (Farm, Market, Barracks, Walls). `rules.py` refuses a level already at cap.
+    const int32 Levels[4] = {Prov.Farm, Prov.Market, Prov.Barracks, Prov.Walls};
+    int32 Building = 0;
+    for (int32 i = 1; i < 4; ++i)
+    {
+        if (Levels[i] < Levels[Building])
+        {
+            Building = i;
+        }
+    }
+    Subsystem->SendCommand(FSimCommand::Build(SelectedProvince, Building));
 }
