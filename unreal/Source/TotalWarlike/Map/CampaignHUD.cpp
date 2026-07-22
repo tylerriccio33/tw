@@ -256,7 +256,7 @@ void ACampaignHUD::DrawControlBar()
         constexpr float CardW = 88.0f;
         constexpr float CardGap = 6.0f;
         const float CardY = ContentY + 30.0f;
-        const float CardH = ContentH - 42.0f;
+        const float CardH = ContentH - 54.0f;
         for (int32 i = 0; i < 3; ++i)
         {
             const float CX = ArmyX + 8.0f + i * (CardW + CardGap);
@@ -267,7 +267,7 @@ void ACampaignHUD::DrawControlBar()
         }
         Label(Canvas, Font,
               FString::Printf(TEXT("%d regiments  -  %d mp"), Army->Regiments, Army->Mp),
-              ArmyX + 8.0f, ContentY + ContentH - 16.0f, DimText);
+              ArmyX + 8.0f, ContentY + ContentH - 18.0f, DimText);
     }
     else
     {

@@ -29,16 +29,18 @@ constexpr double GodotToUU = 100.0;
 ///
 /// Anchored by province name (see FShotPreset), so these survive a rebake.
 const FShotPreset Presets[] = {
-    {TEXT("overview"), TEXT(""), 1400.0 * GodotToUU,
+    {TEXT("overview"), TEXT(""), 1400.0 * GodotToUU, TEXT(""),
      TEXT("the whole island — silhouette, sea colour, fog, faction ink")},
-    {TEXT("lowlands"), TEXT("London"), 420.0 * GodotToUU,
+    {TEXT("lowlands"), TEXT("London"), 420.0 * GodotToUU, TEXT(""),
      TEXT("low green terrain, rivers, a settlement marker up close")},
-    {TEXT("coast"), TEXT("Exeter"), 520.0 * GodotToUU,
+    {TEXT("coast"), TEXT("Exeter"), 520.0 * GodotToUU, TEXT(""),
      TEXT("the land/sea edge — the coastline blend and the water plane")},
-    {TEXT("mountain"), TEXT("Highlands"), 520.0 * GodotToUU,
+    {TEXT("mountain"), TEXT("Highlands"), 520.0 * GodotToUU, TEXT(""),
      TEXT("the height and slope thresholds: rock, snow line, steep faces")},
-    {TEXT("border"), TEXT("Lothian"), 620.0 * GodotToUU,
+    {TEXT("border"), TEXT("Lothian"), 620.0 * GodotToUU, TEXT(""),
      TEXT("a contested frontier — border colours and army markers")},
+    {TEXT("hud"), TEXT("London"), 520.0 * GodotToUU, TEXT("London"),
+     TEXT("the control bar populated — London selected, its army and buildings")},
 };
 
 /// Where shots go when nothing said otherwise. Repo-relative via the project
@@ -179,6 +181,41 @@ bool UShotDirector::ApplyCurrentPreset()
     }
 
     Controller->SetView(Target, Preset->Distance);
+
+    // Establish a selection for HUD presets, so the control bar's army and city
+    // panels have something to draw. Terrain presets leave Select empty and the
+    // current selection untouched.
+    if (FCString::Strlen(Preset->Select) > 0)
+    {
+        const USimSubsystem* Sim =
+            GetGameInstance() != nullptr ? GetGameInstance()->GetSubsystem<USimSubsystem>() : nullptr;
+        if (Sim != nullptr)
+        {
+            const FWorldSnapshot& Snapshot = Sim->GetSnapshot();
+            // Province ids ARE snapshot array indices — the HUD reads the
+            // selected province the same way (see CampaignHUD::DrawControlBar).
+            const int32 ProvId = Snapshot.Provinces.IndexOfByPredicate(
+                [Preset](const FProvinceState& P) { return P.Name.Equals(Preset->Select); });
+            if (ProvId == INDEX_NONE)
+            {
+                UE_LOG(LogShotDirector, Error,
+                       TEXT("preset '%s' wants to select province '%s', which the snapshot does "
+                            "not have — leaving selection empty"),
+                       *Name, Preset->Select);
+            }
+            else
+            {
+                // A player army standing on the province fills the army panel; a
+                // garrison alone is not an army and leaves that panel empty.
+                const FArmyState* Army = Snapshot.Armies.FindByPredicate(
+                    [ProvId, &Snapshot](const FArmyState& A) {
+                        return A.Location == ProvId && Snapshot.Factions.IsValidIndex(A.Owner) &&
+                               Snapshot.Factions[A.Owner].bIsPlayer;
+                    });
+                Map->SetSelection(Army != nullptr ? Army->Id : INDEX_NONE, ProvId);
+            }
+        }
+    }
     return true;
 }
 

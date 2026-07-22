@@ -54,6 +54,11 @@ struct FShotPreset
     const TCHAR* Province;
     /// Camera distance in centimetres, clamped to the controller's zoom range.
     double Distance;
+    /// Province to SELECT (by name) before the shot, so the HUD's army and city
+    /// panels are populated rather than empty. Empty leaves the selection alone —
+    /// which is what the terrain presets want, so their diffs stay about terrain.
+    /// A player army standing on the province is selected too, when one is there.
+    const TCHAR* Select;
     /// What this preset is for, printed by `TWView` with no argument.
     const TCHAR* Purpose;
 };
