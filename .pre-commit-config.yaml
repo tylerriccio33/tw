@@ -15,9 +15,9 @@ repos:
         pass_filenames: false
         always_run: true
 
-      - id: cpp-test
-        name: cpp-test (engine-free Unreal bridge protocol test)
-        entry: make cpp-test
+      - id: bridge-test
+        name: bridge-test (pure-Python sim bridge + msgpack codec vs a real sidecar)
+        entry: make bridge-test
         language: system
         pass_filenames: false
         always_run: true

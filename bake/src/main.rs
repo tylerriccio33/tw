@@ -116,6 +116,7 @@ fn main() {
     check_cities_on_land();
 
     bake_terrain(&out);
+    bake_heightmap(&out);
     bake_borders(&out);
     bake_rivers(&out);
     bake_forests(&out);
@@ -275,6 +276,87 @@ fn bake_terrain(out: &Path) {
             t.indices.len() / 3
         ),
     );
+}
+
+/// The Landscape heightmap. The OBJ above is a static mesh; the Unreal frontend
+/// instead imports the terrain as an `ALandscape` (LODs, tessellation, layered
+/// material). Unreal's native landscape heightmap is **raw 16-bit, little-endian,
+/// row-major** — so that is exactly what we write, no PNG encoder and no new
+/// dependency. `terrain_meta.json` alongside it carries everything `landscape.py`
+/// needs to place the landscape in the same Unreal-cm space as the borders,
+/// rivers and markers, and to key the terrain material's height bands.
+///
+/// The grid is sampled directly from `terrain::height_with` in **Unreal
+/// orientation** (local X = the short N–S axis, local Y = the long E–W axis), so
+/// the Python side needs only an axis-aligned transform, not a handedness puzzle.
+/// Both dimensions are `k*63 + 1`, a valid Unreal landscape size (components of
+/// 63 quads), so the import never has to resample.
+fn bake_heightmap(out: &Path) {
+    // Unreal-space footprint (see `map_extent`): X is the short axis (Godot Z,
+    // half-height), Y the long axis (Godot X, half-width). Both scaled to cm.
+    const HALF_X: f32 = geo::HALF_H; // Godot half-height -> Unreal X
+    const HALF_Y: f32 = geo::HALF_W; // Godot half-width  -> Unreal Y
+    const WIDTH: usize = 757; // 12*63 + 1, along Unreal X (the short axis)
+    const HEIGHT: usize = 1009; // 16*63 + 1, along Unreal Y (the long axis)
+
+    let polys = coastline();
+    let mut heights_cm = vec![0.0f32; WIDTH * HEIGHT];
+    let (mut min_cm, mut max_cm) = (f32::MAX, f32::MIN);
+    for iy in 0..HEIGHT {
+        // Unreal Y across the long axis -> Godot X.
+        let gx = -HALF_Y + iy as f32 / (HEIGHT - 1) as f32 * 2.0 * HALF_Y;
+        for ix in 0..WIDTH {
+            // Unreal X across the short axis -> Godot Z is -ue.x, so gz = +that.
+            let ue_x = -HALF_X + ix as f32 / (WIDTH - 1) as f32 * 2.0 * HALF_X;
+            let gz = -ue_x;
+            let h_cm = terrain::height_with(&polys, gx, gz) * SCALE;
+            heights_cm[iy * WIDTH + ix] = h_cm;
+            min_cm = min_cm.min(h_cm);
+            max_cm = max_cm.max(h_cm);
+        }
+    }
+
+    // Normalise [min,max] cm -> full 16-bit range. `landscape.py` inverts this
+    // with the actor Z-scale, so the world Z of a texel comes back out in cm.
+    let span = (max_cm - min_cm).max(1e-3);
+    let path = out.join("heightmap.r16");
+    let mut w = BufWriter::with_capacity(1 << 20, File::create(&path).unwrap());
+    for &h in &heights_cm {
+        let u = (((h - min_cm) / span) * 65535.0)
+            .round()
+            .clamp(0.0, 65535.0) as u16;
+        w.write_all(&u.to_le_bytes()).unwrap();
+    }
+    w.flush().unwrap();
+    report(&path, &format!("{WIDTH}x{HEIGHT} 16-bit raw"));
+
+    // The band anchors the terrain material keys off, carried across the language
+    // boundary in cm so a drift in EXAG is at least visible on the Unreal side.
+    // world-unit anchors (see terrain.rs): h=30 ~1060 m, h=46 snow line, h=72 peak.
+    let meta = json!({
+        "heightmap": {
+            "file": "heightmap.r16",
+            "width": WIDTH,
+            "height": HEIGHT,
+            "bit_depth": 16,
+            "byte_order": "little",
+            "encoding": "raw",
+            "row_major": true,
+            "orientation": "unreal: local X = short (N-S) axis, local Y = long (E-W) axis",
+        },
+        // Unreal-cm footprint, same convention as provinces.json map_extent.
+        "extent_cm": { "x": 2.0 * HALF_X * SCALE, "y": 2.0 * HALF_Y * SCALE },
+        // Inverse of the normalisation above: worldZ_cm = min + (u16/65535)*span.
+        "height_cm": { "min": min_cm, "max": max_cm, "span": span },
+        "world_scale": SCALE,
+        "terrain_exag": terrain::EXAG,
+        // Height bands the terrain material blends on, in Unreal cm (world-unit
+        // anchor * SCALE). Retune EXAG and these move; see the map-exag coupling.
+        "bands_cm": { "land": 30.0 * SCALE, "snow": 46.0 * SCALE, "peak": 72.0 * SCALE },
+    });
+    let mpath = out.join("terrain_meta.json");
+    write_json(&mpath, &meta);
+    report(&mpath, &format!("range {min_cm:.0}..{max_cm:.0} cm"));
 }
 
 fn bake_borders(out: &Path) {

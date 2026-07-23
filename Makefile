@@ -1,16 +1,20 @@
-# tw — Total War-style campaign game (Python simulation + Unreal renderer)
+# tw — Total War-style campaign game (Python simulation + Python-driven Unreal).
 # `make help` lists everything.
 
 SEED ?= 42
 ROUNDS ?= 120
+# twctl is stdlib-only, so it runs straight from source with no install/venv.
+TWCTL = PYTHONPATH=tools/twctl/src python3 -m twctl
+
 .PHONY: help fmt clippy clean bake \
-        py-sim py-test py-server cpp-test unreal-build unreal-play unreal-test \
-        unreal-shots unreal-shot unreal-live shots-diff shots-bless \
-        unreal-pyscript \
+        py-test py-sim sim \
+        build shot shots-diff shots-bless live exec assets bridge-test \
         pre-commit-install pre-commit
 
 help: ## Show this help
-	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
+
+# --- the Rust geometry baker (bake/) — one-shot, offline ---
 
 clippy: ## Lint the baker (warnings are errors)
 	cargo clippy --all-targets -- -D warnings
@@ -21,144 +25,63 @@ fmt: ## Format the baker's Rust
 clean: ## Remove build artifacts
 	cargo clean
 
-bake: ## Bake the map geometry into unreal/Content/Map/ (one-shot, offline)
+bake: ## Bake map geometry into unreal/Content/Map/ (heightmap, borders, rivers, forests, provinces)
 	cargo run -p tw-bake
 
 # --- the Python simulation (sim/) — the source of truth for all game rules ---
 
-py-test: ## Run the Python simulation test suite
+py-test: ## Run the Python simulation test suite (the gate)
 	cd sim && uv run pytest
 
 py-sim: ## Watch an all-AI campaign (SEED=42, ROUNDS=120) — fastest balance check
 	cd sim && uv run python -m tw_sim.cli --seed $(SEED) --rounds $(ROUNDS)
 
-# Writes sim/.sim-port as well as printing the port, which is what lets an
-# already-open Unreal editor attach instead of spawning its own: restart this
-# and the editor picks the new sidecar up on the next campaign.
-py-server: ## Run the simulation sidecar (prints and advertises the port it picked)
-	cd sim && uv run python -m tw_sim.server --port-file .sim-port
+sim: ## Run the simulation sidecar (writes sim/.sim-port so a live editor attaches)
+	$(TWCTL) sim
 
-# --- the Unreal bridge (unreal/Source/TotalWarlike/Sim) ---
-
-# The engine-free half of the bridge — the msgpack codec, the framing and the
-# province hit test — compiled with plain clang++ and run against a real
-# sidecar. Seconds, versus a full editor build for the automation tests.
-cpp-test: ## Test the C++ bridge without Unreal (needs clang++ and uv)
-	@mkdir -p target/cpp
-	clang++ -std=c++17 -Wall -Wextra -O1 -o target/cpp/wire_test \
-		unreal/Tests/wire_test.cpp \
-		unreal/Source/TotalWarlike/Sim/MsgPack.cpp \
-		unreal/Source/TotalWarlike/Map/ProvinceLookup.cpp
-	./target/cpp/wire_test sim
-
-UE ?= /Users/Shared/Epic Games/UE_5.8
-
-unreal-build: ## Compile the Unreal editor target (UE=<engine dir> to override)
-	"$(UE)/Engine/Build/BatchFiles/Mac/Build.sh" TotalWarlikeEditor Mac Development \
-		-project="$(CURDIR)/unreal/TotalWarlike.uproject" -waitmutex
-
-# The Unreal vertical slice. There is no .umap: ACampaignGameMode spawns the sun,
-# the sea and ACampaignMap at BeginPlay, so -game on a stock empty level is the
-# whole launch. The sidecar starts itself (ESidecarMode::Auto) unless you already
-# have `make py-server` running, in which case it attaches to that one — which is
-# how you restart Python without closing the game.
-unreal-play: unreal-build ## Play the Unreal campaign map (WASD pan, wheel zoom, click, Space)
-	"$(UE)/Engine/Binaries/Mac/UnrealEditor" "$(CURDIR)/unreal/TotalWarlike.uproject" \
-		-game -windowed -ResX=1600 -ResY=900
-
-# --- the visual loop (see unreal/Shots/README.md) ---
+# --- the Unreal frontend, driven entirely through the Python API (twctl) ---
 #
-# Editing how the game LOOKS is edit -> view -> iterate, and "view" has to be one
-# command with a fixed camera or the iteration is not comparable. UShotDirector
-# takes named preset shots headlessly and writes them to unreal/Shots/current/;
-# unreal/Shots/golden/ is what they are compared against.
+# There is NO C++ module. Every actor, material, light and screenshot is built by
+# tw-package Python inside the editor. twctl launches the editor headlessly for
+# these, guarding free disk space (a full launch has twice wedged this machine).
 
-SHOTS ?= overview,lowlands,coast,mountain,border
-SHOT_RES ?= 1600 900
-comma := ,
+build: ## Headless: build + save the whole campaign world from the bake + a snapshot
+	$(TWCTL) build --seed $(SEED)
 
-# The `-` and the check afterwards are not laziness. UnrealEditor on macOS
-# reliably SIGTRAPs inside FMacApplication's destructor on the way out of a
-# windowed -game session, *after* every PNG has been written — an engine
-# teardown bug we cannot fix and should not be blocked by. So the exit code is
-# ignored and the actual contract, "every requested shot is on disk", is checked
-# directly. If a shot is missing, this fails.
-unreal-shots: unreal-build ## Render the preset campaign screenshots to unreal/Shots/current/
-	@rm -f $(foreach s,$(subst $(comma), ,$(SHOTS)),unreal/Shots/current/$(s).png)
-	-"$(UE)/Engine/Binaries/Mac/UnrealEditor" "$(CURDIR)/unreal/TotalWarlike.uproject" \
-		-game -windowed -ResX=$(word 1,$(SHOT_RES)) -ResY=$(word 2,$(SHOT_RES)) -ForceRes \
-		-TWShots=$(SHOTS) -TWShotDir="$(CURDIR)/unreal/Shots/current" \
-		-nosplash -unattended -nopause
-	@missing=""; for s in $(subst $(comma), ,$(SHOTS)); do \
-		[ -f unreal/Shots/current/$$s.png ] || missing="$$missing $$s"; done; \
-	if [ -n "$$missing" ]; then \
-		echo "shots MISSING:$$missing (see ~/Library/Logs/TotalWarlike/TotalWarlike.log)"; exit 1; \
-	fi; \
-	echo "shots written to unreal/Shots/current/: $(SHOTS)"
-
-# The live loop. Keeps ONE process up and drives it from the console, so a .ush
-# edit costs a shader recompile (~2s) instead of a relaunch (~20s):
-#   ~ (in the game window)  `recompileshaders changed`  then  TWView mountain
-#                           TWShot mountain
-# The console is the backtick key. -AllowConsoleInGame is what puts it there in
-# a -game build, where it is off by default.
-unreal-live: unreal-build ## Play with the console + shader hot-reload wired up (the tight visual loop)
-	@echo "console: backtick. try:  TWShotsList | TWView mountain | recompileshaders changed | TWShot try1"
-	"$(UE)/Engine/Binaries/Mac/UnrealEditor" "$(CURDIR)/unreal/TotalWarlike.uproject" \
-		-game -windowed -ResX=1600 -ResY=900 \
-		-AllowConsoleInGame -TWShotDir="$(CURDIR)/unreal/Shots/current"
-
-# One preset, for a tight loop on a single thing: make unreal-shot SHOT=mountain
-unreal-shot: ## Render a single preset (SHOT=mountain)
-	$(MAKE) unreal-shots SHOTS=$(SHOT)
+# The visual loop: render fixed-camera presets, then look at and diff the PNGs.
+# SHOTS overrides the set, e.g. make shot SHOTS="mountain border".
+SHOTS ?=
+shot: ## Headless: render preset shots to unreal/Shots/current/ (SHOTS="mountain border")
+	$(TWCTL) shot $(SHOTS)
 
 shots-diff: ## Compare unreal/Shots/current/ against golden/ and report what moved
-	uv run --with pillow python unreal/Shots/diff.py
+	$(TWCTL) diff
 
 shots-bless: ## Accept unreal/Shots/current/ as the new golden set
-	uv run --with pillow python unreal/Shots/diff.py --bless
+	$(TWCTL) bless
 
-# Runs every TotalWarlike automation test: .Sim spawns a real Python sidecar,
-# .Map reads the baked Content/Map (and skips itself if it has not been baked).
+assets: ## Headless: (re)build the code-owned materials (assets-as-code)
+	$(TWCTL) assets
+
+# The tight loop: one persistent editor, driven from another shell over remote
+# execution. In window A: `make live`. In window B: `make exec CODE=...`.
+live: ## Launch a persistent editor with Python remote-execution on (the tight loop host)
+	$(TWCTL) live
+
+CODE ?=
+exec: ## Push Python into the live editor (CODE='import tw.materials; tw.materials.terrain.build()')
+	@test -n "$(CODE)" || { echo "set CODE=<file or snippet>"; exit 1; }
+	$(TWCTL) exec "$(CODE)"
+
+# --- the bridge test — the fast gate for the pure-Python sim bridge ---
 #
-# UnrealEditor-Cmd exits 0 whether the tests passed or failed — it reports the
-# run, not the result — so a red suite used to look exactly like a green one from
-# here. The results only exist in the log, so read them out of the log: print
-# every verdict, then fail on any {Fail}. `Ran no tests` is also a failure; a
-# filter that matches nothing must not read as success.
-UNREAL_TEST_LOG = $(CURDIR)/unreal/Saved/automation.log
-unreal-test: unreal-build ## Run the Unreal-side automation tests headless
-	@mkdir -p $(dir $(UNREAL_TEST_LOG))
-	@"$(UE)/Engine/Binaries/Mac/UnrealEditor-Cmd" "$(CURDIR)/unreal/TotalWarlike.uproject" \
-		-ExecCmds="Automation RunTests TotalWarlike" \
-		-unattended -nullrhi -nosplash -nopause -stdout -FullStdOutLogOutput \
-		-testexit="Automation Test Queue Empty" > $(UNREAL_TEST_LOG) 2>&1 || true
-	@sed -n 's/.*Test Completed\. Result={\([^}]*\)} Name={\([^}]*\)}.*/  \1  \2/p' \
-		$(UNREAL_TEST_LOG) || true
-	@if grep -q "Result={Fail}" $(UNREAL_TEST_LOG); then \
-		echo "unreal-test FAILED — full log: $(UNREAL_TEST_LOG)"; \
-		sed -n 's/.*LogAutomationController: Error: /  /p' $(UNREAL_TEST_LOG); \
-		exit 1; \
-	elif ! grep -q "Test Completed" $(UNREAL_TEST_LOG); then \
-		echo "unreal-test ran no tests — full log: $(UNREAL_TEST_LOG)"; exit 1; \
-	else \
-		echo "unreal-test passed"; \
-	fi
+# The role the old `make cpp-test` played: exercise the whole wire protocol
+# against a real sidecar in seconds, no editor. Also cross-checks the vendored
+# msgpack codec against the reference library.
+bridge-test: ## Test the pure-Python sim bridge + msgpack codec against a real sidecar
+	cd sim && uv run python ../unreal/Content/Python/tests/test_bridge.py
 
-# The blessed escape hatch for the few things that genuinely need an authored
-# .uasset (the depth-aware water shader, the terrain material's Custom HLSL node).
-# Rather than that being a dead end an agent cannot cross, a Python script under
-# unreal/Scripts/ builds the asset programmatically via Unreal's editor API and is
-# checked in as text — so the asset has a reviewable, re-runnable source the same
-# way the baked geometry does. Run one: make unreal-pyscript SCRIPT=gen_water_material.py
-unreal-pyscript: ## Run an Unreal editor Python script (SCRIPT=gen_water_material.py) to generate an asset as code
-	@test -n "$(SCRIPT)" || { echo "set SCRIPT=<file under unreal/Scripts/>"; exit 1; }
-	@test -f "unreal/Scripts/$(SCRIPT)" || { echo "no such script: unreal/Scripts/$(SCRIPT)"; exit 1; }
-	"$(UE)/Engine/Binaries/Mac/UnrealEditor-Cmd" "$(CURDIR)/unreal/TotalWarlike.uproject" \
-		-run=pythonscript -script="$(CURDIR)/unreal/Scripts/$(SCRIPT)" \
-		-unattended -nullrhi -nosplash -nopause -stdout
-
-# --- pre-commit (prek) — the local CI gate; see CLAUDE.md ---
+# --- pre-commit (prek) — the local CI gate ---
 
 pre-commit-install: ## Install the prek git hook (one-time per clone)
 	uvx prek install

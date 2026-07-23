@@ -11,26 +11,29 @@ Two halves, meeting at a narrow socket interface:
   every game rule. Frontends touch exactly one thing, the `Simulation` facade in
   `api.py`; the AI issues ordinary commands through the same `rules.apply` path
   the player does.
-- **`unreal/` (`TotalWarlike`)** — an Unreal 5.8 C++ renderer. Every click
-  becomes a command; the visible layer is rebuilt from the snapshot, so the
-  screen cannot disagree with the simulation. It contains no game rules.
+- **`unreal/` (`TotalWarlike`)** — a Python-driven Unreal 5.8 frontend with **no
+  C++ module.** Every actor, material, light and screenshot is built by the `tw`
+  Python package inside the editor, driven by the `twctl` CLI (`tools/twctl`). The
+  visible layer is rebuilt from the snapshot, so the screen cannot disagree with
+  the simulation. It contains no game rules.
 
-`sim/server.py` speaks length-prefixed msgpack over loopback TCP. That is the
-whole contract between them.
+`sim/server.py` speaks length-prefixed msgpack over loopback TCP; `tw/simbridge.py`
+is the pure-Python client. That is the whole contract between them.
 
 ## Play
 
 ```sh
-make unreal-play      # compile and launch (WASD pan, wheel zoom, click, Space)
+make build            # headless: build + save the whole world (needs UE_5.8)
+make shot             # render the fixed-camera preset screenshots
+make live             # a persistent editor for the tight loop (make exec CODE=...)
 make py-sim SEED=42   # or just watch an all-AI campaign headless
 ```
 
 ## Tests
 
 ```sh
-make py-test    # the Python suite — this is the gate
-make cpp-test   # the C++ bridge against a real sidecar, ~2 s, no Unreal needed
-make unreal-test
+make py-test      # the Python suite — this is the gate
+make bridge-test  # the pure-Python sim bridge + msgpack codec vs a real sidecar, ~2 s, no editor
 ```
 
 ## The map

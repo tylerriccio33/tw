@@ -4,216 +4,189 @@ Guidance for Claude Code (claude.ai/code) working in this repository.
 
 ## What this repo is
 
-A Total War-style campaign game: **Python simulation + Unreal C++ renderer**,
-meeting at a narrow socket interface.
+A Total War-style campaign game: **Python simulation + a Python-driven Unreal
+5.8 frontend**. The defining constraint is that **the Unreal side has no C++
+module** — every actor, material, light, and screenshot is built by the `tw`
+Python package running inside the editor, driven by the `twctl` CLI. Agents drive
+essentially the whole workflow through Unreal's editor Python API.
 
 | Path | Role |
 | --- | --- |
-| `sim/` (`tw_sim`) | Python simulation — the source of truth for all rules |
-| `unreal/` (`TotalWarlike`) | Unreal 5.8 C++ frontend |
-| `bake/` (`tw-bake`) | One-shot Rust geometry baker → `unreal/Content/Map/` (offline only) |
+| `sim/` (`tw_sim`) | Python simulation — the source of truth for all rules. Untouched by the frontend. |
+| `unreal/Content/Python/tw/` | The frontend: builds and drives the campaign map through the `unreal` Python API. |
+| `tools/twctl/` | The agent-facing CLI. Launches the editor headlessly or drives a live one over remote execution. |
+| `bake/` (`tw-bake`) | One-shot Rust geometry baker → `unreal/Content/Map/` (offline only). |
 
-The migration off Rust/Godot is **complete**. `engine/` (the original Rust
-engine), `godot-client/` and `godot/` have been deleted; the geometry generators
-the baker needs now live in `bake/src/geom/`, which is the only Rust left and the
-only reason there is still a Cargo workspace.
+The north star for the look is `target-state.png`. Current slice is **visuals
+first**: match the reference on fixed-camera golden shots with read-only province
+borders and settlement markers; full click-to-command interactivity is slice 2
+(stubbed in `tw/campaign.py`).
 
-## Commands
+## Commands (`make help` lists all)
 
-`make help` lists everything. The ones that matter day to day:
+- `make py-test` — the Python simulation test suite. **This is the gate.**
+- `make bridge-test` — **reach for this first** when touching the sim bridge. Runs
+  the pure-Python `tw.simbridge` (and its vendored msgpack codec) against a real
+  `tw_sim` sidecar in ~2s, no editor. Plays the role the old `cpp-test` did.
+- `make bake` — regenerate `unreal/Content/Map/` (heightmap, borders, rivers,
+  forests, provinces). Only needed when geometry/elevation code changes.
+- `make build` — headless: build + save the whole world from the bake + a snapshot.
+- `make shot [SHOTS="mountain border"]` — **the visual loop.** Render fixed-camera
+  presets to `unreal/Shots/current/`; `make shots-diff` vs `golden/`, `make
+  shots-bless` to accept. The PNGs are how a visual change is *seen*; two identical
+  runs diff to ~0, so any number is a real change.
+- `make live` + `make exec CODE=...` — **the tight loop.** One persistent editor
+  with Python remote-execution on; push a snippet (e.g. rebuild a material) into it
+  from another shell instead of paying a relaunch.
+- `make sim` — run the sidecar standalone (writes `sim/.sim-port`), so a live
+  editor attaches to it; restart Python without closing the editor.
+- `make assets` — headless: (re)build the code-owned materials.
 
-- `make py-test` — the Python test suite (`cd sim && uv run pytest`). This is the gate.
-- `make py-sim SEED=42 ROUNDS=120` — headless all-AI campaign; fastest balance check.
-- `make py-server` — run the sidecar standalone; writes `sim/.sim-port` so an
-  already-open Unreal editor attaches to it instead of spawning its own. This is
-  how you restart Python without closing the game.
-- `make cpp-test` — **reach for this first** when touching the bridge. Compiles the
-  engine-free half (`Sim/MsgPack.cpp`, `Map/ProvinceLookup.cpp`) with plain
-  `clang++`, starts a real sidecar, exercises the whole protocol in ~2 s.
-- `make unreal-build` / `make unreal-play` / `make unreal-test` — compile, play,
-  and run the `TotalWarlike` automation tests — `.Sim` (slow confirmation of
-  `cpp-test`) and `.Map` (the baked-map reader, incl. terrain winding).
-  Override the engine with `UE=<dir>`; default `/Users/Shared/Epic Games/UE_5.8`.
-- `make unreal-shots` — **the visual loop, and the center of gravity for any change
-  to how the game looks.** Renders five fixed-camera preset screenshots of the
-  campaign map headlessly into `unreal/Shots/current/` in ~10s; `make shots-diff`
-  compares them against the committed `golden/` set and `make shots-bless` accepts a
-  new baseline. Two runs diff to exactly zero, so any number it prints is a real
-  change. The PNGs are directly readable — they are how a visual change is *seen*,
-  not just measured, so the loop is edit → `make unreal-shots` → look → iterate.
-  Every visual change should land as code/HLSL/config **plus** an updated golden,
-  and any new visual subsystem should add its own preset (e.g. a `sea` preset once
-  the water shader exists) so the change it introduces is caught in a frame.
-  `make unreal-live` is the same thing interactively, with the console and shader
-  hot-reload wired up for a ~2s edit/view loop on `TerrainCommon.ush`. See
-  `unreal/Shots/README.md`.
-- `make bake` — regenerate `unreal/Content/Map/`. Only needed when the coastline,
-  elevation or derived-geometry code changes.
-- `make unreal-pyscript SCRIPT=gen_x.py` — run a script under `unreal/Scripts/`
-  that builds a `.uasset` through Unreal's editor Python API. The blessed escape
-  hatch for the few things that truly need an authored asset (the terrain material's
-  Custom HLSL node, the water shader): the asset gets a reviewable, re-runnable
-  source instead of being hand-authored in the editor. See `unreal/Scripts/README.md`.
+Override the engine with `TW_UE=<dir>` (default `/Users/Shared/Epic Games/UE_5.8`).
 
 **Disk is the binding constraint on this machine.** A full editor launch has
-twice filled the volume to the point that no shell command could run. Before any
-editor run, check free space; run it in the background and kill it if free space
-drops below ~3 GB.
-
-## Pre-commit (prek)
-
-`.pre-commit-config.yaml` runs `py-test`, `py-sim`, `cpp-test`, and
-`cargo clippy` on every commit via [`prek`](https://github.com/j178/prek), the
-Rust reimplementation of pre-commit — invoke it with `uvx prek`. This is the
-local, enforced substitute for CI: there is no GitHub Actions workflow in this
-repo, so these four checks are ~90% of what "correctness" means here.
-`unreal-test` is deliberately excluded — a full editor build is too slow for a
-commit hook — so it stays a manual step (see Workflow below).
-
-- `make pre-commit-install` — wire it into `.git/hooks/pre-commit` (one-time per clone).
-- `make pre-commit` — run every hook by hand, e.g. after editing the config itself.
+twice filled the volume until no shell command could run. `twctl` checks free
+space before every launch and kills a headless run if free space drops below
+~3 GB — do not defeat that guard.
 
 ## Architecture
 
 ```
-    Unreal C++  ──FSimCommand──▶  USimSubsystem ──msgpack/TCP──▶  server.py
-    (unreal/)   ◀──snapshot────   (worker thread)              ──▶  api.Simulation
-                                                                    (sim/)
-    unreal/Content/Map/*.json  ◀── make bake ── bake/src/geom/*.rs
+  twctl (tools/) ──▶ UnrealEditor(-Cmd) ── embedded Python (unreal) ──┐
+                        tw/ package:                                   │
+                        world → landscape/materials/water/forests/     │
+                                borders/markers/lighting/render        │
+                        reads unreal/Content/Map/ (bake outputs)       │
+                        ── socket(msgpack) ──▶ tw_sim.server ──▶ api.Simulation
+  bake/ (Rust) ── make bake ──▶ unreal/Content/Map/*.{r16,json}
 ```
 
-The hard rule, unchanged from the Rust design: **the frontend contains no game
-rules.** Every player action becomes a command; the visible layer is rebuilt
-from the snapshot, so the screen cannot disagree with the simulation. The AI is
-not special-cased — `ai.py` issues ordinary commands through the same
-`rules.apply` path.
+The hard rule, unchanged from the old design: **the frontend contains no game
+rules.** Every player action becomes a command; the visible layer is rebuilt from
+the snapshot. The AI is not special-cased — it issues ordinary commands through
+the same `rules.apply` path.
 
-### `sim/src/tw_sim/`
+### `unreal/Content/Python/tw/`
 
-- `api.py` — the `Simulation` facade, the **only** thing a frontend touches.
-  Coarse-grained on purpose: `end_turn()` resolves the player's turn *and* every
-  AI faction's, returning the whole event stream. There is deliberately no
-  per-object accessor (no `army_position(42)` sixty times a second).
-- `server.py` — ~100-line socket adapter onto the facade. Length-prefixed
-  msgpack over loopback TCP, request/response, one in flight. `RuleError` comes
-  back as `{"ok": false}`; anything else propagates so bugs are loud.
-- `rules.py` — command dispatcher, the central file. `turn.py` — end-of-turn
-  resolution and rotation. `state.py` — `GameState` and domain types.
-  `ai.py`, `diplomacy.py`, `combat.py`, `economy.py` — subsystems.
-  `command.py` / `event.py` — the boundary. `wire.py`, `ids.py`, `cli.py`.
-- `config.py` + `data.py` — load `sim/campaign/balance.yaml` (tuning knobs) and
-  `sim/campaign/britain.yaml` (factions, provinces, borders). Authored content
-  is trusted: a bad reference **raises loudly** rather than returning an error value.
+- `simbridge.py` — the client half of the sim bridge, **pure Python, no deps.**
+  4-byte length prefix + msgpack over loopback TCP (see `sim/server.py`). UE ships
+  no `msgpack`, so a minimal codec is vendored here — the thing that makes
+  `bridge-test` possible. Nothing calls the transport per frame.
+- `world.py` — `build_world()`, the one orchestration entry point. Materials →
+  terrain → static geography → ownership layers → lighting. Builds against a
+  neutral snapshot if no sidecar is up, so the visual loop never needs the sim.
+- `landscape.py` — heightmap → `ALandscape`. **The scripted landscape import is
+  the one call to confirm against the installed engine's Python API**; if 5.8 does
+  not expose it, `build()` falls back to importing `terrain.obj` as a Nanite static
+  mesh. The terrain material reads world-Z, so it works on either.
+- `materials/` — assets-as-code. Material graphs built via
+  `unreal.MaterialEditingLibrary` and saved under `/Game/Generated/Materials`, so a
+  look change is a reviewable diff, never hand-authored. `terrain.py` bands on the
+  *actual* baked height range (see the EXAG note below).
+- `water.py`, `forests.py`, `borders.py`, `markers.py`, `lighting.py` — the layers.
+  Static geography is built once; only ownership layers (borders, markers) rebuild
+  on a new snapshot (`campaign.apply_snapshot`).
+- `render.py` + `presets.py` — fixed-camera preset screenshots to `Shots/current/`.
+- `_scene.py` — everything spawned is tagged `tw` + a layer tag, so a rebuild is
+  diff-free by construction (`clear(layer)` removes exactly the last run's actors).
+- `entry/*.py` — the headless entry points `twctl` runs under `-run=pythonscript`;
+  they read parameters from env vars (`TW_CAMPAIGN`, `TW_SEED`, `TW_SHOTS`).
 
-**Determinism is explicitly de-scoped** (`random.Random(seed)`, not ChaCha8) —
-do not expect a seed to replay identically. `sim/tests/test_oracle.py` guards
-*aggregate* campaign shape instead, against bounds recorded from the Rust engine
-before it was deleted. Those numbers can no longer be re-derived: treat them as a
-frozen baseline, and widen them only with a deliberate balance change in hand.
+### `bake/` and the EXAG coupling
 
-### `unreal/Source/TotalWarlike/`
+`make bake` runs the Rust generators once and writes `unreal/Content/Map/`:
+`terrain.obj`, **`heightmap.r16` + `terrain_meta.json`** (the Landscape path),
+`province_borders.json`, `rivers.json`, `forests.json`, `provinces.json`. Output is
+gitignored — regenerate freely. Coordinate conversion (Godot → Unreal cm) happens
+**only** in the baker.
 
-- `Sim/SimSubsystem.{h,cpp}` — the game's single point of contact with the
-  simulation. Everything reads the cached `GetSnapshot()` and reacts to
-  delegates; nothing calls the transport per-frame, and the transport is not
-  reachable from outside. Requests run on a worker thread; replies are
-  marshalled to the game thread before any delegate fires, so subscribers may
-  spawn/destroy actors freely.
-- `Sim/MsgPack.{h,cpp}` — hand-rolled msgpack subset (Unreal ships none),
-  deliberately free of Unreal types. Same for `Map/ProvinceLookup.h`. That is
-  exactly what makes `make cpp-test` possible — **keep them engine-free.**
-- `Sim/SimWire`, `SimTypes.h`, `SimTransport.h`, `SocketSimTransport` — framing,
-  types, transport.
-- `Map/CampaignGameMode` — there is **no `.umap`**. It spawns sun, sky, fog, sea,
-  a post-process volume and `ACampaignMap` at `BeginPlay`, so the game runs against
-  a stock empty level. `SpawnLighting` and `SpawnPostProcess` are the two code-owned
-  "look" hooks: the first is the sun/sky/fog, the second an **unbound
-  `APostProcessVolume`** that carries the whole-map grade (manual exposure, filmic
-  contrast/saturation, bloom, vignette). Keeping the grade in code — not an authored
-  volume — is what puts it in `make unreal-shots` and lets it diff in a PR; the
-  base render quality it grades on top of (Lumen, Nanite, VSM, TSR) lives in
-  `Config/DefaultEngine.ini` under `[/Script/Engine.RendererSettings]`. It also owns
-  sidecar policy: `Auto` in the editor (reuse a running `make py-server`), `Spawn` in
-  a packaged build.
-- `Map/CampaignMap` — turns snapshot into actors. Static geography (terrain,
-  rivers, forests) is built once; only ownership-dependent layers (border
-  colours, markers) rebuild. Markers sync by **diffing ID sets**, not
-  clear-and-rebuild — that is why armies glide instead of blinking, and why "no
-  actor growth over 10 turns" is a testable property.
-- `Map/MapData` — parses the baked `Content/Map/*.json` + `terrain.obj`. It
-  transforms nothing; the baker already wrote Unreal space.
-- `Map/CampaignPlayerController` — pan/zoom/click/end-turn. Decides *which*
-  command to send, never whether it is legal; illegality is discovered by
-  sending it and letting `rules.py` refuse. The one exception is a cheap
-  pre-filter on adjacency, which answers what the click *meant*, not what is legal.
-- `Map/CampaignHUD`, `EventText`, `MarkerActors`, `Ribbon` — presentation.
-  The HUD draws with `Canvas->DrawText` using `GEngine->GetMediumFont()`, which
-  is **ASCII-only** — any emoji or box-drawing glyph renders as a tofu box. Keep
-  canvas labels to plain ASCII (`>>`, `-`, `Gold`), not `▶`/`•`/`⚒`. The `hud`
-  shot preset selects London so the control bar's panels render populated —
-  `make unreal-shots` catches a broken glyph or layout.
-- `Tests/SimTransportTest.cpp` — automation tests (spawn a real sidecar).
-  Note `unreal/Tests/wire_test.cpp` lives **outside** `Source/` because UBT
-  compiles every `.cpp` under a module and that file has its own `main()`.
-
-Content is data files and source, not binary assets — everything is constructed
-in code. The exceptions are the few things that genuinely need a `.uasset` (the
-terrain material's Custom HLSL node; the future water shader): those are looked up
-softly and fall back to a flat colour, and when one is built it is built **as code**
-via a checked-in script under `unreal/Scripts/` (`make unreal-pyscript`), never hand-
-authored in the editor, so it keeps a reviewable source.
-
-### `bake/` and geometry
-
-The simulation models provinces as a pure adjacency graph with **no
-coordinates**. All world geometry is derived offline: `bake/src/main.rs` runs
-`bake/src/geom/{terrain,regions,rivers,forests}.rs` once and writes
-`terrain.obj`, `provinces.json`, `province_borders.json`, `rivers.json`,
-`forests.json`. Those generators are inherited from the retired Godot client and
-import nothing but serde, which is why the whole crate builds and bakes in ~12 s
-from cold. An unoptimized `terrain.rs` takes ~70 s, which is why this is offline
-rather than at load.
-
-Coordinate conversion (Godot Y-up right-handed → Unreal Z-up left-handed cm)
-happens **only** in the baker: `ue = (-godot.z, godot.x, godot.y) * SCALE`. If a
-coordinate looks wrong on screen, there is exactly one place it went wrong.
-
-`bake/src/geom/geo.rs` + `elev.bin` are generated by `bake/gen_geo.py` from
-Natural Earth / terrarium tiles — do not hand-edit; regenerate.
-
-Elevation is exaggerated ~60x (`terrain.rs::EXAG`). **Every height and slope
-threshold in the terrain material is calibrated against that constant** — across
-a language boundary, with nothing to catch a mismatch. Retuning one means
-retuning the others.
+Elevation is exaggerated ~60x (`bake/src/geom/terrain.rs::EXAG`). Historically
+every height/slope threshold in the terrain material was hand-calibrated against
+that constant across the language boundary. Now `terrain_meta.json` carries the
+height range and band anchors in cm, and `materials/terrain.py` bands as
+*fractions of the actual baked range* — so the palette stays reachable even though
+Britain peaks far below the European anchors. If the map goes uniformly green,
+that coupling has drifted; check the range in `terrain_meta.json`.
 
 ## Workflow
 
-**Changing a game rule:** edit `sim/src/tw_sim/`, add a test in `sim/tests/`,
-run `make py-test`, sanity-check balance with `make py-sim`. No C++ changes
-unless a new command/event field crosses the wire.
+  The core idea
 
-**Adding a command or event:** `command.py`/`event.py` → `rules.py` → wire
-serialization (`wire.py`, `api.py`) → C++ `SimTypes.h`/`SimWire.cpp` →
-whatever sends it. Verify with `make cpp-test` before `make unreal-test`.
+  There's no C++ and no editor GUI clicking. You edit Python (in unreal/Content/Python/tw/) or
+  config, and drive the editor from the terminal with twctl (via make). The editor is a renderer you
+  push code into — headlessly for reproducible results, or into a live instance for speed.
 
-**Changing how it looks:** whether the edit is HLSL (`TerrainCommon.ush`), a
-`SpawnLighting`/`SpawnPostProcess` tweak, or a render cvar in
-`Config/DefaultEngine.ini`, the loop is the same — make the change, `make
-unreal-shots`, look at the PNGs and read `make shots-diff`, iterate, then
-`make shots-bless` once it is right so the golden lands with the change. A visual
-change without an updated golden is unfinished. Reach for `make unreal-live` when
-iterating on a `.ush` (2s shader reload vs a relaunch).
+  The tight visual loop (where you'll spend most time)
 
-**Adding an asset that needs a `.uasset`:** write a script under `unreal/Scripts/`
-that builds it through Unreal's Python API, `make unreal-pyscript SCRIPT=...`,
-commit the generated asset next to its script, then confirm it with
-`make unreal-shots`.
+  This is the inner loop for "make it look like target-state.png":
 
-**Changing the renderer:** edit `unreal/Source/TotalWarlike/Map/`,
-`make unreal-build`, then `make unreal-play` (watch disk).
+  make live                        # window A: one persistent editor, remote-exec on
+  # window B — edit tw/materials/terrain.py, then:
+  make exec CODE='import importlib, tw.materials.terrain as t; importlib.reload(t); t.build()'
+  make shot SHOTS=mountain         # render one preset, look at the PNG
 
-**Iterating on Python while the editor is open:** start `make py-server` first;
-the editor attaches to it. Restart the sidecar and the editor picks it up on the
-next campaign.
+  Edit → exec → look. A material tweak costs ~1–2s (a function re-run), not a 20s relaunch. The
+  editor never restarts.
 
-**Changing geometry:** edit `bake/src/geom/*.rs`, `make bake`, relaunch.
+  The golden loop (locking a look in)
+
+  When the change is right, make it reproducible and diffable:
+
+  make shot            # render all presets → unreal/Shots/current/
+  make shots-diff      # what moved vs golden/  (two identical runs diff to ~0)
+  make shots-bless     # accept current/ as the new baseline
+
+  Rule: a visual change without an updated golden is unfinished. The golden PNGs land in the PR
+  alongside the code, so a reviewer sees the pixels change.
+
+  Building the whole world (headless, reproducible)
+
+  make bake && make build     # bake geometry, then build+save the full campaign map
+  build runs entry/build.py under UnrealEditor-Cmd -run=pythonscript — cold, deterministic, exits.
+  This is the CI-shaped path; make shot even auto-builds if the level's empty.
+
+  Changing game rules (unchanged from before)
+
+  The sim is untouched territory:
+  # edit sim/src/tw_sim/, add a test
+  make py-test        # the gate
+  make py-sim SEED=42 # watch an all-AI campaign for balance
+  Only touch the frontend if a snapshot/command field crosses the wire — then edit tw/simbridge.py
+  and run make bridge-test.
+
+  The fast gate (before any commit)
+
+  make bridge-test    # pure-Python bridge + msgpack codec vs a real sidecar, ~2s, no editor
+  Pre-commit runs py-test, py-sim, bridge-test, clippy. Editor steps are excluded — too slow and
+  disk-risky for a hook.
+
+  Iterating on Python while the editor stays open
+
+  make sim            # run the sidecar standalone (writes sim/.sim-port)
+  A live editor's tw.simbridge attaches to it — restart Python without closing Unreal.
+
+  ---
+  The mental model: four loops at different speeds — geometry (bake, seconds, rare), visuals
+  (live+exec, ~2s, constant), world assembly (build, ~minute, occasional), rules (py-test, seconds,
+  separate). Everything an agent needs to do is a make target that ultimately runs tw-package Python
+  inside the editor.
+
+**Changing a game rule:** edit `sim/src/tw_sim/`, add a test, `make py-test`,
+sanity-check with `make py-sim`. No frontend change unless a snapshot/command field
+crosses the wire — then update `tw/simbridge.py` and verify with `make bridge-test`.
+
+**Changing how it looks:** edit the material/lighting Python, then `make live` +
+`make exec CODE='import importlib, tw.materials.terrain as t; importlib.reload(t);
+t.build()'` to see it in the live editor, or `make shot` for the headless frame.
+Look at the PNGs, `make shots-diff`, iterate, `make shots-bless` once it is right.
+A visual change without an updated golden is unfinished.
+
+**Changing geometry:** edit `bake/src/geom/*.rs`, `make bake`, `make build`.
+
+## Pre-commit (prek)
+
+`.pre-commit-config.yaml` runs `py-test`, `py-sim`, `bridge-test`, and
+`cargo clippy` on every commit via `prek` (`uvx prek`). This is the local,
+enforced substitute for CI — there is no GitHub Actions workflow. Editor-in-the-
+loop steps (`make build`/`shot`) are deliberately excluded: too slow, and disk-
+risky, for a commit hook.
