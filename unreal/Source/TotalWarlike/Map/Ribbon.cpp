@@ -5,7 +5,7 @@ namespace tw
 
 void BuildRibbon(const TArray<FVector>& Points, float Width, float ZBias,
                  TArray<FVector>& OutVertices, TArray<int32>& OutTriangles,
-                 TArray<FVector>& OutNormals)
+                 TArray<FVector>& OutNormals, float LateralOffset)
 {
     const int32 N = Points.Num();
     if (N < 2)
@@ -39,10 +39,12 @@ void BuildRibbon(const TArray<FVector>& Points, float Width, float ZBias,
             Forward = FVector::ForwardVector;
         }
 
-        const FVector Side = FVector::CrossProduct(Forward.GetSafeNormal(), FVector::UpVector) *
-                             (Width * 0.5f);
-        OutVertices.Add(Points[i] - Side + Lift);
-        OutVertices.Add(Points[i] + Side + Lift);
+        const FVector SideDir =
+            FVector::CrossProduct(Forward.GetSafeNormal(), FVector::UpVector);
+        const FVector Side = SideDir * (Width * 0.5f);
+        const FVector Centre = Points[i] + SideDir * LateralOffset + Lift;
+        OutVertices.Add(Centre - Side);
+        OutVertices.Add(Centre + Side);
         OutNormals.Add(FVector::UpVector);
         OutNormals.Add(FVector::UpVector);
     }

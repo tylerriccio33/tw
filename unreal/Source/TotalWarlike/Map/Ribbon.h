@@ -17,9 +17,14 @@ namespace tw
 /// Widen `Points` into a triangle strip of half-width `Width * 0.5`, lifted
 /// `ZBias` centimetres so it does not z-fight the terrain it is draped on.
 ///
+/// `LateralOffset` shifts the whole centreline sideways (flat, along the same
+/// heading normal the width uses) — positive is left of travel. It exists so a
+/// frontier can be drawn as two parallel ribbons, one per owning faction's
+/// colour, each hugging its own side of the line.
+///
 /// Emits nothing for a polyline of fewer than two points.
 void BuildRibbon(const TArray<FVector>& Points, float Width, float ZBias,
                  TArray<FVector>& OutVertices, TArray<int32>& OutTriangles,
-                 TArray<FVector>& OutNormals);
+                 TArray<FVector>& OutNormals, float LateralOffset = 0.0f);
 
 } // namespace tw
