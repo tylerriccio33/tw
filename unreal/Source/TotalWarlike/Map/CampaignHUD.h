@@ -62,6 +62,12 @@ private:
     /// nothing here sends a command yet.
     void DrawControlBar();
 
+    /// Floating settlement name tags, projected from each province's site onto
+    /// the map: a dark plate with the owning faction's colour as a stripe, the
+    /// city name in stone text. This is the reference screenshot's Burgos /
+    /// Pamplona labels — the one thing that makes the keeps legible as places.
+    void DrawSettlementLabels();
+
     struct FFeedLine
     {
         FString Text;
