@@ -37,5 +37,6 @@ public:
 
 private:
     void SpawnLighting();
+    void SpawnPostProcess();
     void SpawnSea();
 };

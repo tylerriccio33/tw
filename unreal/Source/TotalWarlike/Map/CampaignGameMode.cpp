@@ -9,6 +9,7 @@
 #include "Engine/SkyLight.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
+#include "Engine/PostProcessVolume.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -34,6 +35,7 @@ void ACampaignGameMode::BeginPlay()
     Super::BeginPlay();
 
     SpawnLighting();
+    SpawnPostProcess();
 
     ACampaignMap* Map = GetWorld()->SpawnActor<ACampaignMap>();
     if (Map == nullptr)
@@ -104,6 +106,55 @@ void ACampaignGameMode::SpawnLighting()
         Component->SetStartDistance(150000.0f);
         Component->SetFogHeightFalloff(0.00002f);
     }
+}
+
+void ACampaignGameMode::SpawnPostProcess()
+{
+    // The one code-owned place for "mood": tone mapping, exposure, bloom, colour
+    // grading and vignette for the whole campaign. It is what turns the flat
+    // stock render into something cinematic, and — like SpawnLighting — it lives
+    // in code so it shows up in `make unreal-shots` and diffs in a PR rather than
+    // hiding in an authored .uasset volume nobody can review.
+    APostProcessVolume* Volume = GetWorld()->SpawnActor<APostProcessVolume>();
+    if (Volume == nullptr)
+    {
+        return;
+    }
+    // Unbound: one global grade over the entire map, not a place you can walk
+    // out of. The camera is always above the island, so there is no interior to
+    // blend against.
+    Volume->bUnbound = true;
+    Volume->BlendWeight = 1.0f;
+
+    FPostProcessSettings& PP = Volume->Settings;
+
+    // Fixed exposure. Auto-exposure would rebalance the frame as the camera pans
+    // between dark mountain and bright sea, which makes two golden shots of the
+    // "same" scene disagree. A manual EV keeps the loop comparable — this mirrors
+    // r.DefaultFeature.AutoExposure=False in DefaultEngine.ini.
+    PP.bOverride_AutoExposureMethod = true;
+    PP.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+    PP.bOverride_AutoExposureBias = true;
+    PP.AutoExposureBias = 11.0f;
+
+    // A restrained filmic grade: a touch of warmth in the mids to match the low
+    // afternoon sun, slightly lifted contrast, and just enough saturation to make
+    // the faction ink read without turning the terrain gaudy.
+    PP.bOverride_ColorSaturation = true;
+    PP.ColorSaturation = FVector4(1.06, 1.06, 1.06, 1.0);
+    PP.bOverride_ColorContrast = true;
+    PP.ColorContrast = FVector4(1.05, 1.05, 1.05, 1.0);
+    PP.bOverride_ColorGamma = true;
+    PP.ColorGamma = FVector4(1.0, 0.99, 0.97, 1.0);
+
+    // Gentle bloom on the sun-lit sea and snow highlights — present, not blown.
+    PP.bOverride_BloomIntensity = true;
+    PP.BloomIntensity = 0.5f;
+
+    // A soft vignette to seat the map in the frame and draw the eye off the
+    // screen edges where the fog is doing its work.
+    PP.bOverride_VignetteIntensity = true;
+    PP.VignetteIntensity = 0.35f;
 }
 
 void ACampaignGameMode::SpawnSea()
