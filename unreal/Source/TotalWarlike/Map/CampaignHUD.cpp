@@ -157,6 +157,7 @@ void ACampaignHUD::DrawHUD()
         Y += LineHeight;
     }
 
+    DrawSettlementLabels();
     DrawControlBar();
 }
 
@@ -365,6 +366,80 @@ void ACampaignHUD::DrawControlBar()
            bReady && bHasCity);
     Button(ActX, RowTop + 48.0f, ActW, 40.0f, TEXT("Recruit"), EControlAction::Recruit,
            bReady && bHasCity);
+}
+
+void ACampaignHUD::DrawSettlementLabels()
+{
+    UFont* Font = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
+    if (Canvas == nullptr || Font == nullptr)
+    {
+        return;
+    }
+
+    const USimSubsystem* Subsystem = Sim();
+    ACampaignMap* Map = FindMap();
+    if (Subsystem == nullptr || Map == nullptr)
+    {
+        return;
+    }
+    const FWorldSnapshot& Snapshot = Subsystem->GetSnapshot();
+    const FMapData& MapData = Map->GetMapData();
+    const int32 Selected = Map->GetSelectedProvince();
+
+    // Labels sit above the map; the control bar draws over them, so keep them out
+    // of its band entirely.
+    constexpr float BarHeight = 150.0f;
+    const float BottomLimit = Canvas->SizeY - BarHeight;
+
+    // How far above the keep the tag floats, in world centimetres.
+    constexpr float LabelLift = 1500.0f;
+
+    for (const FProvinceState& Province : Snapshot.Provinces)
+    {
+        const FString& Name = Province.City.IsEmpty() ? Province.Name : Province.City;
+        if (Name.IsEmpty())
+        {
+            continue;
+        }
+
+        FVector World = Map->MarkerLocationFor(Province.Id);
+        World.Z += LabelLift;
+        const FVector Screen = Project(World);
+        if (Screen.Z <= 0.0f)
+        {
+            continue; // Behind the camera.
+        }
+
+        float TextW = 0.0f;
+        float TextH = 0.0f;
+        Canvas->TextSize(Font, Name, TextW, TextH);
+
+        constexpr float PadX = 8.0f;
+        constexpr float StripeW = 5.0f;
+        const float PlateW = TextW + PadX * 2.0f + StripeW;
+        const float PlateH = TextH + 6.0f;
+        const float PlateX = Screen.X - PlateW * 0.5f;
+        const float PlateY = Screen.Y - PlateH;
+
+        if (PlateX < 0.0f || PlateX + PlateW > Canvas->SizeX || PlateY < 0.0f ||
+            PlateY + PlateH > BottomLimit)
+        {
+            continue; // Fully off-screen or under the control bar.
+        }
+
+        const bool bSelected = Province.Id == Selected;
+        FLinearColor Faction = MapData.ColorFor(Province.Owner);
+
+        // Dark plate, faction stripe down the left edge, name in stone text. A
+        // selected settlement gets a gold outline instead of the plain dark one.
+        Fill(Canvas, PlateX, PlateY, PlateW, PlateH,
+             FLinearColor(0.10f, 0.09f, 0.08f, 0.85f));
+        Fill(Canvas, PlateX, PlateY, StripeW, PlateH, Faction);
+        Outline(Canvas, PlateX, PlateY, PlateW, PlateH, bSelected ? GoldLine : PanelDark);
+
+        Label(Canvas, Font, Name, PlateX + StripeW + PadX, PlateY + 3.0f,
+              bSelected ? GoldText : StoneText);
+    }
 }
 
 ACampaignHUD::EControlAction ACampaignHUD::ControlActionAt(const FVector2D& Screen) const

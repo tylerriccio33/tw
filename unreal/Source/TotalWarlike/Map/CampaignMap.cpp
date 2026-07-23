@@ -247,11 +247,24 @@ void ACampaignMap::BuildForests()
 
 void ACampaignMap::RebuildBorders(const FWorldSnapshot& Snapshot)
 {
-    // A line between two provinces with different owners is a frontier and is
-    // drawn thick and dark; an internal line is thin and faint. That is the
-    // whole rule, and it is why borders rebuild while rivers do not.
-    TArray<FVector> FrontierVerts, InternalVerts, FrontierNormals, InternalNormals;
-    TArray<int32> FrontierTris, InternalTris;
+    // A line between two provinces with different owners is a frontier; an
+    // internal line is thin and faint. Frontiers now carry the owning factions'
+    // colours: each owner gets a ribbon offset onto its own side of the line, so
+    // a contested border reads as two parallel faction stripes the way it does
+    // in Total War. That is why borders rebuild while rivers do not.
+    struct FMeshBuffers
+    {
+        TArray<FVector> Verts, Normals;
+        TArray<int32> Tris;
+    };
+
+    FMeshBuffers Internal;
+    // Frontier geometry accumulates per owning faction so each faction's stretch
+    // of border can be drawn in its own colour with one mesh section.
+    TMap<int32, FMeshBuffers> ByFaction;
+
+    // Half the frontier width — how far each owner's stripe is nudged off centre.
+    const float StripeOffset = BorderFrontierWidth * 0.5f;
 
     for (const FBorderSegment& Segment : Map.Borders)
     {
@@ -261,38 +274,76 @@ void ACampaignMap::RebuildBorders(const FWorldSnapshot& Snapshot)
         const int32 OwnerB = Snapshot.Provinces.IsValidIndex(Segment.B)
                                  ? Snapshot.Provinces[Segment.B].Owner
                                  : TW_NONE;
-        if (OwnerA != OwnerB)
+
+        if (OwnerA == OwnerB)
         {
-            tw::BuildRibbon(Segment.Points, BorderFrontierWidth, InkZBias, FrontierVerts,
-                            FrontierTris, FrontierNormals);
+            tw::BuildRibbon(Segment.Points, BorderInternalWidth, InkZBias, Internal.Verts,
+                            Internal.Tris, Internal.Normals);
+            continue;
         }
-        else
+
+        // Which physical side is A's? Compare the segment's own left-of-travel
+        // normal against the direction to A's settlement, so A's stripe always
+        // lands on the terrain A actually owns. B takes the opposite sign.
+        float SideForA = +1.0f;
+        if (Segment.Points.Num() >= 2)
         {
-            tw::BuildRibbon(Segment.Points, BorderInternalWidth, InkZBias, InternalVerts,
-                            InternalTris, InternalNormals);
+            const FVector Mid = Segment.Points[Segment.Points.Num() / 2];
+            FVector Forward = Segment.Points.Last() - Segment.Points[0];
+            Forward.Z = 0.0;
+            const FVector SideDir =
+                FVector::CrossProduct(Forward.GetSafeNormal(), FVector::UpVector);
+            FVector ToA = Map.SiteOf(Segment.A) - Mid;
+            ToA.Z = 0.0;
+            if (FVector::DotProduct(SideDir, ToA) < 0.0)
+            {
+                SideForA = -1.0f;
+            }
         }
+
+        auto EmitStripe = [&](int32 Owner, float Sign)
+        {
+            if (Owner == TW_NONE)
+            {
+                return;
+            }
+            FMeshBuffers& Buf = ByFaction.FindOrAdd(Owner);
+            tw::BuildRibbon(Segment.Points, StripeOffset, InkZBias, Buf.Verts, Buf.Tris,
+                            Buf.Normals, Sign * StripeOffset * 0.5f);
+        };
+        EmitStripe(OwnerA, SideForA);
+        EmitStripe(OwnerB, -SideForA);
     }
 
     Borders->ClearAllMeshSections();
 
-    FLinearColor Frontier = Ink;
-    Frontier.A = 0.85f;
-    FLinearColor Internal = Ink;
-    Internal.A = 0.3f;
+    FLinearColor InternalColor = Ink;
+    InternalColor.A = 0.3f;
 
-    if (FrontierTris.Num() > 0)
+    int32 Section = 0;
+    if (Internal.Tris.Num() > 0)
     {
-        Borders->CreateMeshSection(0, FrontierVerts, FrontierTris, FrontierNormals,
+        Borders->CreateMeshSection(Section, Internal.Verts, Internal.Tris, Internal.Normals,
                                    TArray<FVector2D>(), TArray<FColor>(),
                                    TArray<FProcMeshTangent>(), false);
-        Borders->SetMaterial(0, TintedMaterial(this, Frontier));
+        Borders->SetMaterial(Section, TintedMaterial(this, InternalColor));
+        ++Section;
     }
-    if (InternalTris.Num() > 0)
+
+    for (const TPair<int32, FMeshBuffers>& Pair : ByFaction)
     {
-        Borders->CreateMeshSection(1, InternalVerts, InternalTris, InternalNormals,
+        const FMeshBuffers& Buf = Pair.Value;
+        if (Buf.Tris.Num() == 0)
+        {
+            continue;
+        }
+        FLinearColor Color = Map.ColorFor(Pair.Key);
+        Color.A = 0.95f;
+        Borders->CreateMeshSection(Section, Buf.Verts, Buf.Tris, Buf.Normals,
                                    TArray<FVector2D>(), TArray<FColor>(),
                                    TArray<FProcMeshTangent>(), false);
-        Borders->SetMaterial(1, TintedMaterial(this, Internal));
+        Borders->SetMaterial(Section, TintedMaterial(this, Color));
+        ++Section;
     }
 }
 
