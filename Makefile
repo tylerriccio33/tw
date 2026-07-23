@@ -6,6 +6,7 @@ ROUNDS ?= 120
 .PHONY: help fmt clippy clean bake \
         py-sim py-test py-server cpp-test unreal-build unreal-play unreal-test \
         unreal-shots unreal-shot unreal-live shots-diff shots-bless \
+        unreal-pyscript \
         pre-commit-install pre-commit
 
 help: ## Show this help
@@ -143,6 +144,19 @@ unreal-test: unreal-build ## Run the Unreal-side automation tests headless
 	else \
 		echo "unreal-test passed"; \
 	fi
+
+# The blessed escape hatch for the few things that genuinely need an authored
+# .uasset (the depth-aware water shader, the terrain material's Custom HLSL node).
+# Rather than that being a dead end an agent cannot cross, a Python script under
+# unreal/Scripts/ builds the asset programmatically via Unreal's editor API and is
+# checked in as text — so the asset has a reviewable, re-runnable source the same
+# way the baked geometry does. Run one: make unreal-pyscript SCRIPT=gen_water_material.py
+unreal-pyscript: ## Run an Unreal editor Python script (SCRIPT=gen_water_material.py) to generate an asset as code
+	@test -n "$(SCRIPT)" || { echo "set SCRIPT=<file under unreal/Scripts/>"; exit 1; }
+	@test -f "unreal/Scripts/$(SCRIPT)" || { echo "no such script: unreal/Scripts/$(SCRIPT)"; exit 1; }
+	"$(UE)/Engine/Binaries/Mac/UnrealEditor-Cmd" "$(CURDIR)/unreal/TotalWarlike.uproject" \
+		-run=pythonscript -script="$(CURDIR)/unreal/Scripts/$(SCRIPT)" \
+		-unattended -nullrhi -nosplash -nopause -stdout
 
 # --- pre-commit (prek) — the local CI gate; see CLAUDE.md ---
 
