@@ -209,6 +209,15 @@ void ACampaignPlayerController::OnLeftClick()
             case ACampaignHUD::EControlAction::Recruit:
                 OnRecruit();
                 return;
+            case ACampaignHUD::EControlAction::TabBuildings:
+                Hud->SelectTab(0);
+                return;
+            case ACampaignHUD::EControlAction::TabCharacters:
+                Hud->SelectTab(1);
+                return;
+            case ACampaignHUD::EControlAction::TabMilitary:
+                Hud->SelectTab(2);
+                return;
             case ACampaignHUD::EControlAction::None:
                 break;
             }

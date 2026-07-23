@@ -46,12 +46,20 @@ public:
         EndTurn,
         Construct,
         Recruit,
+        TabBuildings,
+        TabCharacters,
+        TabMilitary,
     };
 
     /// Which button, if any, sits under a screen point — the bar's hit-test
     /// against the rectangles it drew last frame. Returns None for a click that
     /// missed every button (including one below the bar's own rows).
     EControlAction ControlActionAt(const FVector2D& Screen) const;
+
+    /// Switch the bottom panel's active tab (Buildings / Characters / Military).
+    /// Called by the controller when a tab strip button is clicked; the bar is
+    /// then redrawn against the new selection on the next frame.
+    void SelectTab(int32 Tab) { ActiveTab = Tab; }
 
 private:
     void HandleEvents(const TArray<FSimEvent>& Events);
@@ -61,6 +69,34 @@ private:
     /// a right-hand cluster of treasury / turn / action buttons. Purely visual —
     /// nothing here sends a command yet.
     void DrawControlBar();
+
+    /// The two-resource readout pinned to the top-left corner — treasury and a
+    /// second faction resource, each with its per-turn income delta. This is the
+    /// reference screenshot's "100 (+26) / 102 (+2)" strip.
+    void DrawTopResourceBar();
+
+    /// The row of round faction/menu buttons pinned to the top-right corner —
+    /// diplomacy, technology, missions and the like. Decorative for now: they are
+    /// drawn and lit but issue no command, since the screens behind them do not
+    /// exist yet.
+    void DrawCommandRing();
+
+    /// The left-hand target settlement panel: governor portrait, perk points, and
+    /// the Nobles / Townsfolk / Peasants / Food / Region wealth / Income rows, each
+    /// with a small drawn icon. Shown only when a city is selected.
+    void DrawSettlementPanel();
+
+    /// The bottom tabbed panel — Buildings / Characters / Military tabs above a
+    /// strip of building cards, each a thumbnail with its level and name. Replaces
+    /// the old flat four-row building list.
+    void DrawTabbedPanel();
+
+    /// The ornate framed END TURN button, bottom-right.
+    void DrawEndTurnButton();
+
+    /// Which tab of the bottom panel is showing: 0 Buildings, 1 Characters,
+    /// 2 Military. Persists across frames; the strip redraws against it.
+    int32 ActiveTab = 0;
 
     /// Floating settlement name tags, projected from each province's site onto
     /// the map: a dark plate with the owning faction's colour as a stripe, the
