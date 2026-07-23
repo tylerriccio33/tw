@@ -34,15 +34,26 @@ only reason there is still a Cargo workspace.
   and run the `TotalWarlike` automation tests — `.Sim` (slow confirmation of
   `cpp-test`) and `.Map` (the baked-map reader, incl. terrain winding).
   Override the engine with `UE=<dir>`; default `/Users/Shared/Epic Games/UE_5.8`.
-- `make unreal-shots` — **the visual loop.** Renders five fixed-camera preset
-  screenshots of the campaign map headlessly into `unreal/Shots/current/` in
-  ~10s; `make shots-diff` compares them against the committed `golden/` set and
-  `make shots-bless` accepts a new baseline. Two runs diff to exactly zero, so
-  any number it prints is a real change. `make unreal-live` is the same thing
-  interactively, with the console and shader hot-reload wired up for a ~2s
-  edit/view loop on `TerrainCommon.ush`. See `unreal/Shots/README.md`.
+- `make unreal-shots` — **the visual loop, and the center of gravity for any change
+  to how the game looks.** Renders five fixed-camera preset screenshots of the
+  campaign map headlessly into `unreal/Shots/current/` in ~10s; `make shots-diff`
+  compares them against the committed `golden/` set and `make shots-bless` accepts a
+  new baseline. Two runs diff to exactly zero, so any number it prints is a real
+  change. The PNGs are directly readable — they are how a visual change is *seen*,
+  not just measured, so the loop is edit → `make unreal-shots` → look → iterate.
+  Every visual change should land as code/HLSL/config **plus** an updated golden,
+  and any new visual subsystem should add its own preset (e.g. a `sea` preset once
+  the water shader exists) so the change it introduces is caught in a frame.
+  `make unreal-live` is the same thing interactively, with the console and shader
+  hot-reload wired up for a ~2s edit/view loop on `TerrainCommon.ush`. See
+  `unreal/Shots/README.md`.
 - `make bake` — regenerate `unreal/Content/Map/`. Only needed when the coastline,
   elevation or derived-geometry code changes.
+- `make unreal-pyscript SCRIPT=gen_x.py` — run a script under `unreal/Scripts/`
+  that builds a `.uasset` through Unreal's editor Python API. The blessed escape
+  hatch for the few things that truly need an authored asset (the terrain material's
+  Custom HLSL node, the water shader): the asset gets a reviewable, re-runnable
+  source instead of being hand-authored in the editor. See `unreal/Scripts/README.md`.
 
 **Disk is the binding constraint on this machine.** A full editor launch has
 twice filled the volume to the point that no shell command could run. Before any
@@ -113,10 +124,17 @@ frozen baseline, and widen them only with a deliberate balance change in hand.
   exactly what makes `make cpp-test` possible — **keep them engine-free.**
 - `Sim/SimWire`, `SimTypes.h`, `SimTransport.h`, `SocketSimTransport` — framing,
   types, transport.
-- `Map/CampaignGameMode` — there is **no `.umap`**. It spawns sun, sky, fog, sea
-  and `ACampaignMap` at `BeginPlay`, so the game runs against a stock empty
-  level. It also owns sidecar policy: `Auto` in the editor (reuse a running
-  `make py-server`), `Spawn` in a packaged build.
+- `Map/CampaignGameMode` — there is **no `.umap`**. It spawns sun, sky, fog, sea,
+  a post-process volume and `ACampaignMap` at `BeginPlay`, so the game runs against
+  a stock empty level. `SpawnLighting` and `SpawnPostProcess` are the two code-owned
+  "look" hooks: the first is the sun/sky/fog, the second an **unbound
+  `APostProcessVolume`** that carries the whole-map grade (manual exposure, filmic
+  contrast/saturation, bloom, vignette). Keeping the grade in code — not an authored
+  volume — is what puts it in `make unreal-shots` and lets it diff in a PR; the
+  base render quality it grades on top of (Lumen, Nanite, VSM, TSR) lives in
+  `Config/DefaultEngine.ini` under `[/Script/Engine.RendererSettings]`. It also owns
+  sidecar policy: `Auto` in the editor (reuse a running `make py-server`), `Spawn` in
+  a packaged build.
 - `Map/CampaignMap` — turns snapshot into actors. Static geography (terrain,
   rivers, forests) is built once; only ownership-dependent layers (border
   colours, markers) rebuild. Markers sync by **diffing ID sets**, not
@@ -139,8 +157,11 @@ frozen baseline, and widen them only with a deliberate balance change in hand.
   compiles every `.cpp` under a module and that file has its own `main()`.
 
 Content is data files and source, not binary assets — everything is constructed
-in code. The single exception is the terrain material (needs a Custom HLSL node,
-so a real `.uasset`); it is looked up softly and falls back to a flat colour.
+in code. The exceptions are the few things that genuinely need a `.uasset` (the
+terrain material's Custom HLSL node; the future water shader): those are looked up
+softly and fall back to a flat colour, and when one is built it is built **as code**
+via a checked-in script under `unreal/Scripts/` (`make unreal-pyscript`), never hand-
+authored in the editor, so it keeps a reviewable source.
 
 ### `bake/` and geometry
 
@@ -174,6 +195,19 @@ unless a new command/event field crosses the wire.
 **Adding a command or event:** `command.py`/`event.py` → `rules.py` → wire
 serialization (`wire.py`, `api.py`) → C++ `SimTypes.h`/`SimWire.cpp` →
 whatever sends it. Verify with `make cpp-test` before `make unreal-test`.
+
+**Changing how it looks:** whether the edit is HLSL (`TerrainCommon.ush`), a
+`SpawnLighting`/`SpawnPostProcess` tweak, or a render cvar in
+`Config/DefaultEngine.ini`, the loop is the same — make the change, `make
+unreal-shots`, look at the PNGs and read `make shots-diff`, iterate, then
+`make shots-bless` once it is right so the golden lands with the change. A visual
+change without an updated golden is unfinished. Reach for `make unreal-live` when
+iterating on a `.ush` (2s shader reload vs a relaunch).
+
+**Adding an asset that needs a `.uasset`:** write a script under `unreal/Scripts/`
+that builds it through Unreal's Python API, `make unreal-pyscript SCRIPT=...`,
+commit the generated asset next to its script, then confirm it with
+`make unreal-shots`.
 
 **Changing the renderer:** edit `unreal/Source/TotalWarlike/Map/`,
 `make unreal-build`, then `make unreal-play` (watch disk).
