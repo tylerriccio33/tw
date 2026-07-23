@@ -183,6 +183,13 @@ const FColor GoldText(232, 198, 120);
 const FColor StoneText(228, 216, 190);
 const FColor DimText(150, 140, 122);
 
+// The reference's settlement inspector reads cooler than the carved bar: a slate
+// navy body under a brighter blue caption, with values called out in near-white
+// rather than gold. These sit alongside the stone palette, used only there.
+const FLinearColor SlateField(0.11f, 0.13f, 0.19f, 0.94f);
+const FLinearColor HeaderBlue(0.19f, 0.31f, 0.50f);
+const FColor BrightText(242, 240, 233);
+
 /// A filled rectangle.
 void Fill(UCanvas* Canvas, float X, float Y, float W, float H, const FLinearColor& Color)
 {
@@ -656,16 +663,18 @@ void ACampaignHUD::DrawSettlementPanel()
     const float Y = Canvas->SizeY - BarH - 12.0f - PanelH;
 
     // Frame.
-    Panel(Canvas, X, Y, PanelW, PanelH, FLinearColor(0.14f, 0.12f, 0.10f, 0.92f));
+    Panel(Canvas, X, Y, PanelW, PanelH, SlateField);
 
-    // Header: city name, faction colour flash on the right.
-    Fill(Canvas, X, Y, PanelW, HeaderH, FLinearColor(0.20f, 0.28f, 0.42f));
+    // Header: city name in bright white, over a blue caption bar with a lighter
+    // top rule; the faction colour flashes on the right.
+    Fill(Canvas, X, Y, PanelW, HeaderH, HeaderBlue);
+    Fill(Canvas, X, Y, PanelW, 2.0f, FLinearColor(0.34f, 0.48f, 0.68f));
     Fill(Canvas, X + PanelW - 22.0f, Y, 22.0f, HeaderH, MapData.ColorFor(Prov->Owner));
     Outline(Canvas, X, Y, PanelW, HeaderH, GoldLine);
     {
         float TW = 0.0f, TH = 0.0f;
         Canvas->TextSize(Font, Prov->City, TW, TH);
-        Label(Canvas, Font, Prov->City, X + (PanelW - 22.0f - TW) * 0.5f, Y + 5.0f, GoldText);
+        Label(Canvas, Font, Prov->City, X + (PanelW - 22.0f - TW) * 0.5f, Y + 5.0f, BrightText);
     }
 
     // Governor portrait box + perk points.
@@ -684,7 +693,7 @@ void ACampaignHUD::DrawSettlementPanel()
         Label(Canvas, Font, Row.Name, X + 28.0f, RowY + 3.0f, StoneText);
         float VW = 0.0f, VH = 0.0f;
         Canvas->TextSize(Font, Row.Value, VW, VH);
-        Label(Canvas, Font, Row.Value, X + PanelW - 12.0f - VW, RowY + 3.0f, GoldText);
+        Label(Canvas, Font, Row.Value, X + PanelW - 12.0f - VW, RowY + 3.0f, BrightText);
         RowY += RowH;
     }
 }
@@ -751,15 +760,17 @@ void ACampaignHUD::DrawSettlementLabels()
         const bool bSelected = Province.Id == Selected;
         FLinearColor Faction = MapData.ColorFor(Province.Owner);
 
-        // Dark plate, faction stripe down the left edge, name in stone text. A
-        // selected settlement gets a gold outline instead of the plain dark one.
+        // The selected settlement lifts into a solid gold plate with dark text,
+        // the way the reference calls out the active town; the rest stay as dark
+        // plates with a faction stripe and stone text.
         Fill(Canvas, PlateX, PlateY, PlateW, PlateH,
-             FLinearColor(0.10f, 0.09f, 0.08f, 0.85f));
+             bSelected ? FLinearColor(0.86f, 0.68f, 0.22f, 0.95f)
+                       : FLinearColor(0.10f, 0.09f, 0.08f, 0.85f));
         Fill(Canvas, PlateX, PlateY, StripeW, PlateH, Faction);
         Outline(Canvas, PlateX, PlateY, PlateW, PlateH, bSelected ? GoldLine : PanelDark);
 
         Label(Canvas, Font, Name, PlateX + StripeW + PadX, PlateY + 3.0f,
-              bSelected ? GoldText : StoneText);
+              bSelected ? FColor(28, 22, 12) : StoneText);
     }
 }
 
