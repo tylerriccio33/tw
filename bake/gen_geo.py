@@ -18,7 +18,7 @@ ROOT = os.path.normpath(os.path.join(HERE, ".."))
 # thing left that reads them.
 SRC = os.path.join(ROOT, "bake", "src", "geom")
 CONFIG = os.path.join(ROOT, "bake", "config", "geo.yaml")
-CAMPAIGN = os.path.join(ROOT, "engine", "campaign", "britain.yaml")
+CAMPAIGN = os.path.join(ROOT, "sim", "campaign", "britain.yaml")
 CACHE = os.path.join(HERE, "land50.geojson")
 TILES = os.path.join(HERE, "tiles")                         # cached DEM tiles
 URL = ("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/"
@@ -81,7 +81,7 @@ def load_config(path):
     return cfg
 
 def province_city_names(path):
-    """Settlement names in province order from the engine campaign file. Reads
+    """Settlement names in province order from the sim campaign file. Reads
     the `city` field of each entry in the `provinces:` block (a one-line
     `- { name: Province, city: Settlement, ... }`) — the settlement, not the
     province, because that is what geo.yaml's cities are and where POS seats them
@@ -272,7 +272,7 @@ def build_elevation():
 CITIES = [(c["name"], c["lon"], c["lat"]) for c in CFG["cities"]]
 
 # geo.rs POS is indexed by ProvinceId, so this list must line up 1:1 with the
-# provinces in engine/campaign/britain.yaml. A mismatch would silently seat a
+# provinces in sim/campaign/britain.yaml. A mismatch would silently seat a
 # city on the wrong province, so fail loudly at generation time instead.
 _cities = [name for name, _, _ in CITIES]
 _settlements = province_city_names(CAMPAIGN)
@@ -289,7 +289,7 @@ if _cities != _settlements:
                   f"\n    geo.yaml:     {_cities}"
                   f"\n    britain.yaml: {_settlements}")
     sys.exit("gen_geo.py: config/geo.yaml cities do not match the settlements in "
-             "engine/campaign/britain.yaml (by province order)." + detail)
+             "sim/campaign/britain.yaml (by province order)." + detail)
 
 # --- Sutherland-Hodgman clip against the lon/lat bbox (convex) -------------
 def clip_edge(poly, inside, intersect):

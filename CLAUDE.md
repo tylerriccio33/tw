@@ -28,7 +28,7 @@ borders and settlement markers; full click-to-command interactivity is slice 2
 - `make bridge-test` — **reach for this first** when touching the sim bridge. Runs
   the pure-Python `tw.simbridge` (and its vendored msgpack codec) against a real
   `tw_sim` sidecar in ~2s, no editor. Plays the role the old `cpp-test` did.
-- `make bake` — regenerate `unreal/Content/Map/` (heightmap, borders, rivers,
+- `make bake` — regenerate `unreal/Content/Map/` (terrain mesh, borders, rivers,
   forests, provinces). Only needed when geometry/elevation code changes.
 - `make build` — headless: build + save the whole world from the bake + a snapshot.
 - `make shot [SHOTS="mountain border"]` — **the visual loop.** Render fixed-camera
@@ -164,7 +164,7 @@ produced five all-black golden shots and a `build_world` that logged a clean
 ### `bake/` and the EXAG coupling
 
 `make bake` runs the Rust generators once and writes `unreal/Content/Map/`:
-**`terrain.obj`** (the terrain mesh), `heightmap.r16` + `terrain_meta.json`,
+**`terrain.obj`** (the terrain mesh), `terrain_meta.json`,
 `province_borders.json`, `rivers.json`, `forests.json`, `provinces.json`. Output is
 gitignored — regenerate freely. Coordinate conversion (Godot → Unreal cm) happens
 **only** in the baker.

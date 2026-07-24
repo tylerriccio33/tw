@@ -4,8 +4,8 @@
       "Bash(gh pr merge)",
       "Bash(gh pr merge:*)",
       "Bash(gh pr view)",
-      "Bash(git pull)"
-
+      "Bash(git pull)",
+      "Bash(git checkout main && git pull)"
     ]
   }
 }

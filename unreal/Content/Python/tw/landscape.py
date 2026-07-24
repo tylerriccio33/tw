@@ -1,7 +1,7 @@
 """Terrain: the baked ``terrain.obj`` -> a Nanite static mesh.
 
 `bake` writes ``terrain.obj`` (already in Unreal cm at the world origin) plus
-``heightmap.r16`` and ``terrain_meta.json``. This turns the OBJ into ground.
+``terrain_meta.json``. This turns the OBJ into ground.
 
 There is exactly one path, on purpose. An `ALandscape` cannot be spawned outside
 an interactive editor — placement goes through UE's actor-placement factory,
