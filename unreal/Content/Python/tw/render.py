@@ -56,10 +56,16 @@ def _render_target(res: tuple[int, int]) -> unreal.TextureRenderTarget2D:
     the export call (silently: 'render target has been released', no
     exception, no file). Re-created and overwritten per shot; not meant to be
     checked in — same spirit as the other `Generated/` assets-as-code."""
-    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
-    rt = asset_tools.create_asset(
-        "RT_Shot", _RT_PACKAGE, unreal.TextureRenderTarget2D, unreal.TextureRenderTargetFactoryNew()
-    )
+    rt_path = f"{_RT_PACKAGE}/RT_Shot"
+    rt = unreal.load_asset(rt_path)
+    if rt is None:
+        # `create_asset` on an already-existing package would prompt to
+        # overwrite; unattended runs can't answer that and it silently
+        # returns None instead — only create once per process, reuse after.
+        asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+        rt = asset_tools.create_asset(
+            "RT_Shot", _RT_PACKAGE, unreal.TextureRenderTarget2D, unreal.TextureRenderTargetFactoryNew()
+        )
     rt.set_editor_property("render_target_format", unreal.TextureRenderTargetFormat.RTF_RGBA8)
     # set_editor_property on size_x/y alone doesn't (re)create the GPU
     # resource; ResizeTarget does, and is what the earlier transient

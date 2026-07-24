@@ -61,7 +61,20 @@ def vec(xyz: Iterable[float]) -> unreal.Vector:
     return unreal.Vector(float(x), float(y), float(z))
 
 
+CAMPAIGN_MAP_PATH = "/Game/Maps/Campaign"
+
+
 def save_open_level() -> None:
     """Persist the current level — how the headless `twctl build` leaves a result
-    on disk that a later `twctl shot` reopens."""
-    unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+    on disk that a later `twctl shot` reopens.
+
+    A fresh headless run opens the engine's untitled transient level, which has
+    no package filename yet — `LevelEditorSubsystem.save_current_level()` fails
+    silently in that case ("Can't save the level because it doesn't have a
+    filename"). `save_map` writes to an explicit path regardless of whether the
+    level already has one, so use it unconditionally instead of branching on
+    asset-registry state (which can report an asset present before the level
+    the caller sees actually has that filename).
+    """
+    world = unreal.EditorLevelLibrary.get_editor_world()
+    unreal.EditorLoadingAndSavingUtils.save_map(world, CAMPAIGN_MAP_PATH)
