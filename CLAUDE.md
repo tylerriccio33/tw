@@ -89,8 +89,19 @@ guess was wrong."
   actor-placement factory, which touches `GLevelEditorModeTools()` — a fatal
   assert in a commandlet. Detect commandlet mode
   (`"-run=pythonscript" in unreal.SystemLibrary.get_command_line()`) and skip
-  straight to a static-mesh fallback there; only try the real landscape import
-  interactively (`landscape.py`).
+  a fatal assert in a commandlet. Since `build`/`shot` are commandlets, the
+  landscape path could never run in the loop that produces the goldens, so
+  `landscape.py` has no landscape path at all — terrain is always the baked OBJ
+  as a Nanite static mesh.
+- **The Interchange OBJ translator requires a UV channel.** A `f v//vn` OBJ with
+  no `vt` lines is legal OBJ but trips a *handled ensure*
+  (`UVs.IsValidIndex(VertexData.UVIndex)`) — logged, no Python exception, no
+  asset produced. The baker emits `vt` per vertex for exactly this reason; if
+  terrain ever vanishes from the level, grep the log for that ensure first.
+- **`unreal.Rotator`'s positional order is `(roll, pitch, yaw)`**, not the
+  `(pitch, yaw, roll)` that `Shot.rotation` and most UE UI use. Always construct
+  it with keywords; passing a pitch-first tuple straight through silently rolls
+  the camera instead of tilting it.
 - **Component/property names often aren't what the class name suggests:**
   `ADirectionalLight`/`ASkyLight` both expose `.light_component` (not
   `.directional_light_component`/`.sky_light_component`);
@@ -127,12 +138,16 @@ the same `rules.apply` path.
   no `msgpack`, so a minimal codec is vendored here — the thing that makes
   `bridge-test` possible. Nothing calls the transport per frame.
 - `world.py` — `build_world()`, the one orchestration entry point. Materials →
-  terrain → static geography → ownership layers → lighting. Builds against a
-  neutral snapshot if no sidecar is up, so the visual loop never needs the sim.
-- `landscape.py` — heightmap → `ALandscape`. **The scripted landscape import is
-  the one call to confirm against the installed engine's Python API**; if 5.8 does
-  not expose it, `build()` falls back to importing `terrain.obj` as a Nanite static
-  mesh. The terrain material reads world-Z, so it works on either.
+  terrain → static geography → ownership layers → lighting. **Requires a live
+  sidecar** — `make sim` (or `twctl sim`) before `make build`/`make shot`.
+- `landscape.py` — `terrain.obj` → a Nanite static mesh, the single terrain path.
+  The terrain material reads world-Z, so it needs no painted weightmaps.
+
+**No fallbacks anywhere in this package.** A missing asset, a failed import, an
+unreachable sim, or a shot that wrote no PNG raises. This is deliberate and was
+paid for: a silent OBJ-import failure plus a neutral-snapshot fallback once
+produced five all-black golden shots and a `build_world` that logged a clean
+"done". If you are tempted to add a `try`/`except` that degrades, don't.
 - `materials/` — assets-as-code. Material graphs built via
   `unreal.MaterialEditingLibrary` and saved under `/Game/Generated/Materials`, so a
   look change is a reviewable diff, never hand-authored. `terrain.py` bands on the
@@ -149,7 +164,7 @@ the same `rules.apply` path.
 ### `bake/` and the EXAG coupling
 
 `make bake` runs the Rust generators once and writes `unreal/Content/Map/`:
-`terrain.obj`, **`heightmap.r16` + `terrain_meta.json`** (the Landscape path),
+**`terrain.obj`** (the terrain mesh), `heightmap.r16` + `terrain_meta.json`,
 `province_borders.json`, `rivers.json`, `forests.json`, `provinces.json`. Output is
 gitignored — regenerate freely. Coordinate conversion (Godot → Unreal cm) happens
 **only** in the baker.

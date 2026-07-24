@@ -29,7 +29,12 @@ def _camera(shot: presets.Shot) -> unreal.CineCameraActor:
     cam = _scene.spawn(
         unreal.CineCameraActor,
         unreal.Vector(*shot.location),
-        unreal.Rotator(shot.rotation[0], shot.rotation[1], shot.rotation[2]),
+        # Shot.rotation is (pitch, yaw, roll); unreal.Rotator's positional order
+        # is (roll, pitch, yaw). Keyword it — passing the tuple straight through
+        # spent every shot rolled by the pitch angle instead of tilted down.
+        unreal.Rotator(
+            pitch=shot.rotation[0], yaw=shot.rotation[1], roll=shot.rotation[2]
+        ),
         layer="camera",
         label=f"TW_Cam_{shot.name}",
     )
@@ -121,6 +126,13 @@ def shoot(names: list[str] | None = None, res: tuple[int, int] = (RES_X, RES_Y))
             )
         _snap(cam, out, res)
         _scene.clear("camera")
+        # export_render_target reports nothing on failure — it logs and returns.
+        # The unlink above means a surviving absence is unambiguous.
+        if not out.is_file():
+            raise RuntimeError(
+                f"shot {shot.name}: export_render_target wrote no file at {out} "
+                f"(is -AllowCommandletRendering set?)"
+            )
         written.append(str(out))
         unreal.log(f"[tw] shot {shot.name} -> {out}")
     return written
