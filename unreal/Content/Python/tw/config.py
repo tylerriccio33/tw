@@ -39,7 +39,7 @@ def load_json(name: str) -> object:
 
 
 def terrain_meta() -> dict:
-    """`terrain_meta.json` — heightmap dims, Unreal-cm extent, height range and
+    """`terrain_meta.json` — Unreal-cm extent, height range and
     the material's height bands. Written by the baker; see bake/src/main.rs."""
     return load_json("terrain_meta.json")  # type: ignore[return-value]
 
