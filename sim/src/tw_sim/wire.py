@@ -6,8 +6,7 @@ The wire form is that tag plus a flat payload of plain ints and bools —
 `event_to_dict` the Godot client already used, so we know the shape covers every
 variant.
 
-Enums travel as their integer values, so the C++ side can cast straight into its
-own enum rather than parsing strings.
+Enums travel as their integer values rather than strings.
 
 One wrinkle: `from` is a Python keyword, so the dataclasses spell those fields
 `from_`. A trailing underscore is stripped on the way out and restored on the

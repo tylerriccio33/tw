@@ -30,9 +30,8 @@ refused`, `all checks passed`.
 
 ## Build the world (headless): `make build`
 
-Builds the whole campaign map from the bake outputs + a sim snapshot (or a neutral
-snapshot if no sidecar is up) and saves the level. Run `make bake` first if
-`unreal/Content/Map/` is missing.
+Builds the whole campaign map from the bake outputs + a sim snapshot and saves the
+level. Run `make bake` first if `unreal/Content/Map/` is missing.
 
 ```
 make bake        # if the map geometry isn't baked yet
@@ -79,11 +78,6 @@ snapshot — restart Python without closing the editor.
 
 ## Gotchas
 
-- **The scripted Landscape import (`tw/landscape.py::_import_heightmap`) is the one
-  call to confirm against the installed engine's Python API.** If UE 5.8 doesn't
-  expose it, `landscape.build()` logs a warning and falls back to importing
-  `terrain.obj` as a static mesh — the terrain material reads world-Z, so both
-  paths look right. If terrain is missing, check the editor log for that fallback.
 - Everything the toolkit spawns is tagged `tw`; a rebuild clears exactly the prior
   run's actors. If you see doubled geometry, something spawned untagged.
 - `make build`/`shot`/`live`/`assets` all need the engine; `make bridge-test`,

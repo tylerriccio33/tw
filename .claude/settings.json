@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(gh pr merge)",
-      "Bash(gh pr merge:*)"
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr view)",
+      "Bash(git pull)"
+
     ]
   }
 }

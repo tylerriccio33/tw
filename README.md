@@ -46,10 +46,9 @@ only — no GDAL, no numpy) downloads Natural Earth 50m land polygons for the
 coastline and AWS Open Data terrarium tiles for elevation, then regenerates
 `bake/src/geom/geo.rs` and `bake/src/geom/elev.bin` in place.
 
-Elevation is exaggerated ~60x (`bake/src/geom/terrain.rs::EXAG`) — at true scale
-the Alps would stand 1.6 units tall on a 1240-unit map and be invisible. **Every
-height and slope threshold in the terrain material is calibrated against that
-constant**; retuning one means retuning the others.
+Elevation is exaggerated (`bake/src/geom/terrain.rs::EXAG`) — at true scale
+terrain is invisible on a map this wide. The baker writes the resulting height
+range into `terrain_meta.json` and the terrain material bands as fractions of it.
 
 ```sh
 python3 bake/gen_geo.py   # regenerate geo.rs + elev.bin (rarely needed)

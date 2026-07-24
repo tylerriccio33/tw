@@ -1,7 +1,7 @@
 //! Terrain built from **real elevation** (terrarium DEM, baked into
 //! [`crate::geo::ELEV`]) constrained to the Natural Earth coastline mask, emitted
-//! as raw mesh arrays that the Godot side assembles into an `ArrayMesh`. Pure
-//! Rust, no Godot types here. Colour is the shader's job — we ship geometry only.
+//! as raw mesh arrays. Pure Rust, no renderer types here. Colour is the terrain
+//! material's job — we ship geometry only.
 
 use crate::geo;
 use crate::mapdata::{coastline, map_extent};
@@ -14,14 +14,10 @@ pub const ROWS: usize = 720;
 
 /// Vertical exaggeration, world units per metre of real elevation.
 ///
-/// Europe is ~3000 km across a ~1240-unit map, so one unit is ~2.4 km. At true
-/// scale the Alps would stand 1.6 units tall — invisible. This is ~60x, chosen
-/// so the highest sampled peak (2765 m, after `gen_geo.py`'s low-pass) reaches
-/// ~72 units, the top of the shader's snow band.
-///
-/// Every height threshold in `Main.gd`'s shader is downstream of this number:
-/// h=30 is ~1060 m, h=46 (snow line) ~1700 m, h=64 ~2420 m. Retune this and the
-/// bands must move with it, or the palette goes dead again.
+/// At true scale terrain is invisible on a map this wide, so elevation is
+/// exaggerated. This value is written into `terrain_meta.json` as `terrain_exag`
+/// alongside the resulting `height_cm` range; `tw/materials/terrain.py` bands as
+/// fractions of that actual range, so retuning this moves the bands with it.
 pub const EXAG: f32 = 0.025;
 
 /// Floor for dry land, in world units. Real lowlands (London 46 m, the Po valley
@@ -30,7 +26,7 @@ pub const EXAG: f32 = 0.025;
 /// sand survives only in the shore blend where height actually passes through 0.
 const LAND_BASE: f32 = 3.5;
 
-/// Raw, Godot-agnostic mesh data.
+/// Raw, renderer-agnostic mesh data.
 pub struct TerrainData {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
@@ -230,7 +226,7 @@ pub fn build() -> TerrainData {
             let right = i + 1;
             let down = i + COLS as i32;
             let dr = down + 1;
-            // Clockwise winding for Godot's default front face.
+            // Clockwise winding; `check_winding` asserts it agrees with normals.
             indices.extend([i, right, down, right, dr, down]);
         }
     }
