@@ -21,6 +21,7 @@ from __future__ import annotations
 import unreal
 
 from . import _scene, config
+from .materials import terrain as mat_terrain
 
 TERRAIN_LABEL = "TW_Terrain"
 TERRAIN_ASSET = f"{config.GENERATED_PACKAGE}/Terrain/SM_Terrain"
@@ -56,5 +57,17 @@ def build() -> unreal.Actor:
 
     actor = _scene.spawn(unreal.StaticMeshActor, layer="terrain", label=TERRAIN_LABEL)
     actor.static_mesh_component.set_static_mesh(mesh)
+
+    # The OBJ carries no material, so the imported mesh keeps UE's default
+    # WorldGridMaterial — a flat grey grid, which is what the map rendered as
+    # once the sun was aimed at the ground again. `world.build_world` builds the
+    # materials before the terrain, so M_Terrain is expected to exist by now.
+    material = unreal.load_asset(mat_terrain.MATERIAL_PATH)
+    if not isinstance(material, unreal.MaterialInterface):
+        raise RuntimeError(
+            f"terrain material missing at {mat_terrain.MATERIAL_PATH} "
+            f"(got {material!r}); materials must be built before terrain"
+        )
+    actor.static_mesh_component.set_material(0, material)
     unreal.log(f"[tw] terrain: static mesh {TERRAIN_ASSET}")
     return actor
