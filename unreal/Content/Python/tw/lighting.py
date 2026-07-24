@@ -20,7 +20,11 @@ def build() -> None:
     sun = _scene.spawn(
         unreal.DirectionalLight,
         unreal.Vector(0, 0, 50_000),
-        unreal.Rotator(-42.0, 30.0, 0.0),  # pitch down from the SE
+        # Keyword these: unreal.Rotator's positional order is (roll, pitch, yaw),
+        # so (-42, 30, 0) read as roll=-42/pitch=+30 aimed the sun 30 degrees at
+        # the *sky* — the terrain got no direct light and every shot came back a
+        # black silhouette under a lit fog gradient.
+        unreal.Rotator(pitch=-42.0, yaw=30.0, roll=0.0),  # down from the SE
         layer="lighting",
         label="TW_Sun",
     )
