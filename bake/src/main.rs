@@ -24,7 +24,7 @@
 //!
 //! Godot is Y-up, -Z forward, right-handed, with the map spanning +-620 x +-470
 //! world units. Unreal is Z-up, X forward, **left-handed**, and 1 unit = 1 cm.
-//! The conversion happens here, once, rather than at load in C++:
+//! The conversion happens here, once, rather than at load:
 //!
 //! ```text
 //! ue.x = -godot.z * SCALE
@@ -74,7 +74,7 @@ use mapdata::{coastline, map_extent};
 const SCALE: f32 = 100.0;
 
 /// Province names in engine order, for readable assertion failures. Mirrors the
-/// table in `mapdata.rs`'s tests, which is about to be deleted with it.
+/// table in `mapdata.rs`'s tests.
 const NAMES: [&str; 12] = [
     "London",
     "York",

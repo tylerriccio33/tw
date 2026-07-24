@@ -1,8 +1,8 @@
 //! Forest placement — client-only geometry, like everything else in this crate.
 //!
 //! The engine is coordinate-free, so trees are pure presentation: we scatter
-//! low-poly instances over the terrain and hand Godot a flat list of
-//! `(position, scale, yaw)` to feed a `MultiMesh` (one draw call for the lot).
+//! low-poly instances over the terrain and emit a flat list of
+//! `(position, scale, yaw)`.
 //!
 //! Placement is a hybrid of two masks laid over the same terrain:
 //!

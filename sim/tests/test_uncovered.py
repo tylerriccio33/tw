@@ -3,7 +3,7 @@
 Every one of these is somewhere a silent port bug could hide: a reversed
 iteration order, a `Copy` that quietly became an alias, a symmetric write that
 only landed on one side of the matrix. They are asserted here because the
-reference implementation is about to be deleted.
+reference implementation is gone.
 """
 
 from __future__ import annotations

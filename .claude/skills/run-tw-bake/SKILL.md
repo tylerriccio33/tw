@@ -34,18 +34,17 @@ baking into .../unreal/Content/Map
 done.
 ```
 
-## The two terrain outputs
+## The terrain outputs
 
-- **`heightmap.r16`** — raw 16-bit little-endian, row-major, 757x1009, in **Unreal
-  orientation** (local X = short N–S axis, local Y = long E–W axis). This is
-  Unreal's native landscape heightmap format, so `tw/landscape.py` imports it with
-  no resampling (both dims are `k*63 + 1`). It is the primary terrain path.
+- **`terrain.obj`** — the terrain mesh, already in Unreal cm at the world origin.
+  `tw/landscape.py` imports it as a Nanite static mesh; this is the only terrain
+  path.
 - **`terrain_meta.json`** — everything the Python side needs to place the landscape
   in Unreal-cm space and band the terrain material: heightmap dims, `extent_cm`,
   `height_cm` (min/max/span), `terrain_exag`, and `bands_cm`. **Britain peaks at
   ~2505 cm**, well below the European snow anchor (4600 cm) — which is why the
   terrain material bands as fractions of the *actual* `height_cm` range, not the
-  absolute anchors. `terrain.obj` is kept as the static-mesh fallback.
+  absolute anchors.
 
 ## Gotchas
 

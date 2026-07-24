@@ -169,7 +169,7 @@ produced five all-black golden shots and a `build_world` that logged a clean
 gitignored — regenerate freely. Coordinate conversion (Godot → Unreal cm) happens
 **only** in the baker.
 
-Elevation is exaggerated ~60x (`bake/src/geom/terrain.rs::EXAG`). Historically
+Elevation is exaggerated (`bake/src/geom/terrain.rs::EXAG`). Historically
 every height/slope threshold in the terrain material was hand-calibrated against
 that constant across the language boundary. Now `terrain_meta.json` carries the
 height range and band anchors in cm, and `materials/terrain.py` bands as
