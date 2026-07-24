@@ -24,23 +24,23 @@ def build() -> None:
         layer="lighting",
         label="TW_Sun",
     )
-    sun.directional_light_component.set_intensity(6.0)
-    sun.directional_light_component.set_light_color(unreal.Color(255, 246, 224))
-    sun.directional_light_component.set_editor_property("atmosphere_sun_light", True)
+    sun.light_component.set_intensity(6.0)
+    sun.light_component.set_light_color(unreal.LinearColor(255 / 255, 246 / 255, 224 / 255, 1.0))
+    sun.light_component.set_editor_property("atmosphere_sun_light", True)
 
     _scene.spawn(unreal.SkyAtmosphere, layer="lighting", label="TW_SkyAtmosphere")
 
     skylight = _scene.spawn(unreal.SkyLight, layer="lighting", label="TW_SkyLight")
-    skylight.sky_light_component.set_editor_property("real_time_capture", True)
-    skylight.sky_light_component.set_intensity(1.0)
+    skylight.light_component.set_editor_property("real_time_capture", True)
+    skylight.light_component.set_intensity(1.0)
 
     fog = _scene.spawn(
         unreal.ExponentialHeightFog, layer="lighting", label="TW_Fog"
     )
-    fc = fog.get_component()
+    fc = fog.component
     fc.set_editor_property("fog_density", 0.012)
     fc.set_editor_property("fog_height_falloff", 0.06)
-    fc.set_editor_property("fog_inscattering_color", unreal.LinearColor(0.42, 0.51, 0.62, 1.0))
+    fc.set_fog_inscattering_color(unreal.LinearColor(0.42, 0.51, 0.62, 1.0))
 
     _build_grade()
 

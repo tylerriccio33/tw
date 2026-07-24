@@ -41,7 +41,7 @@ def _seat(x: float, y: float) -> float:
         unreal.DrawDebugTrace.NONE,
         True,
     )
-    return hit.impact_point.z if hit else 0.0
+    return hit.to_dict()["impact_point"].z if hit else 0.0
 
 
 def _owner_of(snapshot: dict, province_id: int) -> int:
@@ -72,11 +72,10 @@ def build(snapshot: dict) -> int:
         comp = pin.static_mesh_component
         comp.set_static_mesh(marker_mesh)
         pin.set_actor_scale3d(unreal.Vector(1.4, 1.4, 2.4))
-        mid = unreal.MaterialInstanceDynamic.create(
-            unreal.load_asset("/Engine/BasicShapes/BasicShapeMaterial"), pin
+        mid = comp.create_and_set_material_instance_dynamic_from_material(
+            0, unreal.load_asset("/Engine/BasicShapes/BasicShapeMaterial")
         )
         mid.set_vector_parameter_value("Color", color)
-        comp.set_material(0, mid)
 
         label = _scene.spawn(
             unreal.TextRenderActor,

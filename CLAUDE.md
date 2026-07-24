@@ -49,6 +49,60 @@ twice filled the volume until no shell command could run. `twctl` checks free
 space before every launch and kills a headless run if free space drops below
 ~3 GB — do not defeat that guard.
 
+## When an `unreal.*` Python call misbehaves
+
+Check the docs and the engine source **before** iterating live against the
+editor. A live-editor edit/run/read-log cycle is slow, and a wrong guess at a
+UE Python API can hard-crash the process (`SIGSEGV`, not a catchable Python
+exception) — burning a relaunch and disk headroom for no signal beyond "that
+guess was wrong."
+
+- Python API docs: `https://dev.epicgames.com/documentation/en-us/unreal-engine/python-api/class/<ClassName>` —
+  fetch the exact class before guessing method/property names or signatures.
+- The engine's C++ source is on disk at `$TW_UE/Engine/Source/` (e.g.
+  `Runtime/Engine/Private/KismetRenderingLibrary.cpp`) and is authoritative —
+  grepping it for a warning string or a function's guard conditions answers
+  "why did this silently no-op" faster than any number of live retries. This
+  is how the `-AllowCommandletRendering` requirement below was actually found.
+- If you do end up crashing the editor, a `CrashReportClient -Unattended`
+  process spawns and can spin indefinitely; find and `kill` it (`ps aux | grep
+  -i crashreport`) rather than waiting for it to finish.
+
+### UE 5.8 Python API gotchas already paid for (don't rediscover these)
+
+- **Commandlets can't render by default.** `-run=pythonscript` gives you
+  `FApp::CanEverRender() == false` unless the launch also passes
+  `-AllowCommandletRendering` (already in `twctl`'s `_run_editor_headless`).
+  Without it, anything GPU-backed — render targets, scene captures — silently
+  no-ops (`UKismetRenderingLibrary::ExportRenderTarget` logs "render target
+  has been released" and writes nothing; no Python exception).
+  `unreal.AutomationLibrary.take_high_res_screenshot` is a harder case: it
+  reaches into the (nonexistent) level-editor viewport client and hard-crashes
+  the process even with that flag — use a spawned `unreal.SceneCapture2D`
+  actor + an asset-backed `unreal.TextureRenderTarget2D` (**not** the
+  transient `RenderingLibrary.create_render_target2d`, which is unrooted and
+  can be GC'd between capture and export) +
+  `RenderingLibrary.export_render_target` instead. That function does not
+  append a file extension — pass the full filename, not the stem.
+- **`ALandscape` placement crashes outside an interactive editor.**
+  `spawn_actor_from_class(unreal.Landscape, ...)` goes through UE's
+  actor-placement factory, which touches `GLevelEditorModeTools()` — a fatal
+  assert in a commandlet. Detect commandlet mode
+  (`"-run=pythonscript" in unreal.SystemLibrary.get_command_line()`) and skip
+  straight to a static-mesh fallback there; only try the real landscape import
+  interactively (`landscape.py`).
+- **Component/property names often aren't what the class name suggests:**
+  `ADirectionalLight`/`ASkyLight` both expose `.light_component` (not
+  `.directional_light_component`/`.sky_light_component`);
+  `AExponentialHeightFog` exposes `.component` as a property, not
+  `.get_component()`, and its inscattering color needs the dedicated
+  `set_fog_inscattering_color()` setter, not `set_editor_property(...)`.
+- **`HitResult` struct fields are unreadable directly** (`get_editor_property`
+  included) — call `.to_dict()` and index into that.
+- **No static `MaterialInstanceDynamic.create`.** Create dynamic material
+  instances via the `PrimitiveComponent` instance method
+  `create_and_set_material_instance_dynamic_from_material(...)`.
+
 ## Architecture
 
 ```

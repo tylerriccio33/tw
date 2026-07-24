@@ -46,13 +46,13 @@ sim: ## Run the simulation sidecar (writes sim/.sim-port so a live editor attach
 # these, guarding free disk space (a full launch has twice wedged this machine).
 
 build: ## Headless: build + save the whole campaign world from the bake + a snapshot
-	$(TWCTL) build --seed $(SEED)
+	$(TWCTL) --seed $(SEED) build
 
 # The visual loop: render fixed-camera presets, then look at and diff the PNGs.
 # SHOTS overrides the set, e.g. make shot SHOTS="mountain border".
 SHOTS ?=
 shot: ## Headless: render preset shots to unreal/Shots/current/ (SHOTS="mountain border")
-	$(TWCTL) shot $(SHOTS)
+	$(TWCTL) --seed $(SEED) shot $(SHOTS)
 
 shots-diff: ## Compare unreal/Shots/current/ against golden/ and report what moved
 	$(TWCTL) diff

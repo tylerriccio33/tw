@@ -119,9 +119,23 @@ def build_from_obj() -> unreal.Actor:
     return actor
 
 
+def _is_commandlet() -> bool:
+    """True under `UnrealEditor-Cmd -run=pythonscript` (twctl build/shot/assets).
+
+    `ALandscape` placement goes through UE's actor-placement factory, which
+    touches the level-editor mode tools — unavailable in a commandlet, where it
+    is a fatal engine assert (SIGSEGV), not a catchable Python exception. So the
+    landscape path can only be tried interactively; headless always uses the
+    OBJ fallback."""
+    return "-run=pythonscript" in unreal.SystemLibrary.get_command_line()
+
+
 def build() -> unreal.Actor:
     """Build the terrain, preferring the Landscape and falling back to the mesh."""
     _scene.clear("terrain")
+    if _is_commandlet():
+        unreal.log("[tw] terrain: commandlet mode, using OBJ mesh (landscape spawn needs an interactive editor)")
+        return build_from_obj()
     try:
         return build_landscape()
     except Exception as e:  # noqa: BLE001 - fall back on any landscape-API gap

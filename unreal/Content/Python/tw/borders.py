@@ -56,10 +56,9 @@ def build(snapshot: dict) -> int:
         actor.set_editor_property("root_component", comp)
         comp.set_static_mesh(mesh)
         if base_mat:
-            mid = unreal.MaterialInstanceDynamic.create(base_mat, actor)
+            mid = comp.create_and_set_material_instance_dynamic_from_material(0, base_mat)
             color = palette[owner] if owner < len(palette) else unreal.LinearColor(1, 1, 1, 1)
             mid.set_vector_parameter_value("Color", color)
-            comp.set_material(0, mid)
         per_color[owner] = comp
         return comp
 

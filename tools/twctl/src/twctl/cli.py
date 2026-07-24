@@ -70,6 +70,10 @@ def _run_editor_headless(script: Path, env: dict[str, str], timeout: int = 900) 
         "-nopause",
         "-stdout",
         "-FullStdOutLogOutput",
+        # A commandlet has no RHI/scene by default (FApp::CanEverRender() is
+        # false), so anything GPU-backed — render targets, scene captures,
+        # the shot pipeline — silently no-ops or crashes without this.
+        "-AllowCommandletRendering",
     ]
     print(f"[twctl] {script.name}  (free {_free_gb():.1f} GB)")
     proc = subprocess.Popen(cmd, env={**os.environ, **env})
