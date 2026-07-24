@@ -37,10 +37,13 @@ def build() -> unreal.Material:
     span = max(hi - lo, 1.0)
 
     # Fractional band edges over the real land range (not absolute cm).
-    # The reference is mostly arid tan with green in the valleys and rock reserved
-    # for genuine ridges, so the arid band is the wide one.
-    grass_top = lo + 0.35 * span
-    arid_top = lo + 0.78 * span
+    # The reference is mostly arid tan with green reserved for the valley floors
+    # and rock for genuine ridges. On a low-relief map like Britain almost every
+    # cell sits low in the height range, so a wide grass band (the old 0.35) put
+    # green everywhere and the plains never read as tan. Pin grass to just the
+    # lowest valleys and let arid own the whole midrange, as the reference does.
+    grass_top = lo + 0.05 * span
+    arid_top = lo + 0.82 * span
     rock_top = lo + 0.95 * span
     snow_lo = lo + 0.99 * span
 
