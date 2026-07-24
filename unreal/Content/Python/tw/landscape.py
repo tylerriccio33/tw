@@ -1,143 +1,60 @@
-"""Terrain: the baked heightmap -> an Unreal Landscape (with a static-mesh
-fallback).
+"""Terrain: the baked ``terrain.obj`` -> a Nanite static mesh.
 
-`bake` writes ``heightmap.r16`` (raw 16-bit, Unreal-oriented) and
-``terrain_meta.json`` (dims + Unreal-cm extent + the cm height range). This turns
-that into ground.
+`bake` writes ``terrain.obj`` (already in Unreal cm at the world origin) plus
+``heightmap.r16`` and ``terrain_meta.json``. This turns the OBJ into ground.
 
-Two paths:
+There is exactly one path, on purpose. An `ALandscape` cannot be spawned outside
+an interactive editor — placement goes through UE's actor-placement factory,
+which touches `GLevelEditorModeTools()` and is a fatal engine assert (SIGSEGV,
+not a catchable Python exception) in a commandlet. Since `twctl build`/`shot` are
+commandlets, the landscape path could never run in the loop that actually
+produces the golden shots, so it is not here. The terrain material reads world-Z
+rather than painted weightmaps, so nothing downstream misses the landscape.
 
-* `build_landscape()` — the intended one: an `ALandscape` whose material can be
-  RVT-backed and layer-blended (grass/arid/rock/snow). Scripted landscape import
-  is the single most engine-version-sensitive call in the toolkit; it is isolated
-  in `_import_heightmap` so it is the one thing to confirm in-editor on 5.8.
-* `build_from_obj()` — the fallback: import the baked ``terrain.obj`` as a Nanite
-  static mesh. Fully supported by the Python asset-import API, so the rest of the
-  pipeline is never blocked on the landscape call.
-
-`build()` tries the landscape and falls back, logging which path ran. Either way
-the terrain lands at the same world transform, so borders/rivers/markers line up.
+Every step verifies its own result and raises. A silent no-op here is expensive:
+it yields a level with no ground and a `build_world` that logs a clean "done",
+which is exactly how five all-black golden shots got blessed.
 """
 
 from __future__ import annotations
-
-import array
 
 import unreal
 
 from . import _scene, config
 
 TERRAIN_LABEL = "TW_Terrain"
+TERRAIN_ASSET = f"{config.GENERATED_PACKAGE}/Terrain/SM_Terrain"
 
 
-def _read_heightmap() -> tuple[array.array, dict]:
-    meta = config.terrain_meta()
-    hm = meta["heightmap"]
-    data = array.array("H")  # unsigned 16-bit
-    data.frombytes(config.map_file(hm["file"]).read_bytes())
-    if len(data) != hm["width"] * hm["height"]:
-        raise ValueError(
-            f"heightmap is {len(data)} samples, expected "
-            f"{hm['width']}x{hm['height']}={hm['width'] * hm['height']}"
-        )
-    # struct/array reads native byte order; the file is little-endian.
-    import sys
+def build() -> unreal.Actor:
+    """Import terrain.obj as a Nanite static mesh and place it at the origin."""
+    _scene.clear("terrain")
 
-    if sys.byteorder == "big":
-        data.byteswap()
-    return data, meta
+    source = config.map_file("terrain.obj")
+    if not source.is_file():
+        raise FileNotFoundError(f"{source} missing — run `make bake` first")
 
-
-def _transform(meta: dict) -> tuple[unreal.Vector, unreal.Vector]:
-    """Landscape actor location + scale so the WxH heightmap spans the baked
-    Unreal-cm extent in X/Y and the 16-bit range maps back to the cm height span.
-
-    Unreal's landscape stores height as ``worldZ = (u16 - 32768) / 128 * scaleZ``
-    at the actor transform, so to make the full 0..65535 range cover ``span`` cm
-    we need ``scaleZ = span / 65535 * 128 / 100`` (the extra /100 because actor
-    scale multiplies the built-in 1 uu quad, and 128 is the LANDSCAPE_ZSCALE)."""
-    hm, ext, hcm = meta["heightmap"], meta["extent_cm"], meta["height_cm"]
-    # Quads = samples - 1; scale.x/y = cm-per-quad / 100 (the 1uu authored quad).
-    scale_x = ext["x"] / (hm["width"] - 1) / 100.0
-    scale_y = ext["y"] / (hm["height"] - 1) / 100.0
-    scale_z = hcm["span"] / 65535.0 * 128.0 / 100.0
-    # Centre the footprint on the origin, and offset Z so u16==0 -> min cm.
-    loc = unreal.Vector(-ext["x"] / 2.0, -ext["y"] / 2.0, hcm["min"] + hcm["span"] / 2.0)
-    return loc, unreal.Vector(scale_x, scale_y, scale_z)
-
-
-def _import_heightmap(
-    data: array.array, meta: dict, loc: unreal.Vector, scale: unreal.Vector
-) -> unreal.Actor:
-    """Create the ALandscape from the height samples. ISOLATED ON PURPOSE — this
-    is the call to verify against the installed engine's Python API; if 5.8 does
-    not expose landscape height import, `build()` falls through to the static mesh.
-    """
-    hm = meta["heightmap"]
-    subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-    landscape = subsystem.spawn_actor_from_class(
-        unreal.Landscape, loc, unreal.Rotator(0, 0, 0)
-    )
-    landscape.set_actor_scale3d(scale)
-    landscape.set_actor_label(TERRAIN_LABEL)
-    landscape.tags = [_scene.TW_TAG, unreal.Name("tw.terrain")]
-    # The heightmap import itself. `import_heightmap` takes the raw u16 buffer and
-    # the (width,height) it covers; a layer-less import is enough for a code-owned
-    # material that reads world height rather than painted weightmaps.
-    landscape.import_heightmap(list(data), hm["width"], hm["height"])  # verify on 5.8
-    return landscape
-
-
-def build_landscape() -> unreal.Actor:
-    data, meta = _read_heightmap()
-    loc, scale = _transform(meta)
-    actor = _import_heightmap(data, meta, loc, scale)
-    unreal.log(f"[tw] terrain: Landscape {meta['heightmap']['width']}x"
-               f"{meta['heightmap']['height']} at scale {scale}")
-    return actor
-
-
-def build_from_obj() -> unreal.Actor:
-    """Fallback: import terrain.obj as a Nanite static mesh and place it. The OBJ
-    is already in Unreal cm at the world origin, so it needs no transform."""
     task = unreal.AssetImportTask()
-    task.filename = str(config.map_file("terrain.obj"))
+    task.filename = str(source)
     task.destination_path = f"{config.GENERATED_PACKAGE}/Terrain"
     task.destination_name = "SM_Terrain"
     task.automated = True
     task.replace_existing = True
     task.save = True
     unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
-    mesh = unreal.load_asset(f"{config.GENERATED_PACKAGE}/Terrain/SM_Terrain")
-    if isinstance(mesh, unreal.StaticMesh):
-        mesh.set_editor_property("nanite_settings", unreal.MeshNaniteSettings(enabled=True))
-    actor = _scene.spawn(
-        unreal.StaticMeshActor, layer="terrain", label=TERRAIN_LABEL
-    )
+
+    # The OBJ import fails *without raising*: UE 5.8's Interchange OBJ translator
+    # hits a handled ensure (e.g. `UVs.IsValidIndex(VertexData.UVIndex)` when the
+    # OBJ carries no `vt` channel), logs it, and leaves no asset behind. Check.
+    mesh = unreal.load_asset(TERRAIN_ASSET)
+    if not isinstance(mesh, unreal.StaticMesh):
+        raise RuntimeError(
+            f"terrain import produced no StaticMesh at {TERRAIN_ASSET} "
+            f"(got {mesh!r}); check the log for an Interchange OBJ ensure"
+        )
+    mesh.set_editor_property("nanite_settings", unreal.MeshNaniteSettings(enabled=True))
+
+    actor = _scene.spawn(unreal.StaticMeshActor, layer="terrain", label=TERRAIN_LABEL)
     actor.static_mesh_component.set_static_mesh(mesh)
-    unreal.log("[tw] terrain: static mesh (terrain.obj) fallback")
+    unreal.log(f"[tw] terrain: static mesh {TERRAIN_ASSET}")
     return actor
-
-
-def _is_commandlet() -> bool:
-    """True under `UnrealEditor-Cmd -run=pythonscript` (twctl build/shot/assets).
-
-    `ALandscape` placement goes through UE's actor-placement factory, which
-    touches the level-editor mode tools — unavailable in a commandlet, where it
-    is a fatal engine assert (SIGSEGV), not a catchable Python exception. So the
-    landscape path can only be tried interactively; headless always uses the
-    OBJ fallback."""
-    return "-run=pythonscript" in unreal.SystemLibrary.get_command_line()
-
-
-def build() -> unreal.Actor:
-    """Build the terrain, preferring the Landscape and falling back to the mesh."""
-    _scene.clear("terrain")
-    if _is_commandlet():
-        unreal.log("[tw] terrain: commandlet mode, using OBJ mesh (landscape spawn needs an interactive editor)")
-        return build_from_obj()
-    try:
-        return build_landscape()
-    except Exception as e:  # noqa: BLE001 - fall back on any landscape-API gap
-        unreal.log_warning(f"[tw] landscape import unavailable ({e}); using OBJ mesh")
-        return build_from_obj()

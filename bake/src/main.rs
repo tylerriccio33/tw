@@ -215,6 +215,63 @@ fn check_winding(t: &terrain::TerrainData) {
     println!("  winding agrees with normals over {checked} triangles");
 }
 
+/// Serialise a row-major `cols` x `rows` terrain grid as Wavefront OBJ.
+///
+/// Split out from `bake_terrain` so the vertex/face formatting is testable
+/// without a full bake — the format is load-bearing for the Unreal import and
+/// has broken it silently once already (see the `vt` comment below).
+fn write_obj<W: Write>(
+    w: &mut W,
+    t: &terrain::TerrainData,
+    cols: usize,
+    rows: usize,
+) -> std::io::Result<()> {
+    writeln!(w, "# Baked by `cargo run -p tw-bake`. Do not edit; regenerate.")?;
+    writeln!(
+        w,
+        "# {}x{} grid, Unreal space (Z-up, left-handed), 1 unit = 1 cm, \
+         vertical exaggeration EXAG={}.",
+        cols,
+        rows,
+        terrain::EXAG
+    )?;
+    writeln!(w, "o TerrainBritain")?;
+    for p in &t.positions {
+        let [x, y, z] = to_ue(*p);
+        writeln!(w, "v {x:.2} {y:.2} {z:.2}")?;
+    }
+    for n in &t.normals {
+        let [x, y, z] = dir_to_ue(*n);
+        writeln!(w, "vn {x:.4} {y:.4} {z:.4}")?;
+    }
+    // A UV channel is not optional. UE 5.8's Interchange OBJ translator ensures
+    // `UVs.IsValidIndex(VertexData.UVIndex)` while building the mesh
+    // description, so a `f v//vn` mesh — legal OBJ, no `vt` — fails the import
+    // via a *handled ensure*: logged, no exception raised into Python, no asset
+    // produced. The terrain then silently never lands in the level. Vertices are
+    // row-major over the grid, so a planar UV is the normalised grid position.
+    for i in 0..t.positions.len() {
+        let (r, c) = (i / cols, i % cols);
+        writeln!(
+            w,
+            "vt {:.6} {:.6}",
+            c as f32 / (cols - 1) as f32,
+            r as f32 / (rows - 1) as f32
+        )?;
+    }
+    // Winding is *not* reversed. The source order is clockwise for Godot's
+    // front face, and the right-to-left-handed flip already inverts triangle
+    // orientation, so the indices come out the other side right-hand-rule
+    // consistent with the `vn` normals — which is what an OBJ consumer expects
+    // and what the bake asserts below. Reversing here as well would flip it
+    // back and leave every face pointing into the hill.
+    for tri in t.indices.chunks_exact(3) {
+        let (a, b, c) = (tri[0] + 1, tri[1] + 1, tri[2] + 1);
+        writeln!(w, "f {a}/{a}/{a} {b}/{b}/{b} {c}/{c}/{c}")?;
+    }
+    Ok(())
+}
+
 // --- the five outputs ------------------------------------------------------
 
 fn bake_terrain(out: &Path) {
@@ -234,39 +291,7 @@ fn bake_terrain(out: &Path) {
 
     let path = out.join("terrain.obj");
     let mut w = BufWriter::with_capacity(1 << 20, File::create(&path).unwrap());
-    writeln!(
-        w,
-        "# Baked by `cargo run -p tw-bake`. Do not edit; regenerate."
-    )
-    .unwrap();
-    writeln!(
-        w,
-        "# {}x{} grid, Unreal space (Z-up, left-handed), 1 unit = 1 cm, \
-         vertical exaggeration EXAG={}.",
-        terrain::COLS,
-        terrain::ROWS,
-        terrain::EXAG
-    )
-    .unwrap();
-    writeln!(w, "o TerrainBritain").unwrap();
-    for p in &t.positions {
-        let [x, y, z] = to_ue(*p);
-        writeln!(w, "v {x:.2} {y:.2} {z:.2}").unwrap();
-    }
-    for n in &t.normals {
-        let [x, y, z] = dir_to_ue(*n);
-        writeln!(w, "vn {x:.4} {y:.4} {z:.4}").unwrap();
-    }
-    // Winding is *not* reversed. The source order is clockwise for Godot's
-    // front face, and the right-to-left-handed flip already inverts triangle
-    // orientation, so the indices come out the other side right-hand-rule
-    // consistent with the `vn` normals — which is what an OBJ consumer expects
-    // and what the bake asserts below. Reversing here as well would flip it
-    // back and leave every face pointing into the hill.
-    for tri in t.indices.chunks_exact(3) {
-        let (a, b, c) = (tri[0] + 1, tri[1] + 1, tri[2] + 1);
-        writeln!(w, "f {a}//{a} {b}//{b} {c}//{c}").unwrap();
-    }
+    write_obj(&mut w, &t, terrain::COLS, terrain::ROWS).unwrap();
     w.flush().unwrap();
     report(
         &path,
@@ -477,4 +502,68 @@ fn report(path: &Path, what: &str) {
         path.file_name().unwrap().to_string_lossy(),
         bytes as f64 / 1e6
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A 2x2 grid: 4 vertices, 2 triangles.
+    fn quad() -> terrain::TerrainData {
+        terrain::TerrainData {
+            positions: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 1.0],
+            ],
+            normals: vec![[0.0, 1.0, 0.0]; 4],
+            indices: vec![0, 1, 2, 1, 3, 2],
+        }
+    }
+
+    fn write(t: &terrain::TerrainData) -> String {
+        let mut buf = Vec::new();
+        write_obj(&mut buf, t, 2, 2).unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    /// Regression: the OBJ must carry a UV channel. Without `vt` lines UE 5.8's
+    /// Interchange OBJ translator trips a handled ensure and produces no asset —
+    /// no exception, no terrain in the level, all-black shots.
+    #[test]
+    fn obj_has_a_uv_per_vertex() {
+        let t = quad();
+        let out = write(&t);
+        let vts: Vec<&str> = out.lines().filter(|l| l.starts_with("vt ")).collect();
+        assert_eq!(
+            vts.len(),
+            t.positions.len(),
+            "expected one vt per vertex, got {vts:?}"
+        );
+        // Corners of the unit UV square, row-major.
+        assert_eq!(vts[0], "vt 0.000000 0.000000");
+        assert_eq!(vts[3], "vt 1.000000 1.000000");
+    }
+
+    /// Regression: faces must reference the UV channel (`v/vt/vn`). A `v//vn`
+    /// face is what tripped the ensure even once `vt` lines existed.
+    #[test]
+    fn obj_faces_reference_uvs() {
+        let out = write(&quad());
+        let faces: Vec<&str> = out.lines().filter(|l| l.starts_with("f ")).collect();
+        assert_eq!(faces.len(), 2);
+        for f in &faces {
+            assert!(
+                !f.contains("//"),
+                "face omits the UV index (v//vn), which fails the UE import: {f}"
+            );
+            for vert in f.split_whitespace().skip(1) {
+                let idx: Vec<&str> = vert.split('/').collect();
+                assert_eq!(idx.len(), 3, "expected v/vt/vn triples, got {vert}");
+                assert!(idx.iter().all(|s| !s.is_empty()), "empty index in {vert}");
+            }
+        }
+        assert_eq!(faces[0], "f 1/1/1 2/2/2 3/3/3");
+    }
 }

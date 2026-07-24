@@ -7,8 +7,10 @@ once; the ownership layers (borders, markers) are the ones `campaign` rebuilds
 when the snapshot changes.
 
 Runs headlessly under `twctl build`; also callable live from the editor console.
-If no sidecar is reachable it still builds the geography against a neutral
-snapshot, so the visual loop never depends on the sim being up.
+A sidecar must be reachable (`make sim`, or `twctl` spawning one) — there is no
+neutral-snapshot mode. Nothing here degrades quietly: a missing asset, a failed
+import or an unreachable sim raises, because the failure mode this build has
+already hit is a clean "done" over an empty level.
 """
 
 from __future__ import annotations
@@ -18,7 +20,6 @@ import unreal
 from . import (
     _scene,
     borders,
-    config,
     forests,
     landscape,
     lighting,
@@ -28,41 +29,32 @@ from . import (
 )
 
 
-def _neutral_snapshot() -> dict:
-    """Everything owned by faction 0 — enough to render geography when the sim is
-    not running (visuals-first builds do not need live ownership)."""
-    doc = config.load_json("provinces.json")
-    return {
-        "turn": 0,
-        "provinces": [{"id": p["id"], "owner": 0} for p in doc["provinces"]],  # type: ignore[index]
-    }
+TERRAIN_MATERIAL = "/Game/Generated/Materials/M_Terrain"
 
 
 def _snapshot(campaign: str, seed: int) -> dict:
+    """The opening snapshot from the sidecar. Raises if no sim is reachable —
+    a build against invented ownership renders borders in one flat colour and
+    looks close enough to right to get blessed as a golden."""
     from . import simbridge
 
-    try:
-        return simbridge.opening_snapshot(campaign=campaign, seed=seed)
-    except Exception as e:  # noqa: BLE001
-        unreal.log_warning(f"[tw] no sim ({e}); building against a neutral snapshot")
-        return _neutral_snapshot()
+    return simbridge.opening_snapshot(campaign=campaign, seed=seed)
 
 
 def _ensure_materials() -> None:
-    if not unreal.EditorAssetLibrary.does_asset_exist("/Game/Generated/Materials/M_Terrain"):
+    if not unreal.EditorAssetLibrary.does_asset_exist(TERRAIN_MATERIAL):
         materials.build_all()
 
 
 def _apply_terrain_material(terrain_actor: unreal.Actor) -> None:
-    mat = unreal.load_asset("/Game/Generated/Materials/M_Terrain")
+    mat = unreal.load_asset(TERRAIN_MATERIAL)
     if not mat:
-        return
-    # Landscape and the static-mesh fallback take the material differently.
-    if isinstance(terrain_actor, unreal.Landscape):
-        terrain_actor.set_editor_property("landscape_material", mat)
-    else:
-        for comp in terrain_actor.get_components_by_class(unreal.StaticMeshComponent):
-            comp.set_material(0, mat)
+        raise RuntimeError(f"{TERRAIN_MATERIAL} did not load after materials.build_all()")
+    comps = terrain_actor.get_components_by_class(unreal.StaticMeshComponent)
+    if not comps:
+        raise RuntimeError(f"terrain actor {terrain_actor} has no StaticMeshComponent")
+    for comp in comps:
+        comp.set_material(0, mat)
 
 
 def build_world(campaign: str = "britain", seed: int = 42, *, save: bool = False) -> None:
