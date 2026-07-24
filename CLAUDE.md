@@ -177,6 +177,17 @@ height range and band anchors in cm, and `materials/terrain.py` bands as
 Britain peaks far below the European anchors. If the map goes uniformly green,
 that coupling has drifted; check the range in `terrain_meta.json`.
 
+### Editing terrain color
+
+`materials/terrain.py` is the whole palette. Two levers: the `GRASS`/`ARID`/
+`ROCK`/`SNOW` linear-RGB constants (the colors themselves) and the `*_top`/`*_lo`
+band edges (which height each color occupies, as fractions of the baked range).
+Green vs. tan is driven by `grass_top`: on low-relief Britain almost every cell
+sits low in the range, so a wide grass band greens the whole map — shrink it
+(e.g. `0.05 * span`) to make arid tan the base ground, as the reference has it.
+Edit → `make assets` (rebuild the material) → `make shot` → look → `make
+shots-bless`.
+
 ## Workflow
 
   The core idea
