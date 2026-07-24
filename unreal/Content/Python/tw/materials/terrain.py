@@ -17,11 +17,15 @@ from . import _graph as g
 
 MATERIAL_PATH = f"{g.MAT_PACKAGE}/M_Terrain"
 
-# target-state palette, linear RGB.
-GRASS = (0.09, 0.16, 0.05)
-ARID = (0.30, 0.26, 0.12)
-ROCK = (0.14, 0.12, 0.10)
-SNOW = (0.72, 0.74, 0.78)
+# target-state palette, linear RGB. The reference is a *bright* midday map: sunlit
+# golden-tan plains, mid-green lowlands, light warm-grey rock. An earlier pass had
+# these two to three stops darker (ROCK at 0.14 is near-black), which is why every
+# shot read as flat grey once the fog washed over it — the terrain simply had no
+# luminance to lose.
+GRASS = (0.10, 0.175, 0.05)
+ARID = (0.42, 0.32, 0.13)
+ROCK = (0.31, 0.29, 0.26)
+SNOW = (0.80, 0.82, 0.85)
 
 
 def build() -> unreal.Material:
@@ -33,10 +37,12 @@ def build() -> unreal.Material:
     span = max(hi - lo, 1.0)
 
     # Fractional band edges over the real land range (not absolute cm).
-    grass_top = lo + 0.20 * span
-    arid_top = lo + 0.55 * span
-    rock_top = lo + 0.80 * span
-    snow_lo = lo + 0.82 * span
+    # The reference is mostly arid tan with green in the valleys and rock reserved
+    # for genuine ridges, so the arid band is the wide one.
+    grass_top = lo + 0.35 * span
+    arid_top = lo + 0.78 * span
+    rock_top = lo + 0.95 * span
+    snow_lo = lo + 0.99 * span
 
     mat = g.create_material("M_Terrain")
 
@@ -63,7 +69,10 @@ def build() -> unreal.Material:
     g.link(n, nz, "")
     one_minus = g.node(mat, unreal.MaterialExpressionOneMinus, -1000, 500)
     g.link(nz, one_minus, "")
-    slope = g.linstep(mat, 0.55, 0.80, one_minus, -800, 500)
+    # 1-Nz of 0.55 is a ~63 degree face — so steep that nothing but a cliff wall
+    # ever reached it and the map had no rock structure at all. The reference
+    # greys out ridges well before that.
+    slope = g.linstep(mat, 0.28, 0.60, one_minus, -800, 500)
     rocky = g.lerp(mat, base2, rock, slope, 100, 0)
 
     # Snow cap on the highest, flattest ground.

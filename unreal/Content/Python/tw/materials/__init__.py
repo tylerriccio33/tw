@@ -9,10 +9,11 @@ of them with ``twctl assets`` (or `tw.materials.build_all()`).
 
 from __future__ import annotations
 
-from . import border, terrain, water
+from . import border, foliage, terrain, water
 
 
 def build_all() -> None:
     terrain.build()
     water.build()
     border.build()
+    foliage.build()

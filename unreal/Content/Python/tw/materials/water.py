@@ -13,8 +13,8 @@ from . import _graph as g
 
 MATERIAL_PATH = f"{g.MAT_PACKAGE}/M_Water"
 
-SHALLOW = (0.05, 0.22, 0.26)
-DEEP = (0.02, 0.05, 0.14)
+SHALLOW = (0.06, 0.25, 0.40)
+DEEP = (0.02, 0.08, 0.26)
 
 
 def build() -> unreal.Material:
@@ -47,7 +47,9 @@ def build() -> unreal.Material:
     g.to_property(op, unreal.MaterialProperty.MP_OPACITY)
 
     g.to_property(g.const(mat, 0.04, 100, 600), unreal.MaterialProperty.MP_ROUGHNESS)
-    g.to_property(g.const(mat, 1.0, 100, 700), unreal.MaterialProperty.MP_METALLIC)
+    # Not metallic: a metallic surface has no diffuse albedo, so the blue above
+    # was being thrown away and the sea rendered as a dark mirror of the sky.
+    g.to_property(g.const(mat, 0.0, 100, 700), unreal.MaterialProperty.MP_METALLIC)
 
     g.recompile(mat)
     unreal.log("[tw] M_Water built")

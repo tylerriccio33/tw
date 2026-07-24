@@ -27,8 +27,14 @@ def build_sea() -> unreal.Actor:
     # beyond the fog's reach (no visible slab rim), 6x like the old sea quad.
     s = max(ext["x"], ext["y"]) * 6.0 / 100.0
     actor.set_actor_scale3d(unreal.Vector(s, s, 1.0))
-    if mat:
-        comp.set_material(0, mat)
+    # No fallback: `if mat:` silently left the sea on UE's WorldGridMaterial,
+    # which is the grey grid that spanned the whole of overview.png.
+    if not isinstance(mat, unreal.MaterialInterface):
+        raise RuntimeError(
+            f"sea material missing at /Game/Generated/Materials/M_Water (got {mat!r}); "
+            "materials must be built before water"
+        )
+    comp.set_material(0, mat)
     return actor
 
 

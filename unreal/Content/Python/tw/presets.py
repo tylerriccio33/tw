@@ -31,13 +31,17 @@ def all_shots() -> list[Shot]:
 
     return [
         # The whole campaign, high and looking down the long axis.
-        Shot("overview", (-hx * 1.7, 0.0, high * 1.5), (-40.0, 0.0, 0.0), 45.0),
+        # Pitch has to be steeper than the angle to the map centre or the frame is
+        # mostly sky, which is what -40 from high*1.5 gave.
+        Shot("overview", (-hx * 1.5, 0.0, high * 1.05), (-45.0, 0.0, 0.0), 45.0),
         # Low, raking across the southern lowlands.
         Shot("lowlands", (-hx * 0.2, -hy * 0.4, high * 0.35), (-22.0, 20.0, 0.0), 38.0),
         # A coastline, camera out over the sea looking back at land.
         Shot("coast", (hx * 1.2, hy * 0.2, high * 0.30), (-18.0, 200.0, 0.0), 40.0),
         # The highlands — the only place rock/snow bands are reachable.
-        Shot("mountain", (-hx * 0.3, hy * 0.55, high * 0.45), (-30.0, 150.0, 0.0), 36.0),
+        # yaw 150 aimed this off the north-west corner of the map and out to sea;
+        # -67 turns it back down the highlands toward the centre.
+        Shot("mountain", (-hx * 0.3, hy * 0.55, high * 0.45), (-36.0, -67.0, 0.0), 36.0),
         # Tight on a province border, to catch the coloured ribbons.
         Shot("border", (0.0, 0.0, high * 0.25), (-35.0, 90.0, 0.0), 34.0),
     ]
