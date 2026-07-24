@@ -123,18 +123,48 @@ fn elev_px(c: usize, r: usize) -> f32 {
     i16::from_le_bytes([geo::ELEV[i], geo::ELEV[i + 1]]) as f32
 }
 
-/// Bilinearly sampled real elevation, in metres, at a world XZ point.
+/// Real elevation in metres at integer cell coords, clamped to the DEM extent
+/// (so the 4x4 bicubic stencil can reach past the edges without wrapping).
+fn elev_at(c: i32, r: i32) -> f32 {
+    let c = c.clamp(0, geo::ELEV_W as i32 - 1) as usize;
+    let r = r.clamp(0, geo::ELEV_H as i32 - 1) as usize;
+    elev_px(c, r)
+}
+
+/// One-dimensional Catmull-Rom interpolation of four samples at fraction `t`.
+fn cubic(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
+    p1 + 0.5
+        * t
+        * (p2 - p0 + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + t * (3.0 * (p1 - p2) + p3 - p0)))
+}
+
+/// Bicubically sampled real elevation, in metres, at a world XZ point.
+///
+/// The land mesh (960x720) is nearly 2x denser than the DEM (512x384), so plain
+/// bilinear sampling leaves the surface piecewise-flat between DEM samples — a
+/// C0 field whose gradient jumps at every cell boundary, which is exactly the
+/// faceting the map read as. Catmull-Rom over the 4x4 neighbourhood is
+/// C1-continuous, so the interpolated surface (and its normals) stay smooth
+/// between samples while still passing through the real elevation values.
 fn dem_meters(x: f32, z: f32) -> f32 {
     let fx = ((x + HALF_W) / (2.0 * HALF_W) * (geo::ELEV_W - 1) as f32)
         .clamp(0.0, (geo::ELEV_W - 1) as f32);
     let fz = ((z + HALF_H) / (2.0 * HALF_H) * (geo::ELEV_H - 1) as f32)
         .clamp(0.0, (geo::ELEV_H - 1) as f32);
-    let (c0, r0) = (fx.floor() as usize, fz.floor() as usize);
-    let (c1, r1) = ((c0 + 1).min(geo::ELEV_W - 1), (r0 + 1).min(geo::ELEV_H - 1));
-    let (tx, tz) = (fx - c0 as f32, fz - r0 as f32);
-    let a = elev_px(c0, r0) + (elev_px(c1, r0) - elev_px(c0, r0)) * tx;
-    let b = elev_px(c0, r1) + (elev_px(c1, r1) - elev_px(c0, r1)) * tx;
-    a + (b - a) * tz
+    let (cx, cz) = (fx.floor() as i32, fz.floor() as i32);
+    let (tx, tz) = (fx - cx as f32, fz - cz as f32);
+    let mut cols = [0.0f32; 4];
+    for (j, col) in cols.iter_mut().enumerate() {
+        let r = cz - 1 + j as i32;
+        *col = cubic(
+            elev_at(cx - 1, r),
+            elev_at(cx, r),
+            elev_at(cx + 1, r),
+            elev_at(cx + 2, r),
+            tx,
+        );
+    }
+    cubic(cols[0], cols[1], cols[2], cols[3], tz)
 }
 
 /// Elevation at a world point, against a coastline the caller already has.
@@ -153,7 +183,11 @@ pub fn height_with(polys: &[Vec<(f32, f32)>], x: f32, z: f32) -> f32 {
     // grid without inventing mountains. Detail grows with elevation so plains
     // stay plate-flat (the Po valley should read as flat) and peaks stay rugged.
     let real = dem_meters(x, z).max(0.0) * EXAG;
-    let detail = (fbm(x * 0.05, z * 0.05, 4) - 0.5) * 1.6 * (1.0 + real * 0.08);
+    // With the DEM now bicubically smoothed, the detail layer no longer has to
+    // paper over grid facets, so it is dialled back (1.6 -> 0.8): enough to keep
+    // slopes from reading as dead-flat, not so much that it re-roughens the
+    // surface the bicubic pass just smoothed.
+    let detail = (fbm(x * 0.05, z * 0.05, 4) - 0.5) * 0.8 * (1.0 + real * 0.08);
     let land = LAND_BASE + real + detail;
 
     // Anchor the waterline *on* the coastline: h is exactly 0 at signed == 0,

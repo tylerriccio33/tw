@@ -5,8 +5,9 @@
     twctl shot [names...]         headless: render preset shots to Shots/current
     twctl diff | bless            compare / accept the golden shots
     twctl assets                  headless: (re)build the code-owned materials
-    twctl live                    launch a persistent editor (remote-exec on)
+    twctl live                    launch a persistent editor (exec server on)
     twctl exec <file|snippet>     push Python into the live editor (tight loop)
+    twctl kill                    stop the live editor started by `twctl live`
 
 The editor is found at $TW_UE (default the memory's UE_5.8 path). Every editor
 launch is guarded by a disk-space check and, for long-running ones, killed if the
@@ -19,6 +20,8 @@ import argparse
 import os
 import shutil
 import signal
+import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -30,6 +33,10 @@ UPROJECT = REPO / "unreal" / "TotalWarlike.uproject"
 PYDIR = REPO / "unreal" / "Content" / "Python"
 SIM_DIR = REPO / "sim"
 SHOTS_DIFF = REPO / "unreal" / "Shots" / "diff.py"
+
+# Where the live editor's exec server publishes its loopback port + pid. Must
+# match exec_server.PORT_FILE.
+EXEC_PORT_FILE = REPO / "unreal" / ".exec-port"
 
 UE = Path(os.environ.get("TW_UE", "/Users/Shared/Epic Games/UE_5.8"))
 EDITOR_CMD = UE / "Engine" / "Binaries" / "Mac" / "UnrealEditor-Cmd"
@@ -161,60 +168,96 @@ def cmd_bless(_a: argparse.Namespace) -> int:
 
 
 def cmd_live(_a: argparse.Namespace) -> int:
-    """Launch a persistent editor with remote execution on (the tight-loop host).
-    Left in the foreground; `twctl exec` talks to it from another shell."""
+    """Launch a persistent editor hosting the tight-loop exec server.
+
+    `TW_EXEC_SERVER=1` makes the editor's startup hook open a loopback TCP eval
+    server (see `unreal/Content/Python/exec_server.py`) and publish its port to
+    `.exec-port`. `twctl exec` connects to that — no UDP multicast, which macOS's
+    Local Network privacy gate silently drops, breaking Epic's remote execution.
+    Left in the foreground; drive it with `twctl exec` from another shell."""
     _require_disk()
     if not EDITOR.exists():
         sys.exit(f"no editor at {EDITOR} — set TW_UE to your engine dir")
+    EXEC_PORT_FILE.unlink(missing_ok=True)  # stale file must not shadow a fresh launch
     print("[twctl] launching live editor; drive it with `twctl exec ...`")
-    return subprocess.call([str(EDITOR), str(UPROJECT)])
+    env = {**os.environ, "TW_EXEC_SERVER": "1"}
+    return subprocess.call([str(EDITOR), str(UPROJECT)], env=env)
+
+
+def _recv_exact(sock: socket.socket, n: int) -> bytes | None:
+    chunks: list[bytes] = []
+    while n > 0:
+        chunk = sock.recv(n)
+        if not chunk:
+            return None
+        chunks.append(chunk)
+        n -= len(chunk)
+    return b"".join(chunks)
+
+
+def _read_exec_port() -> int | None:
+    """The live editor's exec port, waiting briefly for a just-launched one."""
+    for _ in range(20):
+        if EXEC_PORT_FILE.exists():
+            lines = EXEC_PORT_FILE.read_text().splitlines()
+            if lines:
+                try:
+                    return int(lines[0])
+                except ValueError:
+                    pass
+        time.sleep(0.25)
+    return None
 
 
 def cmd_exec(a: argparse.Namespace) -> int:
-    """Push Python into the live editor over Python Remote Execution.
+    """Push Python into the live editor over the loopback exec server.
 
-    Uses Epic's bundled `remote_execution.py` client (stdlib-only), located under
-    the engine — the sanctioned protocol, no reimplementation."""
+    Same 4-byte-length-prefixed framing as `tw.simbridge`: send the source, read
+    back whatever it printed. The snippet runs on the editor's game thread."""
     src = a.code
     if Path(src).is_file():
         src = Path(src).read_text()
-    remote = _load_remote_execution()
-    conn = remote.RemoteExecutionConnection() if hasattr(remote, "RemoteExecutionConnection") else remote.RemoteExecution()
-    conn.start()
+    port = _read_exec_port()
+    if port is None:
+        sys.exit("no live editor found — start one with `twctl live`")
+    payload = src.encode("utf-8")
     try:
-        # Discover the running editor node and run against it.
-        for _ in range(20):
-            if conn.remote_nodes:
-                break
-            time.sleep(0.25)
-        if not conn.remote_nodes:
-            sys.exit("no live editor found — start one with `twctl live`")
-        conn.open_command_connection(conn.remote_nodes[0])
-        result = conn.run_command(
-            src, unattended=True, exec_mode=remote.MODE_EXEC_STATEMENT
-        )
-        print(result.get("output") if isinstance(result, dict) else result)
-        return 0
-    finally:
-        conn.stop()
-
-
-def _load_remote_execution():
-    """Import Epic's remote_execution client from the engine's Python plugin."""
-    import importlib.util
-
-    candidates = list(
-        (UE / "Engine" / "Plugins").rglob("PythonScriptPlugin/**/remote_execution.py")
-    )
-    if not candidates:
+        with socket.create_connection(("127.0.0.1", port), timeout=30) as sock:
+            sock.sendall(struct.pack(">I", len(payload)) + payload)
+            header = _recv_exact(sock, 4)
+            if header is None:
+                sys.exit("live editor closed the connection without replying")
+            (length,) = struct.unpack(">I", header)
+            body = _recv_exact(sock, length) or b""
+    except ConnectionRefusedError:
         sys.exit(
-            "could not find remote_execution.py under the engine; check TW_UE and "
-            "that the Python plugin is installed"
+            "exec port is stale — the live editor isn't accepting; "
+            "is `twctl live` still running?"
         )
-    spec = importlib.util.spec_from_file_location("remote_execution", candidates[0])
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
+    out = body.decode("utf-8")
+    if out:
+        print(out, end="" if out.endswith("\n") else "\n")
+    return 0
+
+
+def cmd_kill(_a: argparse.Namespace) -> int:
+    """Stop the live editor started by `twctl live` (via its recorded pid)."""
+    if not EXEC_PORT_FILE.exists():
+        sys.exit("no live editor recorded (.exec-port missing)")
+    lines = EXEC_PORT_FILE.read_text().splitlines()
+    if len(lines) < 2:
+        sys.exit(".exec-port has no pid — close the editor window manually")
+    pid = int(lines[1])
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        EXEC_PORT_FILE.unlink(missing_ok=True)
+        sys.exit(f"editor pid {pid} is not running (cleared stale .exec-port)")
+    # UE tears down over ~15s and does not run Python shutdown callbacks on a
+    # signal exit, so drop the pointer here — we know the editor is on its way out.
+    EXEC_PORT_FILE.unlink(missing_ok=True)
+    print(f"[twctl] sent SIGTERM to editor pid {pid} (shutting down)")
+    return 0
 
 
 # --------------------------------------------------------------------------- #
@@ -238,6 +281,7 @@ def main() -> int:
     p_exec = sub.add_parser("exec")
     p_exec.add_argument("code", help="a .py file path or an inline snippet")
     p_exec.set_defaults(fn=cmd_exec)
+    sub.add_parser("kill").set_defaults(fn=cmd_kill)
 
     args = ap.parse_args()
     return args.fn(args)

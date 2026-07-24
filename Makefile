@@ -8,7 +8,7 @@ TWCTL = PYTHONPATH=tools/twctl/src python3 -m twctl
 
 .PHONY: help fmt clippy clean bake \
         py-test py-sim sim \
-        build shot shots-diff shots-bless live exec assets bridge-test \
+        build shot shots-diff shots-bless live exec kill assets bridge-test \
         pre-commit-install pre-commit
 
 help: ## Show this help
@@ -65,13 +65,16 @@ assets: ## Headless: (re)build the code-owned materials (assets-as-code)
 
 # The tight loop: one persistent editor, driven from another shell over remote
 # execution. In window A: `make live`. In window B: `make exec CODE=...`.
-live: ## Launch a persistent editor with Python remote-execution on (the tight loop host)
+live: ## Launch a persistent editor hosting the loopback exec server (the tight loop host)
 	$(TWCTL) live
 
 CODE ?=
 exec: ## Push Python into the live editor (CODE='import tw.materials; tw.materials.terrain.build()')
-	@test -n "$(CODE)" || { echo "set CODE=<file or snippet>"; exit 1; }
-	$(TWCTL) exec "$(CODE)"
+	@test -n '$(CODE)' || { echo "set CODE=<file or snippet>"; exit 1; }
+	@$(TWCTL) exec '$(CODE)'
+
+kill: ## Stop the live editor started by `make live`
+	$(TWCTL) kill
 
 # --- the bridge test — the fast gate for the pure-Python sim bridge ---
 #
