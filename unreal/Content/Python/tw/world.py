@@ -42,8 +42,11 @@ def _snapshot(campaign: str, seed: int) -> dict:
 
 
 def _ensure_materials() -> None:
-    if not unreal.EditorAssetLibrary.does_asset_exist(TERRAIN_MATERIAL):
-        materials.build_all()
+    """Always rebuild. Materials are assets-as-code and cost ~a second; gating on
+    "does M_Terrain already exist" meant an edited palette or a newly added
+    material never reached the render — the build reused whatever the last run
+    happened to leave in /Game/Generated/Materials and logged a clean "done"."""
+    materials.build_all()
 
 
 def _apply_terrain_material(terrain_actor: unreal.Actor) -> None:

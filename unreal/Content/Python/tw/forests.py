@@ -13,6 +13,7 @@ import math
 import unreal
 
 from . import _scene, config
+from .materials import foliage as mat_foliage
 
 # Placeholder until a real foliage asset is imported (assets-as-code, later).
 _TREE_MESH = "/Engine/BasicShapes/Cone.Cone"
@@ -25,6 +26,16 @@ def build() -> unreal.Actor:
     hism = unreal.HierarchicalInstancedStaticMeshComponent()
     actor.set_editor_property("root_component", hism)
     hism.set_static_mesh(unreal.load_asset(_TREE_MESH))
+
+    # The engine cone ships with a grey material; without this the whole forest
+    # layer renders as pale grey pips and the map loses its dominant colour.
+    canopy = unreal.load_asset(mat_foliage.MATERIAL_PATH)
+    if not isinstance(canopy, unreal.MaterialInterface):
+        raise RuntimeError(
+            f"foliage material missing at {mat_foliage.MATERIAL_PATH} "
+            f"(got {canopy!r}); materials must be built before forests"
+        )
+    hism.set_material(0, canopy)
     for t in trees:  # type: ignore[union-attr]
         loc = _scene.vec(t["pos"])
         rot = unreal.Rotator(0.0, 0.0, float(t["yaw_deg"]))
