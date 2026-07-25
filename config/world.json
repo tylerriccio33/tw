@@ -1,0 +1,170 @@
+{
+  "_comment": "Single source of truth for the render. Every visual is derived from `seed`, so an unchanged config must produce a byte-identical screenshot. If it does not, something is reading an unseeded RNG.",
+
+  "seed": 20260725,
+
+  "terrain": {
+    "_comment": "region_size * vertex_spacing = world units per region. 2 x 2 regions of 1024 verts at 2.0 spacing => a 4096-unit map spanning -2048..2048.",
+    "region_size": 1024,
+    "vertex_spacing": 2.0,
+    "regions_across": 2,
+    "sea_level": 0.0,
+    "ocean_depth": 160.0,
+
+    "continent": {
+      "_comment": "Radial falloff from the map centre makes the landmass an island. The warp noise pushes that radius in and out so the coastline is ragged instead of circular.",
+      "falloff_start": 0.62,
+      "falloff_end": 1.12,
+      "warp_frequency": 0.00035,
+      "warp_amplitude": 0.30
+    },
+
+    "plains": {
+      "_comment": "Low-amplitude rolling ground covering most of the landmass.",
+      "frequency": 0.0011,
+      "octaves": 5,
+      "height": 70.0
+    },
+
+    "mountains": {
+      "_comment": "Ridged noise gated by a low-frequency belt mask. belt_low/high select roughly the top quarter of the belt noise - open them up and mountains swallow the entire map, which is the single easiest way to lose the campaign-map read.",
+      "frequency": 0.0009,
+      "octaves": 4,
+      "ridge_power": 1.5,
+      "belt_frequency": 0.00075,
+      "belt_low": 0.58,
+      "belt_high": 0.82,
+      "height": 520.0
+    },
+
+    "palette": {
+      "_comment": "Texture ids match the order of the assets built in terrain_builder. The reference map is arid: tan owns the plains and green is confined to wetter low ground, which is what stops it reading as generic green terrain.",
+      "beach_height": 14.0,
+      "beach_blend": 22.0,
+      "snow_height": 430.0,
+      "snow_blend": 120.0,
+      "rock_slope_low": 17.0,
+      "rock_slope_high": 31.0,
+      "moisture_frequency": 0.0009,
+      "moisture_threshold": 0.56,
+      "moisture_blend": 0.16,
+      "green_max_height": 300.0
+    }
+  },
+
+  "forests": {
+    "_comment": "Density mask decides where woods cluster; the height/slope gate then rejects surf and bare peaks. max_height is the treeline and should sit just under where snow starts blending (palette.snow_height - snow_blend), so forests stop before the mountains go white.",
+    "spacing": 22.0,
+    "jitter": 0.85,
+    "density_frequency": 0.0011,
+    "density_threshold": 0.50,
+    "min_height": 12.0,
+    "max_height": 300.0,
+    "max_slope_degrees": 28.0,
+    "scale_min": 0.75,
+    "scale_max": 1.65,
+    "tree_height": 26.0,
+    "conifer_height_fraction": 0.55,
+    "trunk_color": [0.24, 0.18, 0.13],
+    "conifer_color": [0.13, 0.24, 0.14],
+    "broadleaf_color": [0.22, 0.34, 0.15]
+  },
+
+  "cities": {
+    "_comment": "Cities are placed by dart throwing with a minimum separation, gated on flat-ish ground clear of the surf and below the hills. max_slope_degrees is deliberately tight - a settlement draped over a hillside reads as scattered rubble from above.",
+    "count": 6,
+    "min_distance": 620.0,
+    "placement_attempts": 600,
+    "min_height": 20.0,
+    "max_height": 210.0,
+    "max_slope_degrees": 9.0,
+    "radius": 92.0,
+    "building_count": 52,
+    "building_size": 13.0,
+    "max_building_slope_degrees": 20.0,
+    "wall_enabled": true,
+    "wall_segments": 26,
+    "wall_tower_every": 5,
+    "building_color": [0.78, 0.72, 0.62],
+    "keep_color": [0.66, 0.62, 0.56],
+    "roof_color": [0.42, 0.22, 0.16],
+    "wall_color": [0.60, 0.57, 0.52]
+  },
+
+  "network": {
+    "_comment": "Rivers run downhill from high ground; roads are a minimum spanning tree over the cities; borders are the boundary of a nearest-city Voronoi partition. y_offset lifts each ribbon clear of the terrain - drop it to zero and they z-fight into stipple.",
+    "rivers_enabled": true,
+    "roads_enabled": true,
+    "borders_enabled": true,
+
+    "rivers": {
+      "count": 9,
+      "source_attempts": 900,
+      "source_height": 240.0,
+      "step": 14.0,
+      "max_steps": 700,
+      "min_points": 18,
+      "smoothing_passes": 4,
+      "width": 15.0,
+      "y_offset": 2.2,
+      "color": [0.20, 0.38, 0.55]
+    },
+
+    "roads": {
+      "samples_per_road": 60,
+      "wander_frequency": 0.35,
+      "wander_amplitude": 130.0,
+      "width": 13.0,
+      "y_offset": 1.6,
+      "color": [0.80, 0.73, 0.55]
+    },
+
+    "borders": {
+      "cell_size": 46.0,
+      "width": 6.0,
+      "y_offset": 2.8,
+      "color": [0.85, 0.76, 0.30]
+    }
+  },
+
+  "debug": {
+    "_comment": "Terrain3D debug overlays, for splitting 'the lighting is wrong' from 'the control map is wrong'. One of: none, grey, control, heightmap, colormap, checkered, autoshader. Must be `none` for a golden shot.",
+    "terrain_view": "none"
+  },
+
+  "water": {
+    "_comment": "Colours are graded by reconstructed water depth, so shallow_color is what you see over the beach shelf and deep_color is open sea. extent_multiplier pushes the plane past the terrain so the horizon is water, not the region edge.",
+    "extent_multiplier": 24.0,
+    "shallow_color": [0.26, 0.55, 0.62],
+    "deep_color": [0.07, 0.20, 0.38],
+    "depth_falloff": 130.0,
+    "foam_color": [0.93, 0.95, 0.96],
+    "foam_depth": 13.0,
+    "foam_sharpness": 2.4,
+    "wave_scale": 0.008,
+    "wave_speed": 0.03,
+    "wave_strength": 0.05,
+    "wave_time": 0.0,
+    "specular_amount": 0.45,
+    "roughness_amount": 0.08
+  },
+
+  "lighting": {
+    "_comment": "Low sun angle gives the long directional shadows that make ridgelines readable from a high camera.",
+    "sun_pitch_degrees": -38.0,
+    "sun_yaw_degrees": 130.0,
+    "sun_energy": 1.35,
+    "sun_color": [1.0, 0.95, 0.86],
+    "sun_shadow_max_distance": 4200.0,
+    "ambient_energy": 0.7,
+    "sky_horizon_color": [0.72, 0.76, 0.82],
+    "sky_top_color": [0.36, 0.52, 0.74],
+    "fog_enabled": true,
+    "fog_color": [0.68, 0.72, 0.78],
+    "fog_density": 0.00035,
+    "tonemap": "filmic",
+    "exposure": 1.0,
+    "saturation": 1.15,
+    "contrast": 1.08
+  }
+}

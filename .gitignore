@@ -1,36 +1,25 @@
 # macOS
 .DS_Store
 
-# Rust
-/target/
-**/target/
+# Godot
+.godot/
+
+# Vendored GDExtension (42MB of prebuilt binaries) - run `make addons`
+/addons/terrain_3d/
+
+# Terrain3D region data. The terrain is regenerated from config/world.json on
+# every run and never saved, so this is scratch.
+/data/
 
 # Python
-sim/.venv/
 **/__pycache__/
 *.pyc
-sim/.sim-port
-unreal/.exec-port
-.pytest_cache/
-*.egg-info/
 
-# Unreal Engine
-unreal/Binaries/
-unreal/Intermediate/
-unreal/DerivedDataCache/
-unreal/Saved/
-unreal/.vs/
-unreal/*.sln
-unreal/*.VC.db
-unreal/*.VC.opendb
-
-# Baked geometry output (regenerate with `make bake`)
-unreal/Content/Map/
+# Rendered shots. shots/golden/ IS committed - it is the diff baseline.
+/shots/current/
+/shots/contact_sheet.png
 
 # Editors
 .vscode/
 .idea/
 *.swp
-
-# Rendered preset shots — regenerate with `make unreal-shots`. Shots/golden/ IS committed.
-unreal/Shots/current/

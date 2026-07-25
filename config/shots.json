@@ -1,0 +1,29 @@
+{
+  "_comment": "Named camera presets. Every preset is rendered on `make shot` and diffed against shots/golden/. `overview` is the primary composition check; the others exist so a change that fixes one framing but breaks another is visible immediately.",
+
+  "resolution": [1920, 1080],
+
+  "presets": [
+    {
+      "name": "overview",
+      "_comment": "Matches the reference framing: high oblique, ~40 degrees down, wide enough to read the whole landmass silhouette.",
+      "position": [0.0, 2450.0, 3350.0],
+      "look_at": [0.0, 0.0, -350.0],
+      "fov": 45.0
+    },
+    {
+      "name": "coast",
+      "_comment": "Low and close on the shoreline - the sea/land transition and foam are hard to judge from the overview.",
+      "position": [-900.0, 520.0, 1250.0],
+      "look_at": [-350.0, 0.0, 350.0],
+      "fov": 50.0
+    },
+    {
+      "name": "ridge",
+      "_comment": "Side-on across the mountains to check silhouette, rock texturing and shadow length.",
+      "position": [1500.0, 780.0, -300.0],
+      "look_at": [-200.0, 120.0, -600.0],
+      "fov": 40.0
+    }
+  ]
+}
