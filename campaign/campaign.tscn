@@ -2,13 +2,17 @@
 
 [ext_resource type="Script" path="res://campaign/campaign_ui.gd" id="1_ui"]
 
-[node name="Campaign" type="Node2D"]
+[node name="Campaign" type="Node3D"]
 script = ExtResource("1_ui")
 
 [node name="CampaignManager" type="CampaignManager" parent="."]
 
-[node name="Cities" type="Node2D" parent="."]
-position = Vector2(400, 300)
+[node name="CityMarkers" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 
 [node name="UI" type="Control" parent="."]
 anchors_preset = 15

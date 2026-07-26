@@ -156,3 +156,10 @@ func set_camera(camera: Camera3D) -> void:
 		errors.append("set_camera() called before the terrain was built")
 		return
 	terrain_builder.terrain.set_camera(camera)
+
+
+## City centres in world space (x, y=terrain height, z), for callers outside
+## this script that need them without reaching into the pseudo-private
+## _cities stage node directly.
+func city_centres() -> PackedVector3Array:
+	return _cities.city_centres

@@ -8,7 +8,10 @@ set -euo pipefail
 
 GODOT="${GODOT:-godot}"
 RESOLUTION="${RESOLUTION:-1280x800}"
-SETTLE_SECONDS="${SETTLE_SECONDS:-6}"
+# campaign.tscn now builds the full 3D world (terrain/forest/city/road)
+# synchronously before first paint, so it needs longer to settle than the
+# bare 2D scene this used to be.
+SETTLE_SECONDS="${SETTLE_SECONDS:-12}"
 OUT_DIR="shots/play"
 OUT_FILE="${OUT_DIR}/play.png"
 

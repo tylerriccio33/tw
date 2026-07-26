@@ -85,6 +85,80 @@ func _initialize() -> void:
 	)
 
 	manager.free()
+
+	# Exercise the world-derived start path with a non-default city count,
+	# since start_default_game() alone would never catch a regression in
+	# start_game_from_positions()'s faction-clamping/round-robin ownership.
+	var manager2: Object = ClassDB.instantiate("CampaignManager")
+	if manager2 == null:
+		failures.append("CampaignManager failed to instantiate (second instance)")
+		_finish(failures)
+		return
+
+	turn_started_count = 0
+	battle_count = 0
+	game_over_fired = false
+	manager2.turn_started.connect(_on_turn_started)
+	manager2.battle_resolved.connect(_on_battle_resolved)
+	manager2.game_over.connect(_on_game_over)
+
+	var positions := PackedVector2Array(
+		[
+			Vector2(0, 0),
+			Vector2(100, 0),
+			Vector2(0, 100),
+			Vector2(100, 100),
+			Vector2(200, 200),
+			Vector2(200, 0)
+		]
+	)
+	manager2.start_game_from_positions(positions, 10)
+	var state2: Dictionary = manager2.get_state()
+	if state2["factions"].size() != 4:
+		failures.append(
+			(
+				"start_game_from_positions: expected 4 factions (clamped), got %d"
+				% state2["factions"].size()
+			)
+		)
+	if state2["cities"].size() != 6:
+		failures.append(
+			"start_game_from_positions: expected 6 cities, got %d" % state2["cities"].size()
+		)
+
+	iterations = 0
+	while not manager2.is_game_over() and iterations < 500:
+		var s2: Dictionary = manager2.get_state()
+		var current2: int = s2["current_faction"]
+		var target_id2: int = -1
+		for city in s2["cities"]:
+			if int(city["owner"]) != current2:
+				target_id2 = int(city["id"])
+				break
+		if target_id2 != -1:
+			manager2.attack_city(target_id2)
+		manager2.end_turn()
+		iterations += 1
+
+	if not manager2.is_game_over():
+		failures.append(
+			"start_game_from_positions: game did not end within %d iterations" % iterations
+		)
+	if turn_started_count == 0:
+		failures.append("start_game_from_positions: turn_started never fired")
+	if battle_count == 0:
+		failures.append("start_game_from_positions: battle_resolved never fired")
+	if not game_over_fired:
+		failures.append("start_game_from_positions: game_over never fired")
+
+	print(
+		(
+			"campaign smoke (world-derived): turns=%d battles=%d winner=%d"
+			% [turn_started_count, battle_count, manager2.winner_id()]
+		)
+	)
+
+	manager2.free()
 	_finish(failures)
 
 

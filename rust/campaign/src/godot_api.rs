@@ -118,6 +118,54 @@ impl CampaignManager {
         self.signals().turn_started().emit(faction_id, turn);
     }
 
+    /// Sets up the campaign from real world-derived city positions: `num_factions =
+    /// city_positions.len().clamp(1, 4)` factions from the fixed Red/Blue/Green/Yellow
+    /// roster, cities named "City N" with flat income 20, ownership assigned round-robin
+    /// (`owner = index % num_factions`) so every faction starts with at least one city.
+    /// City id == index into `city_positions`, so callers can map ids back to world
+    /// positions directly. Call once before any other method.
+    #[func]
+    fn start_game_from_positions(&mut self, city_positions: PackedVector2Array, max_turns: i64) {
+        const ROSTER: [&str; 4] = ["Red", "Blue", "Green", "Yellow"];
+
+        let num_cities = city_positions.len();
+        if num_cities == 0 {
+            self.campaign = None;
+            return;
+        }
+        let num_factions = num_cities.clamp(1, 4);
+
+        let factions: Vec<Faction> = (0..num_factions)
+            .map(|i| Faction {
+                id: i as u32,
+                name: ROSTER[i].into(),
+                money: 100,
+                alive: true,
+            })
+            .collect();
+
+        let cities: Vec<City> = city_positions
+            .as_slice()
+            .iter()
+            .enumerate()
+            .map(|(i, v)| City {
+                id: i as u32,
+                name: format!("City {}", i + 1),
+                income: 20,
+                position: (v.x, v.y),
+                owner: (i % num_factions) as u32,
+            })
+            .collect();
+
+        self.campaign = Some(Campaign::new(factions, cities, max_turns as u32));
+
+        let (faction_id, turn) = {
+            let c = self.campaign.as_ref().unwrap();
+            (c.current_faction_id() as i64, c.turn as i64)
+        };
+        self.signals().turn_started().emit(faction_id, turn);
+    }
+
     #[func]
     fn current_faction_id(&self) -> i64 {
         self.campaign
