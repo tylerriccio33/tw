@@ -70,9 +70,12 @@ func _ready() -> void:
 	var map_extent: float = world.terrain_builder.map_extent
 	add_child(_world_camera)
 	# Tilted strategy-map angle (a la Total War) instead of a dead-vertical
-	# top-down shot: pulled back and elevated so look_at() naturally pitches
-	# the camera down at ~45 degrees over the whole island.
-	_world_camera.global_position = Vector3(0.0, map_extent * 1.15, map_extent * 1.15)
+	# top-down shot: pulled back much further than it is elevated, so
+	# look_at() pitches the camera down at ~23 degrees. The previous 45-degree
+	# framing looked straight down into shadowed mountain crevices, which
+	# reads as black shadow-acne tearing across half the range; a shallow
+	# raking angle grazes past those faces instead and matches the reference.
+	_world_camera.global_position = Vector3(0.0, map_extent * 0.75, map_extent * 1.8)
 	_world_camera.look_at(Vector3.ZERO, Vector3.UP)
 	_world_camera.make_current()
 
