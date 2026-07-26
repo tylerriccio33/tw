@@ -10,7 +10,7 @@ else
 SHOT_ARGS :=
 endif
 
-.PHONY: help addons textures foliage import shot diff sheet accept smoke api check test clean-shots campaign campaign-test campaign-smoke play play-shot
+.PHONY: help addons textures foliage import shot diff sheet accept smoke api check test clean-shots campaign campaign-test campaign-smoke play play-shot hud-shot
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -40,6 +40,8 @@ help:
 	@echo "make campaign      - build the campaign-map Rust GDExtension and install it into addons/campaign/bin/"
 	@echo "make campaign-test - run the Rust unit tests for the campaign-map game logic"
 	@echo "make play          - build the extension and open the campaign map in a window"
+	@echo "make play-shot     - screenshot the whole campaign window to shots/play/play.png"
+	@echo "make hud-shot      - screenshot just the bottom HUD banner to shots/play/hud.png"
 
 addons:
 	python3 tools/fetch_addons.py
@@ -146,6 +148,15 @@ play: campaign
 # render) to shots/play/play.png. macOS only.
 play-shot: campaign
 	GODOT=$(GODOT) ./tools/play_shot.sh
+
+# Reuses play-shot's full-window capture and crops it down to just the
+# bottom HUD banner (city panel/buildings row/end-turn ribbon), so reviewing
+# a HUD tweak doesn't mean eyeballing it inside a full 1280x800 map shot.
+# RESOLUTION must match whatever play-shot itself was given, since the crop
+# needs it to know where the OS titlebar chrome ends and game content
+# starts - both default to 1280x800 so this is a no-op unless overridden.
+hud-shot: play-shot
+	@RESOLUTION=$(or $(RESOLUTION),1280x800) uv run tools/hud_shot.py
 
 campaign-smoke:
 	GODOT=$(GODOT) ./tools/godot_gate.sh --headless --script res://tools/campaign_smoke.gd
