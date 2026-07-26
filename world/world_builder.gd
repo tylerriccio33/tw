@@ -18,6 +18,9 @@ var errors: PackedStringArray = []
 var built := false
 
 var terrain_builder: TerrainBuilder
+var _scatter: Scatter
+var _cities: Cities
+var _splines: Splines
 
 
 ## Runs `stage.build(...)`, then confirms it actually reached the end. GDScript
@@ -76,34 +79,60 @@ func build(cfg: Dictionary) -> void:
 	)):
 		return
 
-	var scatter := Scatter.new()
-	scatter.name = "Forests"
-	add_child(scatter)
-	if not _run_stage("forests", scatter, scatter.build.bind(
+	_scatter = Scatter.new()
+	_scatter.name = "Forests"
+	add_child(_scatter)
+	if not _run_stage("forests", _scatter, _scatter.build.bind(
 		cfg["forests"], int(cfg["seed"]),
 		terrain_builder.map_extent, terrain_builder
 	)):
 		return
 
-	var cities := Cities.new()
-	cities.name = "Cities"
-	add_child(cities)
-	if not _run_stage("cities", cities, cities.build.bind(
+	_cities = Cities.new()
+	_cities.name = "Cities"
+	add_child(_cities)
+	if not _run_stage("cities", _cities, _cities.build.bind(
 		cfg["cities"], int(cfg["seed"]),
 		terrain_builder.map_extent, terrain_builder
 	)):
 		return
 
-	var splines := Splines.new()
-	splines.name = "Network"
-	add_child(splines)
-	if not _run_stage("network", splines, splines.build.bind(
+	_splines = Splines.new()
+	_splines.name = "Network"
+	add_child(_splines)
+	if not _run_stage("network", _splines, _splines.build.bind(
 		cfg["network"], int(cfg["seed"]), terrain_builder.map_extent,
-		float(terrain_cfg["sea_level"]), terrain_builder, cities.city_centres
+		float(terrain_cfg["sea_level"]), terrain_builder, _cities.city_centres
 	)):
 		return
 
 	built = true
+
+
+## Aggregates every stage's stats() plus a whole-scene triangle count, for the
+## harness to print once per render. Cheap next to a render (one tree walk)
+## and answers "roads are zigzagging" / "cities placed 6 of 6" without
+## opening an image.
+func stats() -> Dictionary:
+	var s := {"triangles": _count_triangles(self)}
+	s.merge(terrain_builder.stats())
+	s.merge(_scatter.stats())
+	s.merge(_cities.stats())
+	s.merge(_splines.stats())
+	return s
+
+
+func _count_triangles(node: Node) -> int:
+	var total := 0
+	if node is MeshInstance3D and node.mesh != null:
+		total += (node.mesh as Mesh).get_faces().size() / 3
+	elif node is MultiMeshInstance3D and node.multimesh != null:
+		var mm := node.multimesh as MultiMesh
+		if mm.mesh != null:
+			total += int((mm.mesh as Mesh).get_faces().size() / 3) * mm.instance_count
+	for child in node.get_children():
+		total += _count_triangles(child)
+	return total
 
 
 ## Terrain3D cannot discover the capture camera on its own (we render into a

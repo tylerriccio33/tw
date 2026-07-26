@@ -63,9 +63,56 @@ func _vec3(value: Variant, where: String) -> Vector3:
 	return Vector3(float(arr[0]), float(arr[1]), float(arr[2]))
 
 
+## Applies `--set=path.to.key=value[,path.to.key=value...]` (as passed by
+## `make shot SET=...`) directly to the loaded config in memory. Every prior
+## override was a `python3 -c` one-liner rewriting world.json on disk - fine
+## until it gets left in a mutated state and a later "control" render gets
+## captured as if it were the real thing. This never touches the file.
+func _apply_overrides(cfg: Dictionary) -> void:
+	for arg in OS.get_cmdline_user_args():
+		if not arg.begins_with("--set="):
+			continue
+		var assignment := arg.substr("--set=".length())
+		for pair in assignment.split(","):
+			if pair.is_empty():
+				continue
+			var eq := pair.find("=")
+			if eq == -1:
+				_fail("--set: malformed override %s (expected path.to.key=value)" % pair)
+				continue
+			_apply_override(cfg, pair.substr(0, eq), pair.substr(eq + 1))
+
+
+func _apply_override(cfg: Dictionary, path: String, raw_value: String) -> void:
+	var parts := path.split(".")
+	var node := cfg
+	for i in parts.size() - 1:
+		var key := parts[i]
+		if not (node.has(key) and typeof(node[key]) == TYPE_DICTIONARY):
+			_fail("--set: %s is not a nested config path" % path)
+			return
+		node = node[key]
+	var last_key := parts[-1]
+	if not node.has(last_key):
+		_fail("--set: unknown config key %s" % path)
+		return
+
+	# JSON-decode the raw string so `--set=cities.count=8` produces an int and
+	# `--set=network.rivers_enabled=false` a bool, not the strings "8"/"false";
+	# anything that fails to parse (e.g. `grey`) is used as a plain string.
+	var json := JSON.new()
+	var value: Variant = raw_value if json.parse(raw_value) != OK else json.data
+	node[last_key] = value
+	print("override: %s = %s (transient - world.json untouched)" % [path, value])
+
+
 func _run() -> void:
 	var world_cfg := _load_json(WORLD_CONFIG)
 	var shots_cfg := _load_json(SHOTS_CONFIG)
+	if not _errors.is_empty():
+		return _finish()
+
+	_apply_overrides(world_cfg)
 	if not _errors.is_empty():
 		return _finish()
 
@@ -105,6 +152,8 @@ func _run() -> void:
 		_fail("world build did not complete; refusing to capture a partial render")
 	if not _errors.is_empty():
 		return _finish()
+
+	_print_stats(world.stats())
 
 	var camera := Camera3D.new()
 	camera.name = "ShotCamera"
@@ -159,6 +208,16 @@ func _run() -> void:
 		print("wrote %s (%dx%d)" % [path, image.get_width(), image.get_height()])
 
 	_finish()
+
+
+## Nothing else told an agent how many trees/cities/rivers/roads actually got
+## emitted - only a hand-written check would have. This is nearly free next
+## to a render and makes "cities placed 6 of 6" or "roads are zigzagging"
+## visible without opening an image.
+func _print_stats(s: Dictionary) -> void:
+	print("STATS regions=%d height=[%.1f, %.1f] trees=%d cities=%d rivers=%d roads=%d triangles=%d"
+		% [s["regions"], s["height_min"], s["height_max"], s["trees"],
+			s["cities"], s["rivers"], s["roads"], s["triangles"]])
 
 
 func _finish() -> void:
