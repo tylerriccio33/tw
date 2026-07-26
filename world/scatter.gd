@@ -20,9 +20,7 @@ var built := false
 var tree_positions: PackedVector3Array = []
 
 
-func build(
-	cfg: Dictionary, seed_value: int, map_extent: float, terrain_builder: Node
-) -> void:
+func build(cfg: Dictionary, seed_value: int, map_extent: float, terrain_builder: Node) -> void:
 	var spacing := float(cfg["spacing"])
 	if spacing <= 0.0:
 		errors.append("forests.spacing must be > 0, got %f" % spacing)
@@ -31,8 +29,9 @@ func build(
 	var min_height := float(cfg["min_height"])
 	var max_height := float(cfg["max_height"])
 	if min_height >= max_height:
-		errors.append("forests.min_height (%f) must be below max_height (%f)"
-			% [min_height, max_height])
+		errors.append(
+			"forests.min_height (%f) must be below max_height (%f)" % [min_height, max_height]
+		)
 		return
 
 	var max_slope := float(cfg["max_slope_degrees"])
@@ -89,7 +88,8 @@ func build(
 				continue
 
 			var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(
-				Vector3.ONE * rng.randf_range(scale_min, scale_max))
+				Vector3.ONE * rng.randf_range(scale_min, scale_max)
+			)
 			var xform := Transform3D(basis, Vector3(x, h, z))
 			if h >= conifer_line:
 				conifer_transforms.append(xform)
@@ -99,9 +99,13 @@ func build(
 
 	if conifer_transforms.is_empty() and broadleaf_transforms.is_empty():
 		errors.append(
-			"forest scatter placed 0 trees - check forests.density_threshold "
-			+ "(%f) and the height gate %f..%f against the terrain height range"
-			% [density_threshold, min_height, max_height]
+			(
+				"forest scatter placed 0 trees - check forests.density_threshold "
+				+ (
+					"(%f) and the height gate %f..%f against the terrain height range"
+					% [density_threshold, min_height, max_height]
+				)
+			)
 		)
 		return
 
@@ -145,8 +149,14 @@ func _material(color: Color) -> StandardMaterial3D:
 
 ## Trunk plus canopy as one two-surface mesh, so a whole species is a single
 ## MultiMesh and therefore a single draw call.
-func _assemble(trunk: Mesh, canopy: Mesh, trunk_color: Color, canopy_color: Color,
-		trunk_y: float, canopy_y: float) -> ArrayMesh:
+func _assemble(
+	trunk: Mesh,
+	canopy: Mesh,
+	trunk_color: Color,
+	canopy_color: Color,
+	trunk_y: float,
+	canopy_y: float
+) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 
 	var trunk_st := SurfaceTool.new()
@@ -189,9 +199,12 @@ func _make_conifer(cfg: Dictionary, height: float) -> ArrayMesh:
 	canopy.rings = 1
 
 	return _assemble(
-		trunk, canopy,
-		_color(cfg, "trunk_color"), _color(cfg, "conifer_color"),
-		height * 0.175, height * 0.35 + height * 0.425
+		trunk,
+		canopy,
+		_color(cfg, "trunk_color"),
+		_color(cfg, "conifer_color"),
+		height * 0.175,
+		height * 0.35 + height * 0.425
 	)
 
 
@@ -210,7 +223,10 @@ func _make_broadleaf(cfg: Dictionary, height: float) -> ArrayMesh:
 	canopy.rings = 4
 
 	return _assemble(
-		trunk, canopy,
-		_color(cfg, "trunk_color"), _color(cfg, "broadleaf_color"),
-		height * 0.225, height * 0.45 + height * 0.22
+		trunk,
+		canopy,
+		_color(cfg, "trunk_color"),
+		_color(cfg, "broadleaf_color"),
+		height * 0.225,
+		height * 0.45 + height * 0.22
 	)

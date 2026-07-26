@@ -14,8 +14,7 @@ func _initialize() -> void:
 	root.add_child(terrain)
 	terrain.region_size = REGION_SIZE
 	terrain.vertex_spacing = SPACING
-	DirAccess.make_dir_recursive_absolute(
-		ProjectSettings.globalize_path("res://data/probe"))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://data/probe"))
 	terrain.data_directory = "res://data/probe"
 
 	var data := terrain.data
@@ -31,7 +30,8 @@ func _initialize() -> void:
 			heights[z * REGION_SIZE + x] = (1.0 - clampf(d, 0.0, 1.0)) * 600.0 - 100.0
 
 	var img := Image.create_from_data(
-		REGION_SIZE, REGION_SIZE, false, Image.FORMAT_RF, heights.to_byte_array())
+		REGION_SIZE, REGION_SIZE, false, Image.FORMAT_RF, heights.to_byte_array()
+	)
 	data.import_images([img, null, null], Vector3.ZERO, 0.0, 1.0)
 	print("regions after import: ", data.get_region_count())
 
@@ -67,8 +67,12 @@ func _initialize() -> void:
 	# then a deliberately wrong Y should still work.
 	var probe := Vector3(512.0, 0.0, 512.0)
 	data.set_control_base_id(probe, 2)
-	print("write with y=0 (true height %.1f) -> base_id %d"
-		% [data.get_height(probe), data.get_control_base_id(probe)])
+	print(
+		(
+			"write with y=0 (true height %.1f) -> base_id %d"
+			% [data.get_height(probe), data.get_control_base_id(probe)]
+		)
+	)
 
 	print("raw control word at probe: ", data.get_control(probe))
 	quit(0)

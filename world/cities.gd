@@ -21,9 +21,7 @@ var city_centres: PackedVector3Array = []
 var city_radii: PackedFloat32Array = []
 
 
-func build(
-	cfg: Dictionary, seed_value: int, map_extent: float, terrain_builder: Node
-) -> void:
+func build(cfg: Dictionary, seed_value: int, map_extent: float, terrain_builder: Node) -> void:
 	var count := int(cfg["count"])
 	if count < 1:
 		errors.append("cities.count must be >= 1, got %d" % count)
@@ -68,16 +66,21 @@ func build(
 
 	if placed == 0:
 		errors.append(
-			"placed 0 cities in %d attempts - the gate (height %.0f..%.0f, "
-			% [attempts, min_height, max_height]
-			+ "slope <= %.0f deg) may exclude the whole landmass" % max_slope
+			(
+				(
+					"placed 0 cities in %d attempts - the gate (height %.0f..%.0f, "
+					% [attempts, min_height, max_height]
+				)
+				+ "slope <= %.0f deg) may exclude the whole landmass" % max_slope
+			)
 		)
 		return
 	if placed < count:
 		# Not fatal: a smaller map genuinely may not fit the requested count at
 		# the requested separation. Worth saying out loud rather than hiding.
-		print("cities: placed %d of %d requested (min_distance %.0f)"
-			% [placed, count, min_distance])
+		print(
+			"cities: placed %d of %d requested (min_distance %.0f)" % [placed, count, min_distance]
+		)
 
 	var house_transforms: Array[Transform3D] = []
 	var wall_transforms: Array[Transform3D] = []
@@ -86,8 +89,15 @@ func build(
 
 	for i in city_centres.size():
 		_lay_out_city(
-			cfg, rng, terrain_builder, city_centres[i], city_radii[i],
-			house_transforms, wall_transforms, tower_transforms, keep_transforms
+			cfg,
+			rng,
+			terrain_builder,
+			city_centres[i],
+			city_radii[i],
+			house_transforms,
+			wall_transforms,
+			tower_transforms,
+			keep_transforms
 		)
 
 	var building_size := float(cfg["building_size"])
@@ -144,8 +154,7 @@ func _lay_out_city(
 		# Buildings face roughly towards the centre, with slack. Fully random
 		# yaw reads as scattered debris rather than a settlement.
 		var facing := atan2(centre.x - x, centre.z - z) + rng.randf_range(-0.5, 0.5)
-		var basis := Basis(Vector3.UP, facing).scaled(
-			Vector3.ONE * rng.randf_range(0.8, 1.25))
+		var basis := Basis(Vector3.UP, facing).scaled(Vector3.ONE * rng.randf_range(0.8, 1.25))
 		houses.append(Transform3D(basis, Vector3(x, h, z)))
 
 	if not bool(cfg["wall_enabled"]):
@@ -207,8 +216,7 @@ func _color(cfg: Dictionary, key: String) -> Color:
 ## Body plus roof as one two-surface mesh, so each building type is a single
 ## MultiMesh draw call.
 func _assemble(
-	body: Mesh, roof: Mesh, body_color: Color, roof_color: Color,
-	body_y: float, roof_y: float
+	body: Mesh, roof: Mesh, body_color: Color, roof_color: Color, body_y: float, roof_y: float
 ) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 
@@ -241,9 +249,12 @@ func _make_house(cfg: Dictionary, size: float) -> ArrayMesh:
 	roof.rings = 1
 
 	return _assemble(
-		body, roof,
-		_color(cfg, "building_color"), _color(cfg, "roof_color"),
-		size * 0.375, size * 0.75 + size * 0.3
+		body,
+		roof,
+		_color(cfg, "building_color"),
+		_color(cfg, "roof_color"),
+		size * 0.375,
+		size * 0.75 + size * 0.3
 	)
 
 
@@ -259,9 +270,12 @@ func _make_keep(cfg: Dictionary, size: float) -> ArrayMesh:
 	roof.rings = 1
 
 	return _assemble(
-		body, roof,
-		_color(cfg, "keep_color"), _color(cfg, "roof_color"),
-		size * 1.3, size * 2.6 + size * 0.75
+		body,
+		roof,
+		_color(cfg, "keep_color"),
+		_color(cfg, "roof_color"),
+		size * 1.3,
+		size * 2.6 + size * 0.75
 	)
 
 
@@ -295,7 +309,10 @@ func _make_tower(cfg: Dictionary, size: float) -> ArrayMesh:
 	roof.rings = 1
 
 	return _assemble(
-		body, roof,
-		_color(cfg, "wall_color"), _color(cfg, "roof_color"),
-		size * 0.85, size * 1.7 + size * 0.35
+		body,
+		roof,
+		_color(cfg, "wall_color"),
+		_color(cfg, "roof_color"),
+		size * 0.85,
+		size * 1.7 + size * 0.35
 	)

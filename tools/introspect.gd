@@ -4,6 +4,7 @@ extends SceneTree
 # instead of names remembered from documentation.
 #   godot --headless --script res://tools/introspect.gd
 
+
 func _dump(cls: String) -> void:
 	print("\n===== ", cls, " =====")
 	print("-- properties --")
@@ -16,8 +17,15 @@ func _dump(cls: String) -> void:
 			args.append("%s: %s" % [a.name, type_string(a.type)])
 		print("  %s(%s)" % [m.name, ", ".join(args)])
 
+
 func _initialize() -> void:
-	for cls in ["Terrain3D", "Terrain3DData", "Terrain3DAssets",
-			"Terrain3DTextureAsset", "Terrain3DMaterial", "Terrain3DRegion"]:
+	for cls in [
+		"Terrain3D",
+		"Terrain3DData",
+		"Terrain3DAssets",
+		"Terrain3DTextureAsset",
+		"Terrain3DMaterial",
+		"Terrain3DRegion"
+	]:
 		_dump(cls)
 	quit(0)

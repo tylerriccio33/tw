@@ -8,3 +8,40 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=5000]
       - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: mixed-line-ending
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.7
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+
+  - repo: local
+    hooks:
+      - id: pyrefly
+        name: pyrefly
+        entry: uv run --with pyrefly --with pillow --with numpy pyrefly check tools
+        language: system
+        files: \.py$
+        pass_filenames: false
+
+      - id: gdformat
+        name: gdformat
+        entry: uvx --from "gdtoolkit==4.5.0" gdformat
+        language: system
+        files: \.gd$
+
+      - id: gdlint
+        name: gdlint
+        entry: uvx --from "gdtoolkit==4.5.0" gdlint
+        language: system
+        files: \.gd$

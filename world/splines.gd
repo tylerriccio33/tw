@@ -53,6 +53,7 @@ func stats() -> Dictionary:
 
 # --- Ribbon construction ----------------------------------------------------
 
+
 ## Extrudes a polyline into a flat ribbon draped on the terrain.
 ##
 ## `y_offset` lifts the ribbon clear of the ground; without it the ribbon and
@@ -105,8 +106,7 @@ func _make_ribbon(points: PackedVector3Array, width: float, y_offset: float) -> 
 
 
 func _add_ribbon(
-	parent: Node3D, points: PackedVector3Array, width: float,
-	y_offset: float, material: Material
+	parent: Node3D, points: PackedVector3Array, width: float, y_offset: float, material: Material
 ) -> void:
 	var mesh := _make_ribbon(points, width, y_offset)
 	if mesh == null:
@@ -166,6 +166,7 @@ func _drape(points: PackedVector3Array) -> PackedVector3Array:
 
 # --- Rivers -----------------------------------------------------------------
 
+
 func _build_rivers(cfg: Dictionary, seed_value: int, map_extent: float) -> void:
 	var parent := Node3D.new()
 	parent.name = "Rivers"
@@ -207,8 +208,7 @@ func _build_rivers(cfg: Dictionary, seed_value: int, map_extent: float) -> void:
 			# the river simply ends there rather than looping forever.
 			var best := here
 			var best_dir := Vector2.ZERO
-			var neighbours: Array[Vector2] = [
-				Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]
+			var neighbours: Array[Vector2] = [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]
 			for dir in neighbours:
 				var probe := pos + dir * step
 				var ph: float = _terrain.height_at(probe.x, probe.y)
@@ -226,24 +226,27 @@ func _build_rivers(cfg: Dictionary, seed_value: int, map_extent: float) -> void:
 		path = _drape(_smooth(path, int(cfg["smoothing_passes"])))
 		if path.size() < 2:
 			continue
-		_add_ribbon(parent, path, float(cfg["width"]),
-			float(cfg["y_offset"]), material)
+		_add_ribbon(parent, path, float(cfg["width"]), float(cfg["y_offset"]), material)
 		made += 1
 
 	river_count = made
 
 	if made == 0:
 		errors.append(
-			"no rivers generated in %d attempts - source_height %.0f may be "
-			% [attempts, source_height] + "above the terrain's peak"
+			(
+				(
+					"no rivers generated in %d attempts - source_height %.0f may be "
+					% [attempts, source_height]
+				)
+				+ "above the terrain's peak"
+			)
 		)
 
 
 # --- Roads ------------------------------------------------------------------
 
-func _build_roads(
-	cfg: Dictionary, seed_value: int, city_centres: PackedVector3Array
-) -> void:
+
+func _build_roads(cfg: Dictionary, seed_value: int, city_centres: PackedVector3Array) -> void:
 	if city_centres.size() < 2:
 		return
 
@@ -269,8 +272,7 @@ func _build_roads(
 		points = _drape(points)
 		if points.size() < 2:
 			continue
-		_add_ribbon(parent, points, float(cfg["width"]),
-			float(cfg["y_offset"]), material)
+		_add_ribbon(parent, points, float(cfg["width"]), float(cfg["y_offset"]), material)
 		road_count += 1
 
 
@@ -281,11 +283,10 @@ func _build_roads(
 ## the historical bug where sampling noise at `t * 100` put ~35 cycles along
 ## one road, which reads as a zigzag rather than a bend or two.
 func _wander_road(
-	a: Vector3, b: Vector3, edge_index: int,
-	wander: FastNoiseLite, amplitude: float, samples: int
+	a: Vector3, b: Vector3, edge_index: int, wander: FastNoiseLite, amplitude: float, samples: int
 ) -> PackedVector3Array:
 	var points := PackedVector3Array()
-	var direction := (b - a)
+	var direction := b - a
 	direction.y = 0.0
 	var perpendicular := Vector3(-direction.z, 0.0, direction.x).normalized()
 
@@ -347,14 +348,13 @@ func _nearest_city(x: float, z: float, city_centres: PackedVector3Array) -> int:
 
 # --- Borders ----------------------------------------------------------------
 
+
 ## Faction borders as the boundary of a nearest-city Voronoi partition,
 ## sampled on a grid. Where two neighbouring cells belong to different cities
 ## and both are on land, emit a short ribbon. Sampling on a grid rather than
 ## computing exact Voronoi edges gives the broken, dashed look the reference
 ## has, for a fraction of the work.
-func _build_borders(
-	cfg: Dictionary, map_extent: float, city_centres: PackedVector3Array
-) -> void:
+func _build_borders(cfg: Dictionary, map_extent: float, city_centres: PackedVector3Array) -> void:
 	if city_centres.size() < 2:
 		return
 
@@ -395,14 +395,34 @@ func _build_borders(
 			if ix + 1 < steps:
 				var other := owner[iz * steps + ix + 1]
 				if other >= 0 and other != mine:
-					_add_ribbon(parent, _drape(PackedVector3Array([
-						Vector3(x + cell * 0.5, 0.0, z - cell * 0.5),
-						Vector3(x + cell * 0.5, 0.0, z + cell * 0.5),
-					])), width, y_offset, material)
+					_add_ribbon(
+						parent,
+						_drape(
+							PackedVector3Array(
+								[
+									Vector3(x + cell * 0.5, 0.0, z - cell * 0.5),
+									Vector3(x + cell * 0.5, 0.0, z + cell * 0.5),
+								]
+							)
+						),
+						width,
+						y_offset,
+						material
+					)
 			if iz + 1 < steps:
 				var other := owner[(iz + 1) * steps + ix]
 				if other >= 0 and other != mine:
-					_add_ribbon(parent, _drape(PackedVector3Array([
-						Vector3(x - cell * 0.5, 0.0, z + cell * 0.5),
-						Vector3(x + cell * 0.5, 0.0, z + cell * 0.5),
-					])), width, y_offset, material)
+					_add_ribbon(
+						parent,
+						_drape(
+							PackedVector3Array(
+								[
+									Vector3(x - cell * 0.5, 0.0, z + cell * 0.5),
+									Vector3(x + cell * 0.5, 0.0, z + cell * 0.5),
+								]
+							)
+						),
+						width,
+						y_offset,
+						material
+					)

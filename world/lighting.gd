@@ -68,8 +68,12 @@ func build(cfg: Dictionary) -> void:
 
 	var tonemap_name := String(cfg["tonemap"])
 	if not TONEMAP_MODES.has(tonemap_name):
-		errors.append("lighting.tonemap unknown: %s (expected one of %s)"
-			% [tonemap_name, TONEMAP_MODES.keys()])
+		errors.append(
+			(
+				"lighting.tonemap unknown: %s (expected one of %s)"
+				% [tonemap_name, TONEMAP_MODES.keys()]
+			)
+		)
 	else:
 		env.tonemap_mode = TONEMAP_MODES[tonemap_name]
 	env.tonemap_exposure = float(cfg["exposure"])

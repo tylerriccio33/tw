@@ -6,6 +6,7 @@ extends SceneTree
 # Rendering is unavailable headless, but class registration is not, so this
 # isolates "the extension is broken" from "the render is wrong".
 
+
 func _initialize() -> void:
 	var failures: Array[String] = []
 
@@ -20,8 +21,14 @@ func _initialize() -> void:
 		else:
 			print("Terrain3D instantiated: ", terrain.get_class())
 			# The methods the whole terrain pipeline depends on.
-			for m in ["import_images", "set_height", "add_region_blankp",
-					"save_directory", "set_control_base_id", "set_control_blend"]:
+			for m in [
+				"import_images",
+				"set_height",
+				"add_region_blankp",
+				"save_directory",
+				"set_control_base_id",
+				"set_control_blend"
+			]:
 				if not ClassDB.class_has_method("Terrain3DData", m):
 					failures.append("Terrain3DData missing method: %s" % m)
 			terrain.free()

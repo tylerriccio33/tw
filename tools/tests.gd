@@ -25,9 +25,14 @@ func _test_mst() -> void:
 	# A 10x10 square. The MST of a 4-cycle is always 3 of the 4 sides
 	# (weight 3*10=30) - the two diagonals (~14.14) are strictly longer than
 	# any side, so they can never be part of a minimum tree.
-	var points := PackedVector3Array([
-		Vector3(0, 0, 0), Vector3(0, 0, 10), Vector3(10, 0, 10), Vector3(10, 0, 0),
-	])
+	var points := PackedVector3Array(
+		[
+			Vector3(0, 0, 0),
+			Vector3(0, 0, 10),
+			Vector3(10, 0, 10),
+			Vector3(10, 0, 0),
+		]
+	)
 	var edges: Array[Vector2i] = splines._minimum_spanning_tree(points)
 
 	_check(edges.size() == 3, "MST of 4 points should have 3 edges, got %d" % edges.size())
@@ -39,8 +44,10 @@ func _test_mst() -> void:
 		seen[e.x] = true
 		seen[e.y] = true
 	_check(seen.size() == 4, "MST must connect all 4 points, connected %d" % seen.size())
-	_check(is_equal_approx(total, 30.0),
-		"MST of a 10x10 square should weigh 30 (3 sides), got %.3f" % total)
+	_check(
+		is_equal_approx(total, 30.0),
+		"MST of a 10x10 square should weigh 30 (3 sides), got %.3f" % total
+	)
 
 	splines.free()
 
@@ -48,16 +55,24 @@ func _test_mst() -> void:
 func _test_ribbon_extrusion() -> void:
 	var splines := Splines.new()
 	var width := 4.0
-	var points := PackedVector3Array([
-		Vector3(0, 0, 0), Vector3(10, 0, 0), Vector3(20, 0, 0),
-	])
+	var points := PackedVector3Array(
+		[
+			Vector3(0, 0, 0),
+			Vector3(10, 0, 0),
+			Vector3(20, 0, 0),
+		]
+	)
 	var mesh: ArrayMesh = splines._make_ribbon(points, width, 1.0)
 	_check(mesh != null, "ribbon over 3 points should produce a mesh")
 
 	var faces := mesh.get_faces()
-	_check(faces.size() / 3 == 4,
-		"a 3-point straight ribbon should be 4 triangles (2 per segment), got %d"
-			% (faces.size() / 3))
+	_check(
+		faces.size() / 3 == 4,
+		(
+			"a 3-point straight ribbon should be 4 triangles (2 per segment), got %d"
+			% (faces.size() / 3)
+		)
+	)
 
 	# The path runs along +X, so the extrusion should be perpendicular - along
 	# Z - by half the width on each side.
@@ -66,8 +81,10 @@ func _test_ribbon_extrusion() -> void:
 	for v in faces:
 		max_z = maxf(max_z, v.z)
 		min_z = minf(min_z, v.z)
-	_check(is_equal_approx(max_z, width * 0.5) and is_equal_approx(min_z, -width * 0.5),
-		"ribbon should extend +/-%.1f in Z, got [%.3f, %.3f]" % [width * 0.5, min_z, max_z])
+	_check(
+		is_equal_approx(max_z, width * 0.5) and is_equal_approx(min_z, -width * 0.5),
+		"ribbon should extend +/-%.1f in Z, got [%.3f, %.3f]" % [width * 0.5, min_z, max_z]
+	)
 
 	splines.free()
 
@@ -76,12 +93,16 @@ func _test_voronoi_nearest_city() -> void:
 	var splines := Splines.new()
 	var cities := PackedVector3Array([Vector3(0, 0, 0), Vector3(100, 0, 0)])
 
-	_check(splines._nearest_city(10.0, 0.0, cities) == 0,
-		"point near city 0 should belong to city 0")
-	_check(splines._nearest_city(90.0, 0.0, cities) == 1,
-		"point near city 1 should belong to city 1")
-	_check(splines._nearest_city(50.0, 0.0, cities) == 0,
-		"equidistant point should resolve to the first city (strict '<' comparison)")
+	_check(
+		splines._nearest_city(10.0, 0.0, cities) == 0, "point near city 0 should belong to city 0"
+	)
+	_check(
+		splines._nearest_city(90.0, 0.0, cities) == 1, "point near city 1 should belong to city 1"
+	)
+	_check(
+		splines._nearest_city(50.0, 0.0, cities) == 0,
+		"equidistant point should resolve to the first city (strict '<' comparison)"
+	)
 
 	splines.free()
 
@@ -98,10 +119,14 @@ func _test_road_wander_bounded_curvature() -> void:
 	var samples := 60  # config/world.json network.roads.samples_per_road
 	var points := splines._wander_road(a, b, 0, wander, 130.0, samples)
 
-	_check(points.size() == samples + 1,
-		"wander_road should emit samples+1 points, got %d" % points.size())
-	_check(points[0].is_equal_approx(a) and points[-1].is_equal_approx(b),
-		"wander_road must still arrive exactly at both endpoints (taper -> 0)")
+	_check(
+		points.size() == samples + 1,
+		"wander_road should emit samples+1 points, got %d" % points.size()
+	)
+	_check(
+		points[0].is_equal_approx(a) and points[-1].is_equal_approx(b),
+		"wander_road must still arrive exactly at both endpoints (taper -> 0)"
+	)
 
 	# Bounded-curvature regression check: the fixed sampling advances only
 	# ~3 noise units across the whole road, so the lateral offset should
@@ -116,9 +141,13 @@ func _test_road_wander_bounded_curvature() -> void:
 		if (z > 0.0) != (prev_z > 0.0) and absf(z) > 0.01 and absf(prev_z) > 0.01:
 			sign_changes += 1
 		prev_z = z
-	_check(sign_changes <= 6,
-		"road lateral offset crossed zero %d times - expected a handful of "
-			% sign_changes + "bends, not a zigzag (regression check for the t*100 bug)")
+	_check(
+		sign_changes <= 6,
+		(
+			"road lateral offset crossed zero %d times - expected a handful of " % sign_changes
+			+ "bends, not a zigzag (regression check for the t*100 bug)"
+		)
+	)
 
 	splines.free()
 
@@ -142,18 +171,26 @@ func _test_height_generation() -> void:
 	var centre := tb._generate_heights(size, Vector3(-8.0, 0.0, -8.0))
 	for h in centre:
 		_check(is_finite(h), "centre heights must be finite, got %s" % h)
-	_check(centre[0] > -ocean_depth * 0.5,
-		"a point near the map centre should read as land, got height %.2f (ocean_depth %.1f)"
-			% [centre[0], ocean_depth])
+	_check(
+		centre[0] > -ocean_depth * 0.5,
+		(
+			"a point near the map centre should read as land, got height %.2f (ocean_depth %.1f)"
+			% [centre[0], ocean_depth]
+		)
+	)
 
 	# Far outside falloff_end + warp_amplitude: land is deterministically 0,
 	# so height must be exactly -ocean_depth regardless of noise.
 	var far := tb._generate_heights(size, Vector3(3000.0, 0.0, 3000.0))
 	for h in far:
 		_check(is_finite(h), "far-field heights must be finite, got %s" % h)
-		_check(is_equal_approx(h, -ocean_depth),
-			"far outside the continent falloff, height must equal -ocean_depth exactly "
-				+ "(got %.4f, want %.4f)" % [h, -ocean_depth])
+		_check(
+			is_equal_approx(h, -ocean_depth),
+			(
+				"far outside the continent falloff, height must equal -ocean_depth exactly "
+				+ "(got %.4f, want %.4f)" % [h, -ocean_depth]
+			)
+		)
 
 	tb.free()
 

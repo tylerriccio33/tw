@@ -40,14 +40,22 @@ func _load_json(path: String) -> Dictionary:
 		return {}
 	var text := FileAccess.get_file_as_string(path)
 	if text.is_empty():
-		_fail("config is empty or unreadable: %s (%s)"
-			% [path, error_string(FileAccess.get_open_error())])
+		_fail(
+			(
+				"config is empty or unreadable: %s (%s)"
+				% [path, error_string(FileAccess.get_open_error())]
+			)
+		)
 		return {}
 	var json := JSON.new()
 	var err := json.parse(text)
 	if err != OK:
-		_fail("invalid JSON in %s at line %d: %s"
-			% [path, json.get_error_line(), json.get_error_message()])
+		_fail(
+			(
+				"invalid JSON in %s at line %d: %s"
+				% [path, json.get_error_line(), json.get_error_message()]
+			)
+		)
 		return {}
 	if typeof(json.data) != TYPE_DICTIONARY:
 		_fail("%s must contain a JSON object" % path)
@@ -184,8 +192,7 @@ func _run() -> void:
 		var position := _vec3(p["position"], "presets[%d].position" % i)
 		var target := _vec3(p["look_at"], "presets[%d].look_at" % i)
 		if position.is_equal_approx(target):
-			_fail("presets[%d] (%s) position and look_at are identical"
-				% [i, shot_name])
+			_fail("presets[%d] (%s) position and look_at are identical" % [i, shot_name])
 			continue
 
 		camera.fov = float(p["fov"])
@@ -215,9 +222,21 @@ func _run() -> void:
 ## to a render and makes "cities placed 6 of 6" or "roads are zigzagging"
 ## visible without opening an image.
 func _print_stats(s: Dictionary) -> void:
-	print("STATS regions=%d height=[%.1f, %.1f] trees=%d cities=%d rivers=%d roads=%d triangles=%d"
-		% [s["regions"], s["height_min"], s["height_max"], s["trees"],
-			s["cities"], s["rivers"], s["roads"], s["triangles"]])
+	print(
+		(
+			"STATS regions=%d height=[%.1f, %.1f] trees=%d cities=%d rivers=%d roads=%d triangles=%d"
+			% [
+				s["regions"],
+				s["height_min"],
+				s["height_max"],
+				s["trees"],
+				s["cities"],
+				s["rivers"],
+				s["roads"],
+				s["triangles"]
+			]
+		)
+	)
 
 
 func _finish() -> void:

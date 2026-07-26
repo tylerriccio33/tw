@@ -32,8 +32,10 @@ def fail(msg: str) -> None:
 
 def main() -> None:
     if TARGET.exists():
-        print(f"addons/terrain_3d already present ({TERRAIN3D_VERSION} expected); "
-              f"delete it to re-fetch")
+        print(
+            f"addons/terrain_3d already present ({TERRAIN3D_VERSION} expected); "
+            f"delete it to re-fetch"
+        )
         return
 
     print(f"downloading {TERRAIN3D_URL}")
@@ -69,7 +71,7 @@ def main() -> None:
     for name in members:
         if not name.startswith(prefix) or name.endswith("/"):
             continue
-        rel = name[len(prefix):]
+        rel = name[len(prefix) :]
         dest = TARGET / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         with archive.open(name) as src, open(dest, "wb") as out:
@@ -83,7 +85,12 @@ def main() -> None:
     if not (TARGET / "terrain.gdextension").is_file():
         fail("terrain.gdextension missing after extraction")
 
-    macos_lib = TARGET / "bin" / "libterrain.macos.release.framework" / "libterrain.macos.release"
+    macos_lib = (
+        TARGET
+        / "bin"
+        / "libterrain.macos.release.framework"
+        / "libterrain.macos.release"
+    )
     if sys.platform == "darwin" and not macos_lib.is_file():
         fail(f"macOS release binary missing: {macos_lib.relative_to(ROOT)}")
 

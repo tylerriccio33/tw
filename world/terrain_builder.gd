@@ -54,7 +54,8 @@ const PALETTE := {
 ## Half the width of the generated map in world units, i.e. the terrain spans
 ## -map_extent..+map_extent on both axes. Water sizes itself from this.
 var map_extent: float:
-	get: return _half_extent
+	get:
+		return _half_extent
 
 var _cfg: Dictionary
 var _palette_cfg: Dictionary
@@ -74,8 +75,9 @@ func build(cfg: Dictionary, seed_value: int) -> void:
 
 	var region_size := int(cfg["region_size"])
 	if region_size not in VALID_REGION_SIZES:
-		errors.append("terrain.region_size %d invalid, must be one of %s"
-			% [region_size, VALID_REGION_SIZES])
+		errors.append(
+			"terrain.region_size %d invalid, must be one of %s" % [region_size, VALID_REGION_SIZES]
+		)
 		return
 
 	var regions_across := int(cfg["regions_across"])
@@ -107,8 +109,9 @@ func build(cfg: Dictionary, seed_value: int) -> void:
 	terrain.material.world_background = Terrain3DMaterial.NONE
 
 	if terrain.region_size != region_size:
-		errors.append("region_size did not apply: asked %d, got %d"
-			% [region_size, terrain.region_size])
+		errors.append(
+			"region_size did not apply: asked %d, got %d" % [region_size, terrain.region_size]
+		)
 		return
 
 	_vertex_spacing = terrain.vertex_spacing
@@ -133,8 +136,7 @@ func build(cfg: Dictionary, seed_value: int) -> void:
 				var heights := _generate_heights(region_size, origin)
 				# import_images takes [height, control, color]; nulls are skipped.
 				var height_img := Image.create_from_data(
-					region_size, region_size, false, Image.FORMAT_RF,
-					heights.to_byte_array()
+					region_size, region_size, false, Image.FORMAT_RF, heights.to_byte_array()
 				)
 				terrain.data.import_images([height_img, null, null], origin, 0.0, 1.0)
 				_paint_controls(heights, region_size, origin)
@@ -142,8 +144,12 @@ func build(cfg: Dictionary, seed_value: int) -> void:
 		print("terrain: cache miss (%s), generated and cached regions" % cache_dir.get_file())
 
 	if terrain.data.get_region_count() != expected_regions:
-		errors.append("expected %d regions, Terrain3D has %d"
-			% [expected_regions, terrain.data.get_region_count()])
+		errors.append(
+			(
+				"expected %d regions, Terrain3D has %d"
+				% [expected_regions, terrain.data.get_region_count()]
+			)
+		)
 		return
 
 	terrain.data.update_maps(Terrain3DRegion.TYPE_MAX, true, true)
@@ -152,8 +158,7 @@ func build(cfg: Dictionary, seed_value: int) -> void:
 
 	var range_y := terrain.data.get_height_range()
 	if is_equal_approx(range_y.x, range_y.y):
-		errors.append("terrain is flat (height range %s) - noise produced nothing"
-			% range_y)
+		errors.append("terrain is flat (height range %s) - noise produced nothing" % range_y)
 		return
 
 	built = true
@@ -193,9 +198,15 @@ func _load_cached_regions(cache_dir: String, expected_regions: int) -> bool:
 		return false
 	terrain.data.load_directory(cache_dir)
 	if terrain.data.get_region_count() != expected_regions:
-		print("terrain: cache at %s looked stale (expected %d regions, got %d)"
-			% [cache_dir, expected_regions, terrain.data.get_region_count()]
-			+ " - regenerating")
+		print(
+			(
+				(
+					"terrain: cache at %s looked stale (expected %d regions, got %d)"
+					% [cache_dir, expected_regions, terrain.data.get_region_count()]
+				)
+				+ " - regenerating"
+			)
+		)
 		return false
 	return true
 
@@ -204,8 +215,7 @@ func _save_cached_regions(cache_dir: String) -> void:
 	var abs_dir := ProjectSettings.globalize_path(cache_dir)
 	var err := DirAccess.make_dir_recursive_absolute(abs_dir)
 	if err != OK:
-		errors.append("could not create terrain cache dir %s: %s"
-			% [cache_dir, error_string(err)])
+		errors.append("could not create terrain cache dir %s: %s" % [cache_dir, error_string(err)])
 		return
 	terrain.data.save_directory(cache_dir)
 
@@ -227,8 +237,9 @@ func _apply_debug_view() -> void:
 	if view == "none":
 		return
 	if not flags.has(view):
-		errors.append("debug.terrain_view unknown: %s (expected none or one of %s)"
-			% [view, flags.keys()])
+		errors.append(
+			"debug.terrain_view unknown: %s (expected none or one of %s)" % [view, flags.keys()]
+		)
 		return
 	terrain.material.set(flags[view], true)
 
@@ -264,16 +275,12 @@ func slope_at(x: float, z: float, step: float = 6.0) -> float:
 	return rad_to_deg(atan(Vector2((hr - hl) / run, (hu - hd) / run).length()))
 
 
-func _make_noise(
-	seed_value: int, frequency: float, octaves: int, ridged: bool
-) -> FastNoiseLite:
+func _make_noise(seed_value: int, frequency: float, octaves: int, ridged: bool) -> FastNoiseLite:
 	var noise := FastNoiseLite.new()
 	noise.seed = seed_value
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	noise.frequency = frequency
-	noise.fractal_type = (
-		FastNoiseLite.FRACTAL_RIDGED if ridged else FastNoiseLite.FRACTAL_FBM
-	)
+	noise.fractal_type = (FastNoiseLite.FRACTAL_RIDGED if ridged else FastNoiseLite.FRACTAL_FBM)
 	noise.fractal_octaves = octaves
 	return noise
 
@@ -285,17 +292,17 @@ func _build_noise(seed_value: int) -> void:
 
 	# Distinct seed offsets: sharing one seed across layers correlates them,
 	# which puts every mountain range on the same axis as the coastline bulges.
-	_warp_noise = _make_noise(
-		seed_value, float(continent["warp_frequency"]), 3, false)
+	_warp_noise = _make_noise(seed_value, float(continent["warp_frequency"]), 3, false)
 	_plains_noise = _make_noise(
-		seed_value + 101, float(plains["frequency"]), int(plains["octaves"]), false)
+		seed_value + 101, float(plains["frequency"]), int(plains["octaves"]), false
+	)
 	_mountain_noise = _make_noise(
-		seed_value + 202, float(mountains["frequency"]),
-		int(mountains["octaves"]), true)
-	_belt_noise = _make_noise(
-		seed_value + 303, float(mountains["belt_frequency"]), 2, false)
+		seed_value + 202, float(mountains["frequency"]), int(mountains["octaves"]), true
+	)
+	_belt_noise = _make_noise(seed_value + 303, float(mountains["belt_frequency"]), 2, false)
 	_moisture_noise = _make_noise(
-		seed_value + 404, float(_palette_cfg["moisture_frequency"]), 3, false)
+		seed_value + 404, float(_palette_cfg["moisture_frequency"]), 3, false
+	)
 
 
 ## Builds a tileable placeholder texture: flat colour plus fine value noise so
@@ -312,12 +319,19 @@ func _make_placeholder_texture(base: Color, seed_value: int) -> ImageTexture:
 	for y in SIZE:
 		for x in SIZE:
 			var n := noise.get_noise_2d(float(x), float(y)) * 0.16
-			img.set_pixel(x, y, Color(
-				clampf(base.r + n, 0.0, 1.0),
-				clampf(base.g + n, 0.0, 1.0),
-				clampf(base.b + n, 0.0, 1.0),
-				1.0,
-			))
+			(
+				img
+				. set_pixel(
+					x,
+					y,
+					Color(
+						clampf(base.r + n, 0.0, 1.0),
+						clampf(base.g + n, 0.0, 1.0),
+						clampf(base.b + n, 0.0, 1.0),
+						1.0,
+					)
+				)
+			)
 	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
 
@@ -335,8 +349,12 @@ func _build_assets() -> void:
 	terrain.assets = assets
 
 	if terrain.assets.get_texture_count() != PALETTE.size():
-		errors.append("expected %d textures registered, got %d"
-			% [PALETTE.size(), terrain.assets.get_texture_count()])
+		errors.append(
+			(
+				"expected %d textures registered, got %d"
+				% [PALETTE.size(), terrain.assets.get_texture_count()]
+			)
+		)
 
 
 ## Returns region_size^2 world-space heights in row-major order, matching the
@@ -378,8 +396,7 @@ func _generate_heights(size: int, origin: Vector3) -> PackedFloat32Array:
 			# and pow(negative, 1.5) is NaN. That NaN reaches the heightmap and
 			# destroys the vertex normals, which renders as black patches near
 			# the peaks that survive even a flat-albedo debug view.
-			var ridge := clampf(
-				_mountain_noise.get_noise_2d(wx, wz) * 0.5 + 0.5, 0.0, 1.0)
+			var ridge := clampf(_mountain_noise.get_noise_2d(wx, wz) * 0.5 + 0.5, 0.0, 1.0)
 			ridge = pow(ridge, ridge_power)
 
 			var belt := _belt_noise.get_noise_2d(wx, wz) * 0.5 + 0.5
@@ -397,9 +414,11 @@ func _generate_heights(size: int, origin: Vector3) -> PackedFloat32Array:
 	for h in heights:
 		if not is_finite(h):
 			errors.append(
-				"non-finite height generated at region origin %s - check the "
-				% origin + "noise parameters in world.json (a negative base "
-				+ "under a fractional pow() is the usual cause)"
+				(
+					"non-finite height generated at region origin %s - check the " % origin
+					+ "noise parameters in world.json (a negative base "
+					+ "under a fractional pow() is the usual cause)"
+				)
 			)
 			break
 
@@ -436,9 +455,7 @@ func _paint_controls(heights: PackedFloat32Array, size: int, origin: Vector3) ->
 			var zu := heights[maxi(z - 1, 0) * size + x]
 			var zd := heights[mini(z + 1, size - 1) * size + x]
 			var run := 2.0 * _vertex_spacing
-			var slope := rad_to_deg(atan(
-				Vector2((xr - xl) / run, (zd - zu) / run).length()
-			))
+			var slope := rad_to_deg(atan(Vector2((xr - xl) / run, (zd - zu) / run).length()))
 
 			var base_id := TEX_TAN
 			var overlay_id := TEX_TAN
@@ -448,17 +465,19 @@ func _paint_controls(heights: PackedFloat32Array, size: int, origin: Vector3) ->
 				# Shoreline: sand fading up into the plains material.
 				base_id = TEX_SAND
 				overlay_id = TEX_TAN
-				blend = smoothstep(
-					beach_height - beach_blend, beach_height + beach_blend, h)
+				blend = smoothstep(beach_height - beach_blend, beach_height + beach_blend, h)
 			else:
 				# Moisture decides tan vs green on mid ground; green is capped
 				# by altitude so high slopes never look like meadow.
 				var moisture := _moisture_noise.get_noise_2d(wx, wz) * 0.5 + 0.5
-				var green := smoothstep(
-					moisture_threshold - moisture_blend,
-					moisture_threshold + moisture_blend,
-					moisture
-				) * (1.0 - smoothstep(green_max_height * 0.6, green_max_height, h))
+				var green := (
+					smoothstep(
+						moisture_threshold - moisture_blend,
+						moisture_threshold + moisture_blend,
+						moisture
+					)
+					* (1.0 - smoothstep(green_max_height * 0.6, green_max_height, h))
+				)
 				base_id = TEX_TAN
 				overlay_id = TEX_GRASS
 				blend = green

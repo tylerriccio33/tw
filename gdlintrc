@@ -1,0 +1,3 @@
+disable:
+  - class-definitions-order
+max-returns: 12

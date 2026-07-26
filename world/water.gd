@@ -20,9 +20,17 @@ func build(cfg: Dictionary, sea_level: float, map_extent: float) -> void:
 	material.set_shader_parameter("shallow_color", _color(cfg, "shallow_color"))
 	material.set_shader_parameter("deep_color", _color(cfg, "deep_color"))
 	material.set_shader_parameter("foam_color", _color(cfg, "foam_color"))
-	for key in ["depth_falloff", "foam_depth", "foam_sharpness",
-			"wave_scale", "wave_speed", "wave_strength", "wave_time",
-			"specular_amount", "roughness_amount"]:
+	for key in [
+		"depth_falloff",
+		"foam_depth",
+		"foam_sharpness",
+		"wave_scale",
+		"wave_speed",
+		"wave_strength",
+		"wave_time",
+		"specular_amount",
+		"roughness_amount"
+	]:
 		if not cfg.has(key):
 			errors.append("water.%s missing from world.json" % key)
 			return

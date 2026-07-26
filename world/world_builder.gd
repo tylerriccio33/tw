@@ -32,16 +32,17 @@ func _run_stage(stage_name: String, stage: Object, callable: Callable) -> bool:
 	errors.append_array(stage.get("errors"))
 	if not stage.get("built"):
 		errors.append(
-			"%s did not complete - a runtime error aborted its build(); "
-			% stage_name + "see the SCRIPT ERROR above for the real cause"
+			(
+				"%s did not complete - a runtime error aborted its build(); " % stage_name
+				+ "see the SCRIPT ERROR above for the real cause"
+			)
 		)
 		return false
 	return true
 
 
 func build(cfg: Dictionary) -> void:
-	for key in ["seed", "terrain", "water", "forests", "cities", "network",
-			"lighting"]:
+	for key in ["seed", "terrain", "water", "forests", "cities", "network", "lighting"]:
 		if not cfg.has(key):
 			errors.append("world.json missing top-level key: %s" % key)
 	if not errors.is_empty():
@@ -56,15 +57,13 @@ func build(cfg: Dictionary) -> void:
 	# The debug view is a terrain-material concern, so it rides along in the
 	# terrain config rather than being threaded through as its own argument.
 	var terrain_cfg_in: Dictionary = (cfg["terrain"] as Dictionary).duplicate()
-	terrain_cfg_in["debug_view"] = (cfg.get("debug", {}) as Dictionary).get(
-		"terrain_view", "none")
+	terrain_cfg_in["debug_view"] = (cfg.get("debug", {}) as Dictionary).get("terrain_view", "none")
 
 	terrain_builder = TerrainBuilder.new()
 	terrain_builder.name = "TerrainBuilder"
 	add_child(terrain_builder)
 	if not _run_stage(
-		"terrain", terrain_builder,
-		terrain_builder.build.bind(terrain_cfg_in, int(cfg["seed"]))
+		"terrain", terrain_builder, terrain_builder.build.bind(terrain_cfg_in, int(cfg["seed"]))
 	):
 		return
 
@@ -72,38 +71,52 @@ func build(cfg: Dictionary) -> void:
 	water.name = "Water"
 	add_child(water)
 	var terrain_cfg: Dictionary = cfg["terrain"]
-	if not _run_stage("water", water, water.build.bind(
-		cfg["water"],
-		float(terrain_cfg["sea_level"]),
-		terrain_builder.map_extent
-	)):
+	if not _run_stage(
+		"water",
+		water,
+		water.build.bind(cfg["water"], float(terrain_cfg["sea_level"]), terrain_builder.map_extent)
+	):
 		return
 
 	_scatter = Scatter.new()
 	_scatter.name = "Forests"
 	add_child(_scatter)
-	if not _run_stage("forests", _scatter, _scatter.build.bind(
-		cfg["forests"], int(cfg["seed"]),
-		terrain_builder.map_extent, terrain_builder
-	)):
+	if not _run_stage(
+		"forests",
+		_scatter,
+		_scatter.build.bind(
+			cfg["forests"], int(cfg["seed"]), terrain_builder.map_extent, terrain_builder
+		)
+	):
 		return
 
 	_cities = Cities.new()
 	_cities.name = "Cities"
 	add_child(_cities)
-	if not _run_stage("cities", _cities, _cities.build.bind(
-		cfg["cities"], int(cfg["seed"]),
-		terrain_builder.map_extent, terrain_builder
-	)):
+	if not _run_stage(
+		"cities",
+		_cities,
+		_cities.build.bind(
+			cfg["cities"], int(cfg["seed"]), terrain_builder.map_extent, terrain_builder
+		)
+	):
 		return
 
 	_splines = Splines.new()
 	_splines.name = "Network"
 	add_child(_splines)
-	if not _run_stage("network", _splines, _splines.build.bind(
-		cfg["network"], int(cfg["seed"]), terrain_builder.map_extent,
-		float(terrain_cfg["sea_level"]), terrain_builder, _cities.city_centres
-	)):
+	if not _run_stage(
+		"network",
+		_splines,
+		_splines.build.bind(
+			cfg["network"],
+			int(cfg["seed"]),
+			terrain_builder.map_extent,
+			float(terrain_cfg["sea_level"]),
+			terrain_builder,
+			_cities.city_centres
+		)
+	):
 		return
 
 	built = true
