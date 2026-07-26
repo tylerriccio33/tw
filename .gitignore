@@ -24,3 +24,8 @@
 .vscode/
 .idea/
 *.swp
+
+# Rust GDExtension build output - run `make campaign` to (re)build
+/rust/target/
+/rust/*/target/
+/addons/campaign/bin/

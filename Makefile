@@ -10,7 +10,7 @@ else
 SHOT_ARGS :=
 endif
 
-.PHONY: help addons import shot diff sheet accept smoke api check test clean-shots
+.PHONY: help addons import shot diff sheet accept smoke api check test clean-shots campaign campaign-test campaign-smoke play
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -35,6 +35,9 @@ help:
 	@echo "make check    - parse every .gd file for errors (incl. type-inference warnings) in ~1s, no render"
 	@echo "make test     - headless tests for MST/ribbon/Voronoi/road-wander/height-generation"
 	@echo "make shot SET=debug.terrain_view=grey - transient config override, world.json untouched"
+	@echo "make campaign      - build the campaign-map Rust GDExtension and install it into addons/campaign/bin/"
+	@echo "make campaign-test - run the Rust unit tests for the campaign-map game logic"
+	@echo "make play          - build the extension and open the campaign map in a window"
 
 addons:
 	python3 tools/fetch_addons.py
@@ -92,7 +95,7 @@ accept:
 # surfacing mid-render, three stages deep, ten seconds later.
 check:
 	@fail=0; \
-	for f in world/*.gd tools/*.gd; do \
+	for f in world/*.gd tools/*.gd campaign/*.gd; do \
 		echo "checking $$f"; \
 		if ! GODOT=$(GODOT) ./tools/godot_gate.sh --headless --check-only --script "res://$$f"; then \
 			echo "FAIL: $$f"; \
@@ -104,6 +107,24 @@ check:
 
 test:
 	GODOT=$(GODOT) ./tools/godot_gate.sh --headless --script res://tools/tests.gd
+
+# Builds the campaign-map GDExtension in release mode and installs the dylib
+# where campaign.gdextension expects it. Re-run after any rust/campaign/ change.
+campaign:
+	cd rust/campaign && cargo build --release
+	@mkdir -p addons/campaign/bin
+	cp rust/campaign/target/release/libcampaign.dylib addons/campaign/bin/libcampaign.dylib
+
+campaign-test:
+	cd rust/campaign && cargo test
+
+# Opens the campaign map in a real window, bypassing project.godot's
+# run/main_scene (tools/shoot.tscn) for this one launch only.
+play: campaign
+	$(GODOT) res://campaign/campaign.tscn
+
+campaign-smoke:
+	GODOT=$(GODOT) ./tools/godot_gate.sh --headless --script res://tools/campaign_smoke.gd
 
 clean-shots:
 	rm -rf shots/current shots/contact_sheet.png shots/sheet.png

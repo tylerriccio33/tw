@@ -45,3 +45,24 @@ repos:
         entry: uvx --from "gdtoolkit==4.5.0" gdlint
         language: system
         files: \.gd$
+
+      - id: cargo-fmt
+        name: cargo fmt (campaign)
+        entry: cargo fmt --manifest-path rust/campaign/Cargo.toml
+        language: system
+        files: ^rust/campaign/.*\.rs$
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy (campaign)
+        entry: cargo clippy --manifest-path rust/campaign/Cargo.toml --all-targets -- -D warnings
+        language: system
+        files: ^rust/campaign/.*\.rs$
+        pass_filenames: false
+
+      - id: cargo-test
+        name: cargo test (campaign)
+        entry: cargo test --manifest-path rust/campaign/Cargo.toml
+        language: system
+        files: ^rust/campaign/.*\.rs$
+        pass_filenames: false
