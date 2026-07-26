@@ -17,8 +17,8 @@ ci: ## Commit everything and push straight to main
 	@git add .
 	@echo "Running pre-commit"
 	@uvx prek run --all-files
-	@echo "Committing with message: $(MSG)"
-	@git commit -m "$(MSG)"
+	@echo "Committing with message: $$MSG"
+	@git commit -m "$$MSG"
 	@echo "Pushing to origin main"
 	@git push origin HEAD:main
 	@echo "Done"
