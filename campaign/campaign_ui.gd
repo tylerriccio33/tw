@@ -1,6 +1,6 @@
 extends Node3D
 ## Thin GDScript glue: builds the real 3D world from config/world.json, sets
-## up a static top-down camera over it, and drives the Rust CampaignManager
+## up a static tilted strategy-map camera over it, and drives the Rust CampaignManager
 ## with the world's real city positions instead of a hardcoded square. City
 ## markers/dropdown/end-turn button render state on every signal instead of
 ## polling - unchanged from before this script also owned world/camera setup.
@@ -63,14 +63,17 @@ func _ready() -> void:
 
 	_world_camera = Camera3D.new()
 	_world_camera.name = "WorldCamera"
-	_world_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_world_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+	_world_camera.fov = 45.0
 	_world_camera.near = 1.0
 	_world_camera.far = 20000.0
 	var map_extent: float = world.terrain_builder.map_extent
-	_world_camera.size = map_extent * 2.0 * 1.05
 	add_child(_world_camera)
-	_world_camera.global_position = Vector3(0.0, 4000.0, 0.01)
-	_world_camera.look_at(Vector3.ZERO, Vector3.FORWARD)
+	# Tilted strategy-map angle (a la Total War) instead of a dead-vertical
+	# top-down shot: pulled back and elevated so look_at() naturally pitches
+	# the camera down at ~45 degrees over the whole island.
+	_world_camera.global_position = Vector3(0.0, map_extent * 1.15, map_extent * 1.15)
+	_world_camera.look_at(Vector3.ZERO, Vector3.UP)
 	_world_camera.make_current()
 
 	world.set_camera(_world_camera)
@@ -104,7 +107,7 @@ func _ready() -> void:
 
 
 ## Screen position of every city, from its real 3D centre through the static
-## top-down camera. Computed once (plus on resize) since the camera never
+## tilted camera. Computed once (plus on resize) since the camera never
 ## moves - re-running every frame would be wasted work.
 func _project_markers() -> void:
 	for i in _city_centres.size():
