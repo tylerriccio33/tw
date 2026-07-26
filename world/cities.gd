@@ -99,6 +99,11 @@ func build(
 	built = true
 
 
+## City count, for the harness's per-render stats block.
+func stats() -> Dictionary:
+	return {"cities": city_centres.size()}
+
+
 func _lay_out_city(
 	cfg: Dictionary,
 	rng: RandomNumberGenerator,

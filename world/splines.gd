@@ -18,6 +18,12 @@ var built := false
 var _terrain: Node
 var _sea_level: float
 
+## Counts of ribbons actually emitted, published for the stats block - not
+## the requested/attempted counts, which routinely differ (rivers that never
+## reach min_points, roads pruned to nothing after draping).
+var river_count := 0
+var road_count := 0
+
 
 func build(
 	cfg: Dictionary,
@@ -38,6 +44,11 @@ func build(
 		_build_borders(cfg["borders"], map_extent, city_centres)
 
 	built = true
+
+
+## River/road count, for the harness's per-render stats block.
+func stats() -> Dictionary:
+	return {"rivers": river_count, "roads": road_count}
 
 
 # --- Ribbon construction ----------------------------------------------------
@@ -219,6 +230,8 @@ func _build_rivers(cfg: Dictionary, seed_value: int, map_extent: float) -> void:
 			float(cfg["y_offset"]), material)
 		made += 1
 
+	river_count = made
+
 	if made == 0:
 		errors.append(
 			"no rivers generated in %d attempts - source_height %.0f may be "
@@ -251,30 +264,44 @@ func _build_roads(
 	for edge in _minimum_spanning_tree(city_centres):
 		var a := city_centres[edge.x]
 		var b := city_centres[edge.y]
-		var points := PackedVector3Array()
-		var direction := (b - a)
-		direction.y = 0.0
-		var perpendicular := Vector3(-direction.z, 0.0, direction.x).normalized()
-
-		for s in samples + 1:
-			var t := float(s) / float(samples)
-			var p := a.lerp(b, t)
-			# Taper the wander to zero at both ends so roads still arrive at
-			# the city they are supposed to connect.
-			var taper := sin(t * PI)
-			# Sample across ~3 noise units over the whole road, so the route
-			# bends once or twice. Advancing far per sample (t * 100) instead
-			# puts dozens of noise cycles along one road and it comes out as a
-			# zigzag rather than a route. The per-edge offset keeps parallel
-			# roads from bending in unison.
-			var offset := wander.get_noise_1d(t * 3.0 + float(edge.x) * 37.0)
-			points.append(p + perpendicular * offset * amplitude * taper)
+		var points := _wander_road(a, b, edge.x, wander, amplitude, samples)
 
 		points = _drape(points)
 		if points.size() < 2:
 			continue
 		_add_ribbon(parent, points, float(cfg["width"]),
 			float(cfg["y_offset"]), material)
+		road_count += 1
+
+
+## Straight line from `a` to `b`, perturbed sideways by 1D noise and tapered
+## to zero at both ends so the road still arrives at the city it connects.
+## Pure and terrain-independent (no draping here) so it is directly testable -
+## a bounded-curvature assertion on this is exactly what would have caught
+## the historical bug where sampling noise at `t * 100` put ~35 cycles along
+## one road, which reads as a zigzag rather than a bend or two.
+func _wander_road(
+	a: Vector3, b: Vector3, edge_index: int,
+	wander: FastNoiseLite, amplitude: float, samples: int
+) -> PackedVector3Array:
+	var points := PackedVector3Array()
+	var direction := (b - a)
+	direction.y = 0.0
+	var perpendicular := Vector3(-direction.z, 0.0, direction.x).normalized()
+
+	for s in samples + 1:
+		var t := float(s) / float(samples)
+		var p := a.lerp(b, t)
+		var taper := sin(t * PI)
+		# Sample across ~3 noise units over the whole road, so the route
+		# bends once or twice. Advancing far per sample (t * 100) instead
+		# puts dozens of noise cycles along one road and it comes out as a
+		# zigzag rather than a route. The per-edge offset keeps parallel
+		# roads from bending in unison.
+		var offset := wander.get_noise_1d(t * 3.0 + float(edge_index) * 37.0)
+		points.append(p + perpendicular * offset * amplitude * taper)
+
+	return points
 
 
 ## Prim's algorithm over the cities. An MST gives a connected network with no
@@ -302,6 +329,20 @@ func _minimum_spanning_tree(points: PackedVector3Array) -> Array[Vector2i]:
 		remaining.erase(best_to)
 
 	return edges
+
+
+## Index of the nearest city centre to an XZ point, by squared distance in
+## the ground plane. Pure and terrain-independent, factored out of
+## _build_borders so the Voronoi partition itself is directly testable.
+func _nearest_city(x: float, z: float, city_centres: PackedVector3Array) -> int:
+	var best := INF
+	var best_index := -1
+	for c in city_centres.size():
+		var d := Vector2(city_centres[c].x - x, city_centres[c].z - z).length_squared()
+		if d < best:
+			best = d
+			best_index = c
+	return best_index
 
 
 # --- Borders ----------------------------------------------------------------
@@ -339,14 +380,7 @@ func _build_borders(
 			if not is_finite(h) or h <= _sea_level:
 				owner[iz * steps + ix] = -1
 				continue
-			var best := INF
-			var best_index := -1
-			for c in city_centres.size():
-				var d := Vector2(city_centres[c].x - x, city_centres[c].z - z).length_squared()
-				if d < best:
-					best = d
-					best_index = c
-			owner[iz * steps + ix] = best_index
+			owner[iz * steps + ix] = _nearest_city(x, z, city_centres)
 
 	for iz in steps:
 		for ix in steps:

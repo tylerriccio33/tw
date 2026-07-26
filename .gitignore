@@ -18,6 +18,7 @@
 # Rendered shots. shots/golden/ IS committed - it is the diff baseline.
 /shots/current/
 /shots/contact_sheet.png
+/shots/sheet.png
 
 # Editors
 .vscode/

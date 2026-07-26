@@ -112,6 +112,11 @@ func build(
 	built = true
 
 
+## Tree count, for the harness's per-render stats block.
+func stats() -> Dictionary:
+	return {"trees": tree_positions.size()}
+
+
 func _add_multimesh(node_name: String, mesh: Mesh, transforms: Array[Transform3D]) -> void:
 	if transforms.is_empty():
 		return

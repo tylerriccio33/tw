@@ -22,6 +22,13 @@ var terrain: Terrain3D
 ## Terrain3D errors out if the directory does not exist.
 const DATA_DIR := "res://data/terrain"
 
+## Baked regions are cached here, one subdirectory per config+seed hash.
+## Terrain regen is ~7s of every ~10s render cycle; a run that only touches an
+## unrelated stage (a wall rotation, a light angle) re-does that work for
+## nothing. Keyed on the inputs that actually change the heightmap/control
+## map - not on debug_view, which only flips a material flag at render time.
+const CACHE_ROOT := "res://data/terrain_cache"
+
 const VALID_REGION_SIZES := [64, 128, 256, 512, 1024]
 
 ## Texture slot ids. The order here defines the ids referenced by the control
@@ -111,24 +118,32 @@ func build(cfg: Dictionary, seed_value: int) -> void:
 	_build_noise(seed_value)
 	_build_assets()
 
-	var half := regions_across / 2
-	for rz in range(-half, regions_across - half):
-		for rx in range(-half, regions_across - half):
-			var origin := Vector3(
-				float(rx) * region_world_size, 0.0, float(rz) * region_world_size
-			)
-			var heights := _generate_heights(region_size, origin)
-			# import_images takes [height, control, color]; nulls are skipped.
-			var height_img := Image.create_from_data(
-				region_size, region_size, false, Image.FORMAT_RF,
-				heights.to_byte_array()
-			)
-			terrain.data.import_images([height_img, null, null], origin, 0.0, 1.0)
-			_paint_controls(heights, region_size, origin)
+	var expected_regions := regions_across * regions_across
+	var cache_dir := _cache_dir_for(cfg, region_size, regions_across, seed_value)
 
-	if terrain.data.get_region_count() != regions_across * regions_across:
+	if _load_cached_regions(cache_dir, expected_regions):
+		print("terrain: cache hit (%s), skipped region generation" % cache_dir.get_file())
+	else:
+		var half := regions_across / 2
+		for rz in range(-half, regions_across - half):
+			for rx in range(-half, regions_across - half):
+				var origin := Vector3(
+					float(rx) * region_world_size, 0.0, float(rz) * region_world_size
+				)
+				var heights := _generate_heights(region_size, origin)
+				# import_images takes [height, control, color]; nulls are skipped.
+				var height_img := Image.create_from_data(
+					region_size, region_size, false, Image.FORMAT_RF,
+					heights.to_byte_array()
+				)
+				terrain.data.import_images([height_img, null, null], origin, 0.0, 1.0)
+				_paint_controls(heights, region_size, origin)
+		_save_cached_regions(cache_dir)
+		print("terrain: cache miss (%s), generated and cached regions" % cache_dir.get_file())
+
+	if terrain.data.get_region_count() != expected_regions:
 		errors.append("expected %d regions, Terrain3D has %d"
-			% [regions_across * regions_across, terrain.data.get_region_count()])
+			% [expected_regions, terrain.data.get_region_count()])
 		return
 
 	terrain.data.update_maps(Terrain3DRegion.TYPE_MAX, true, true)
@@ -142,6 +157,57 @@ func build(cfg: Dictionary, seed_value: int) -> void:
 		return
 
 	built = true
+
+
+## Hashes exactly the inputs that change the baked heightmap/control map.
+## debug_view is deliberately excluded so toggling it does not invalidate an
+## otherwise-identical cache entry.
+func _cache_dir_for(
+	cfg: Dictionary, region_size: int, regions_across: int, seed_value: int
+) -> String:
+	var hashable := {
+		"region_size": region_size,
+		"vertex_spacing": float(cfg["vertex_spacing"]),
+		"regions_across": regions_across,
+		"sea_level": float(cfg["sea_level"]),
+		"ocean_depth": float(cfg["ocean_depth"]),
+		"continent": cfg["continent"],
+		"plains": cfg["plains"],
+		"mountains": cfg["mountains"],
+		"palette": cfg["palette"],
+		"seed": seed_value,
+	}
+	var key := str(JSON.stringify(hashable).hash())
+	return "%s/%s" % [CACHE_ROOT, key]
+
+
+## Loads a previously-saved cache entry if one exists and looks intact.
+## Returns false (and leaves `terrain.data` untouched) on any miss, including
+## a corrupt/partial entry - the caller then regenerates and re-saves it, so
+## a bad cache dir self-heals instead of hard-failing the render.
+func _load_cached_regions(cache_dir: String, expected_regions: int) -> bool:
+	var abs_dir := ProjectSettings.globalize_path(cache_dir)
+	if not DirAccess.dir_exists_absolute(abs_dir):
+		return false
+	if DirAccess.get_files_at(abs_dir).is_empty():
+		return false
+	terrain.data.load_directory(cache_dir)
+	if terrain.data.get_region_count() != expected_regions:
+		print("terrain: cache at %s looked stale (expected %d regions, got %d)"
+			% [cache_dir, expected_regions, terrain.data.get_region_count()]
+			+ " - regenerating")
+		return false
+	return true
+
+
+func _save_cached_regions(cache_dir: String) -> void:
+	var abs_dir := ProjectSettings.globalize_path(cache_dir)
+	var err := DirAccess.make_dir_recursive_absolute(abs_dir)
+	if err != OK:
+		errors.append("could not create terrain cache dir %s: %s"
+			% [cache_dir, error_string(err)])
+		return
+	terrain.data.save_directory(cache_dir)
 
 
 ## Terrain3D ships debug overlays that isolate one input at a time. `grey`
@@ -165,6 +231,16 @@ func _apply_debug_view() -> void:
 			% [view, flags.keys()])
 		return
 	terrain.material.set(flags[view], true)
+
+
+## Region count and height range, for the harness's per-render stats block.
+func stats() -> Dictionary:
+	var range_y := terrain.data.get_height_range()
+	return {
+		"regions": terrain.data.get_region_count(),
+		"height_min": range_y.x,
+		"height_max": range_y.y,
+	}
 
 
 ## Ground height at a world XZ, or NAN outside the generated regions. Every

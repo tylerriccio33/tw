@@ -20,6 +20,15 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 window/size/viewport_width=128
 window/size/viewport_height=128
 
+[debug]
+
+; A GDScript type-inference warning (e.g. `var x := some_untyped_call()`,
+; which infers Variant rather than a real type) is otherwise silent until it
+; happens to misbehave at runtime, mid-render, three stages deep - promoting
+; it to a hard error lets `make check` (godot --check-only) catch it in
+; about a second instead of losing a full render cycle to it.
+gdscript/warnings/treat_warnings_as_errors=true
+
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/terrain_3d/plugin.cfg")
