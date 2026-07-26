@@ -27,7 +27,7 @@ ci: ## Commit on a fresh branch, push, open a PR into main, and auto-merge it
 	@echo "Pushing to origin"
 	@git push -u origin HEAD
 	@echo "Opening PR via CLI with title: $(TITLE)"
-	@gh pr create --title "$(TITLE)" --body "Auto-generated PR from CI" --base main --head $(shell git rev-parse --abbrev-ref HEAD)
+	@gh pr create --title "$(TITLE)" --body "Auto-generated PR from CI" --base main --head "$$(git rev-parse --abbrev-ref HEAD)"
 	@echo "Merging PR on main"
 	@gh pr merge --merge --delete-branch --auto
 	@echo "Done"
