@@ -10,7 +10,7 @@ else
 SHOT_ARGS :=
 endif
 
-.PHONY: help addons import shot diff sheet accept smoke api check test clean-shots campaign campaign-test campaign-smoke play
+.PHONY: help addons import shot diff sheet accept smoke api check test clean-shots campaign campaign-test campaign-smoke play play-shot
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -119,9 +119,18 @@ campaign-test:
 	cd rust/campaign && cargo test
 
 # Opens the campaign map in a real window, bypassing project.godot's
-# run/main_scene (tools/shoot.tscn) for this one launch only.
+# run/main_scene (tools/shoot.tscn) for this one launch only. project.godot
+# pins the window to 128x128 for shoot.gd's benefit; --resolution overrides
+# that just for this launch without touching the file.
 play: campaign
-	$(GODOT) res://campaign/campaign.tscn
+	$(GODOT) res://campaign/campaign.tscn --resolution $(or $(RESOLUTION),1280x800)
+
+# Launches `make play` windowed, waits for it to settle, and takes an
+# OS-level screenshot of the window (there's no in-game SubViewport capture
+# path like shoot.gd has, since this is live gameplay, not a config-driven
+# render) to shots/play/play.png. macOS only.
+play-shot: campaign
+	GODOT=$(GODOT) ./tools/play_shot.sh
 
 campaign-smoke:
 	GODOT=$(GODOT) ./tools/godot_gate.sh --headless --script res://tools/campaign_smoke.gd
