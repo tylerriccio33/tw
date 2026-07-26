@@ -118,6 +118,16 @@ func build(cfg: Dictionary, seed_value: int) -> void:
 	# NONE keeps the terrain bounded at the region edges instead of tiling
 	# noise to the horizon; the water plane fills everything beyond the coast.
 	terrain.material.world_background = Terrain3DMaterial.NONE
+	# Sharper texture-to-texture transitions (default 0.5 reads as a soft,
+	# washed-out blend at campaign-map camera distances) and macro variation
+	# to break up the flat, repeating look within a single texture slot.
+	terrain.material.blend_sharpness = 0.85
+	terrain.material.enable_macro_variation = true
+	terrain.material.macro_variation_slope = 0.2
+	# Subtle tint variants (pure white = no-op, see lightweight.gdshader) so
+	# macro variation actually shows up instead of being a silent default.
+	terrain.material.macro_variation1 = Color(0.88, 0.86, 0.8)
+	terrain.material.macro_variation2 = Color(1.0, 0.97, 0.9)
 
 	if terrain.region_size != region_size:
 		errors.append(
@@ -338,6 +348,11 @@ func _build_assets() -> void:
 		asset.albedo_texture = _load_packed_texture(slot, "albedo")
 		asset.normal_texture = _load_packed_texture(slot, "normal_rough")
 		asset.uv_scale = TEXTURE_UV_SCALE
+		# Push normal-map depth and AO past their (flat, washed-out) defaults
+		# so the packed ambientCG maps actually read as bumpy/textured at
+		# campaign-map camera distances instead of near-flat color.
+		asset.normal_depth = 1.4
+		asset.ao_strength = 0.35
 		assets.set_texture(id, asset)
 	terrain.assets = assets
 
