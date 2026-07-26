@@ -6,7 +6,9 @@ repos:
       - id: end-of-file-fixer
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: [--maxkb=5000]
+        # 8000: shots/golden/city.png (a close, detail-dense settlement shot)
+        # runs ~6.3MB, past the old 5000 headroom that fit overview/coast/ridge.
+        args: [--maxkb=8000]
       - id: check-yaml
       - id: check-json
       - id: check-toml

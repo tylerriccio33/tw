@@ -13,6 +13,19 @@ const FACTION_COLORS: Array[Color] = [
 	Color.INDIAN_RED, Color.CORNFLOWER_BLUE, Color.MEDIUM_SEA_GREEN, Color.GOLDENROD
 ]
 
+# Total War-style HUD palette, sampled off the reference reveal-stream
+# screenshot: a mid steel-blue header/tab color, cream parchment panels, and
+# a maroon building tray - kept as named constants since they're reused
+# across the city panel, tabs, and building tray.
+const HUD_BLUE := Color(0.247, 0.353, 0.51)
+const HUD_BLUE_DARK := Color(0.11, 0.15, 0.22)
+const HUD_CREAM := Color(0.95, 0.94, 0.88)
+const HUD_MAROON := Color(0.55, 0.1, 0.08)
+
+const FONT_MEDIUM := preload("res://assets/fonts/Baloo2-Medium.ttf")
+const FONT_SEMIBOLD := preload("res://assets/fonts/Baloo2-SemiBold.ttf")
+const FONT_BOLD := preload("res://assets/fonts/Baloo2-Bold.ttf")
+
 @onready var manager: Node = $CampaignManager
 @onready var status_label: Label = $UI/StatusLabel
 @onready var log_label: RichTextLabel = $UI/LogLabel
@@ -269,6 +282,12 @@ func _style_box(
 	return sb
 
 
+func _set_font(control: Control, font: Font, size: int = -1) -> void:
+	control.add_theme_font_override("font", font)
+	if size > 0:
+		control.add_theme_font_size_override("font_size", size)
+
+
 func _anchor_rect(control: Control, left: float, top: float, right: float, bottom: float) -> void:
 	control.anchor_left = left
 	control.anchor_top = top
@@ -300,7 +319,7 @@ func _build_city_panel() -> void:
 
 	# Header: navy bar with the city name and a faction-colored tab.
 	var header := PanelContainer.new()
-	header.add_theme_stylebox_override("panel", _style_box(Color(0.13, 0.2, 0.31)))
+	header.add_theme_stylebox_override("panel", _style_box(HUD_BLUE))
 	header.custom_minimum_size = Vector2(0, 40)
 	vbox.add_child(header)
 
@@ -315,7 +334,7 @@ func _build_city_panel() -> void:
 
 	_city_panel_name_label = Label.new()
 	_city_panel_name_label.text = "Burgos"
-	_city_panel_name_label.add_theme_font_size_override("font_size", 20)
+	_set_font(_city_panel_name_label, FONT_BOLD, 20)
 	_city_panel_name_label.add_theme_color_override("font_color", Color.WHITE)
 	_city_panel_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	margin.add_child(_city_panel_name_label)
@@ -327,7 +346,7 @@ func _build_city_panel() -> void:
 
 	# Body: parchment background holding the governor row and stat list.
 	var body := PanelContainer.new()
-	body.add_theme_stylebox_override("panel", _style_box(Color(0.95, 0.94, 0.88)))
+	body.add_theme_stylebox_override("panel", _style_box(HUD_CREAM))
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(body)
 
@@ -352,7 +371,7 @@ func _build_city_panel() -> void:
 
 	var gov_label := Label.new()
 	gov_label.text = "Gov..."
-	gov_label.add_theme_font_size_override("font_size", 13)
+	_set_font(gov_label, FONT_MEDIUM, 13)
 	gov_label.add_theme_color_override("font_color", Color(0.2, 0.2, 0.2))
 	gov_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	gov_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
@@ -361,14 +380,14 @@ func _build_city_panel() -> void:
 	var perk_label := Label.new()
 	perk_label.text = "Perk pts   0"
 	_city_panel_perk_label = perk_label
-	perk_label.add_theme_font_size_override("font_size", 15)
+	_set_font(perk_label, FONT_SEMIBOLD, 15)
 	perk_label.add_theme_color_override("font_color", Color(0.2, 0.2, 0.2))
 	perk_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	perk_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gov_row.add_child(perk_label)
 
 	var menu_pill := PanelContainer.new()
-	var pill_sb := _style_box(Color(0.25, 0.4, 0.6))
+	var pill_sb := _style_box(HUD_BLUE)
 	pill_sb.corner_radius_top_left = 14
 	pill_sb.corner_radius_top_right = 14
 	pill_sb.corner_radius_bottom_left = 14
@@ -404,12 +423,13 @@ func _make_stat_row(key: String, label_text: String, icon: String) -> HBoxContai
 
 	var icon_label := Label.new()
 	icon_label.text = icon
-	icon_label.add_theme_color_override("font_color", Color(0.2, 0.35, 0.55))
+	icon_label.add_theme_color_override("font_color", HUD_BLUE)
 	icon_label.custom_minimum_size = Vector2(20, 0)
 	row.add_child(icon_label)
 
 	var name_label := Label.new()
 	name_label.text = label_text
+	_set_font(name_label, FONT_MEDIUM)
 	name_label.add_theme_color_override("font_color", Color(0.25, 0.25, 0.25))
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(name_label)
@@ -417,7 +437,7 @@ func _make_stat_row(key: String, label_text: String, icon: String) -> HBoxContai
 	var value_label := Label.new()
 	value_label.text = "0"
 	value_label.add_theme_color_override("font_color", Color(0.05, 0.05, 0.05))
-	value_label.add_theme_font_size_override("font_size", 15)
+	_set_font(value_label, FONT_BOLD, 15)
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(value_label)
 	_city_stat_value_labels[key] = value_label
@@ -445,7 +465,7 @@ func _build_buildings_panel() -> void:
 	tabs_row.add_child(_make_tab_button("Military", false))
 
 	var cards_row := PanelContainer.new()
-	cards_row.add_theme_stylebox_override("panel", _style_box(Color(0.94, 0.93, 0.87)))
+	cards_row.add_theme_stylebox_override("panel", _style_box(HUD_CREAM))
 	cards_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(cards_row)
 
@@ -464,7 +484,7 @@ func _build_buildings_panel() -> void:
 		cards_hbox.add_child(_make_building_card(name, -1, true))
 
 	var red_strip := PanelContainer.new()
-	red_strip.add_theme_stylebox_override("panel", _style_box(Color(0.55, 0.1, 0.08)))
+	red_strip.add_theme_stylebox_override("panel", _style_box(HUD_MAROON))
 	red_strip.custom_minimum_size = Vector2(56, 0)
 	cards_hbox.add_child(red_strip)
 
@@ -493,16 +513,15 @@ func _build_buildings_panel() -> void:
 
 func _make_tab_button(text: String, active: bool) -> PanelContainer:
 	var tab := PanelContainer.new()
-	tab.add_theme_stylebox_override(
-		"panel", _style_box(Color(0.85, 0.83, 0.76) if active else Color(0.16, 0.19, 0.24))
-	)
+	tab.add_theme_stylebox_override("panel", _style_box(HUD_BLUE if active else HUD_BLUE_DARK))
 	var margin := MarginContainer.new()
 	for side in ["left", "right"]:
 		margin.add_theme_constant_override("margin_%s" % side, 14)
 	tab.add_child(margin)
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", Color(0.1, 0.1, 0.1) if active else Color.WHITE)
+	_set_font(label, FONT_SEMIBOLD)
+	label.add_theme_color_override("font_color", Color.WHITE)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	margin.add_child(label)
 	return tab
@@ -515,8 +534,7 @@ func _make_building_card(name: String, level: int, locked: bool) -> VBoxContaine
 
 	var image_panel := PanelContainer.new()
 	image_panel.add_theme_stylebox_override(
-		"panel",
-		_style_box(Color(0.7, 0.7, 0.7) if locked else Color.WHITE, Color(0.3, 0.3, 0.3), 1)
+		"panel", _style_box(Color(0.7, 0.7, 0.7) if locked else Color.WHITE, Color.BLACK, 1)
 	)
 	image_panel.custom_minimum_size = Vector2(0, 70)
 	card.add_child(image_panel)
@@ -524,13 +542,13 @@ func _make_building_card(name: String, level: int, locked: bool) -> VBoxContaine
 	if not locked:
 		var level_label := Label.new()
 		level_label.text = "Lv.%d" % level
-		level_label.add_theme_font_size_override("font_size", 13)
+		_set_font(level_label, FONT_BOLD, 13)
 		level_label.add_theme_color_override("font_color", Color.BLACK)
 		image_panel.add_child(level_label)
 	elif name == "Mine":
 		var q_label := Label.new()
 		q_label.text = "?"
-		q_label.add_theme_font_size_override("font_size", 28)
+		_set_font(q_label, FONT_BOLD, 28)
 		q_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		q_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		q_label.add_theme_color_override("font_color", Color(0.1, 0.1, 0.1))
@@ -538,6 +556,7 @@ func _make_building_card(name: String, level: int, locked: bool) -> VBoxContaine
 
 	var caption := Label.new()
 	caption.text = name
+	_set_font(caption, FONT_SEMIBOLD)
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	caption.add_theme_color_override("font_color", Color(0.15, 0.15, 0.15))
 	card.add_child(caption)
@@ -551,7 +570,7 @@ func _build_end_turn_banner() -> void:
 	_anchor_rect(end_turn_button, 0.89, 0.87, 0.965, 0.93)
 	end_turn_button.text = "END TURN 1"
 	end_turn_button.add_theme_color_override("font_color", Color.WHITE)
-	end_turn_button.add_theme_font_size_override("font_size", 16)
+	_set_font(end_turn_button, FONT_BOLD, 16)
 	var sb := _style_box(Color(0.55, 0.13, 0.05), Color(0.85, 0.45, 0.1), 2)
 	end_turn_button.add_theme_stylebox_override("normal", sb)
 	end_turn_button.add_theme_stylebox_override(

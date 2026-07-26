@@ -32,6 +32,13 @@
       "position": [1500.0, 780.0, -300.0],
       "look_at": [-200.0, 120.0, -600.0],
       "fov": 40.0
+    },
+    {
+      "name": "city",
+      "_comment": "Close on one settlement (seed 20260725's city index 2, world.json unchanged) so a building-kit change is a one-preset diff instead of hunting for a speck in the overview. Fixed world coords, not city_centres() at render time, so this stays put if placement logic changes - re-pick with `grep CITY_CENTRE` output from a `make shot` run (see tools/shoot.gd) if the seed or gate ever moves this city.",
+      "position": [-915.0, 300.0, -312.0],
+      "look_at": [-1117.0, 55.0, -514.0],
+      "fov": 35.0
     }
   ]
 }

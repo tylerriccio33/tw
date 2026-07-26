@@ -10,7 +10,7 @@ else
 SHOT_ARGS :=
 endif
 
-.PHONY: help addons textures foliage import shot diff sheet accept smoke api check test clean-shots campaign campaign-test campaign-smoke play play-shot hud-shot
+.PHONY: help addons textures foliage buildings import shot diff sheet accept smoke api check test clean-shots campaign campaign-test campaign-smoke play play-shot hud-shot
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -27,6 +27,7 @@ help:
 	@echo "make addons   - vendor the Terrain3D GDExtension into addons/"
 	@echo "make textures - vendor ambientCG PBR ground textures into assets/textures/"
 	@echo "make foliage  - vendor Poly Haven CC0 tree textures into assets/foliage/"
+	@echo "make buildings - vendor Quaternius CC0 Medieval Village MegaKit into assets/buildings/ (needs tools/vendor_cache/, see tools/fetch_buildings.py)"
 	@echo "make import   - reimport assets and register the GDExtension"
 	@echo "make shot     - render every preset in config/shots.json to shots/current/"
 	@echo "make diff     - PSNR table + shots/contact_sheet.png vs shots/golden/"
@@ -53,6 +54,9 @@ textures:
 # each and scatter.gd places ~4500 of them. See tools/fetch_foliage.py.
 foliage:
 	@uv run tools/fetch_foliage.py
+
+buildings:
+	@uv run tools/fetch_buildings.py
 
 # Godot only registers a GDExtension after a project import, so a fresh clone
 # renders an empty scene until this has run at least once.

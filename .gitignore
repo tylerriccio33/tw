@@ -13,6 +13,14 @@
 # Vendored Poly Haven CC0 tree textures - run `make foliage`
 /assets/foliage/
 
+# Vendored Quaternius CC0 building kit - run `make buildings`
+/assets/buildings/
+
+# Cached itch.io download for tools/fetch_buildings.py (161MB zip; itch.io
+# gates it behind a pay-what-you-want click-through with no stable direct
+# URL, so unlike textures/foliage this cannot be curled unattended)
+/tools/vendor_cache/
+
 # Terrain3D region data. The terrain is regenerated from config/world.json on
 # every run and never saved, so this is scratch.
 /data/

@@ -1,8 +1,6 @@
 {
   "_comment": "Single source of truth for the render. Every visual is derived from `seed`, so an unchanged config must produce a byte-identical screenshot. If it does not, something is reading an unseeded RNG.",
-
   "seed": 20260725,
-
   "terrain": {
     "_comment": "region_size * vertex_spacing = world units per region. 4 x 4 regions of 1024 verts at 1.0 spacing => a 4096-unit map spanning -2048..2048, same extent as before but at 2x mesh density (1.0 matches Terrain3D's own default; 2.0 under-sampled the ridged mountain noise into visibly faceted slopes).",
     "region_size": 1024,
@@ -10,22 +8,19 @@
     "regions_across": 4,
     "sea_level": 0.0,
     "ocean_depth": 160.0,
-
     "continent": {
       "_comment": "Radial falloff from the map centre makes the landmass an island. The warp noise pushes that radius in and out so the coastline is ragged instead of circular.",
       "falloff_start": 0.62,
       "falloff_end": 1.12,
       "warp_frequency": 0.00035,
-      "warp_amplitude": 0.30
+      "warp_amplitude": 0.3
     },
-
     "plains": {
       "_comment": "Low-amplitude rolling ground covering most of the landmass.",
       "frequency": 0.0011,
       "octaves": 5,
       "height": 70.0
     },
-
     "mountains": {
       "_comment": "Ridged noise gated by a low-frequency belt mask. belt_low/high select roughly the top quarter of the belt noise - open them up and mountains swallow the entire map, which is the single easiest way to lose the campaign-map read.",
       "frequency": 0.0009,
@@ -36,7 +31,6 @@
       "belt_high": 0.82,
       "height": 520.0
     },
-
     "material": {
       "_comment": "Terrain3D shader uniforms, reachable only via set_shader_param (they do not appear in `make api`). Deliberately excluded from the region cache hash - none of these change the heightmap or control map, they only affect how it is shaded.",
       "blend_sharpness": 0.85,
@@ -54,7 +48,6 @@
       "dual_scale_far": 2600.0,
       "dual_scale_reduction": 0.3
     },
-
     "palette": {
       "_comment": "Texture ids match the order of the assets built in terrain_builder. The reference map is arid: tan owns the plains and green is confined to wetter low ground, which is what stops it reading as generic green terrain.",
       "beach_height": 14.0,
@@ -69,13 +62,12 @@
       "green_max_height": 300.0
     }
   },
-
   "forests": {
     "_comment": "Density mask decides where woods cluster; the height/slope gate then rejects surf and bare peaks. max_height is the treeline and should sit just under where snow starts blending (palette.snow_height - snow_blend), so forests stop before the mountains go white.",
     "spacing": 26.0,
     "jitter": 0.85,
     "density_frequency": 0.0011,
-    "density_threshold": 0.50,
+    "density_threshold": 0.5,
     "min_height": 12.0,
     "max_height": 300.0,
     "max_slope_degrees": 28.0,
@@ -88,26 +80,35 @@
     "conifer_stand_threshold": 0.56,
     "conifer_stand_frequency": 0.0009,
     "tint_jitter": 0.65,
-
     "canopy": {
       "_comment": "Trees are built from `<kind>_cards` single-leaf quads scattered over a canopy shell, each sampling one leaf cell that tools/fetch_foliage.py segmented out of the Poly Haven atlas. radius_fraction is the shell radius and leaf_fraction the size of one leaf, both as a fraction of tree_height; base_fraction is how far down the trunk the foliage starts, as a fraction of trunk height (below 1.0 buries the bare pole). Card counts are per-kind because a conifer spire needs many small twigs to read as solid while a broadleaf dome needs fewer, larger fronds. Raising cards is the direct dial for how dense a wood reads from above; it costs 2 triangles per card per tree.",
       "conifer_cards": 34,
-      "conifer_radius_fraction": 0.30,
-      "conifer_leaf_fraction": 0.30,
+      "conifer_radius_fraction": 0.3,
+      "conifer_leaf_fraction": 0.3,
       "conifer_base_fraction": 0.35,
       "broadleaf_cards": 22,
       "broadleaf_radius_fraction": 0.42,
       "broadleaf_leaf_fraction": 0.36,
       "broadleaf_base_fraction": 0.85
     },
-
-    "trunk_color": [0.24, 0.18, 0.13],
-    "conifer_color": [0.13, 0.24, 0.14],
-    "broadleaf_color": [0.22, 0.34, 0.15]
+    "trunk_color": [
+      0.24,
+      0.18,
+      0.13
+    ],
+    "conifer_color": [
+      0.13,
+      0.24,
+      0.14
+    ],
+    "broadleaf_color": [
+      0.22,
+      0.34,
+      0.15
+    ]
   },
-
   "cities": {
-    "_comment": "Cities are placed by dart throwing with a minimum separation, gated on flat-ish ground clear of the surf and below the hills. max_slope_degrees is deliberately tight - a settlement draped over a hillside reads as scattered rubble from above.",
+    "_comment": "Cities are placed by dart throwing with a minimum separation, gated on flat-ish ground clear of the surf and below the hills. max_slope_degrees is deliberately tight - a settlement draped over a hillside reads as scattered rubble from above. Houses/keeps are assembled from the Quaternius kit (world/cities.gd, assets/buildings/kit/ - run `make buildings`); building_color/keep_color are gone since the kit's own materials replace them. building_size is still the tuning knob for how big a building reads - it is matched internally to the old procedural roof's diameter (size*1.9) so this didn't need to change when the geometry did.",
     "count": 6,
     "min_distance": 620.0,
     "placement_attempts": 600,
@@ -115,24 +116,28 @@
     "max_height": 210.0,
     "max_slope_degrees": 9.0,
     "radius": 92.0,
-    "building_count": 52,
+    "building_count": 60,
     "building_size": 13.0,
     "max_building_slope_degrees": 20.0,
     "wall_enabled": true,
     "wall_segments": 26,
     "wall_tower_every": 5,
-    "building_color": [0.78, 0.72, 0.62],
-    "keep_color": [0.66, 0.62, 0.56],
-    "roof_color": [0.42, 0.22, 0.16],
-    "wall_color": [0.60, 0.57, 0.52]
+    "roof_color": [
+      0.42,
+      0.22,
+      0.16
+    ],
+    "wall_color": [
+      0.6,
+      0.57,
+      0.52
+    ]
   },
-
   "network": {
     "_comment": "Rivers run downhill from high ground; roads are a minimum spanning tree over the cities; borders are the boundary of a nearest-city Voronoi partition. y_offset lifts each ribbon clear of the terrain - drop it to zero and they z-fight into stipple.",
     "rivers_enabled": true,
     "roads_enabled": true,
     "borders_enabled": true,
-
     "rivers": {
       "count": 9,
       "source_attempts": 900,
@@ -143,40 +148,60 @@
       "smoothing_passes": 4,
       "width": 15.0,
       "y_offset": 2.2,
-      "color": [0.20, 0.38, 0.55]
+      "color": [
+        0.2,
+        0.38,
+        0.55
+      ]
     },
-
     "roads": {
       "samples_per_road": 60,
       "wander_frequency": 0.35,
       "wander_amplitude": 130.0,
       "width": 13.0,
       "y_offset": 1.6,
-      "color": [0.80, 0.73, 0.55]
+      "color": [
+        0.8,
+        0.73,
+        0.55
+      ]
     },
-
     "borders": {
       "_comment": "Grid cell edges are chained into polylines and smoothed before drawing; without smoothing_passes the boundary is a hard axis-aligned staircase. cell_size was 46 with 6 passes and still stair-stepped visibly in ridge.png - a coarser grid plus more passes reads as a soft tapered ribbon instead.",
       "cell_size": 64.0,
       "smoothing_passes": 10,
       "width": 6.0,
       "y_offset": 2.8,
-      "color": [0.85, 0.76, 0.30]
+      "color": [
+        0.85,
+        0.76,
+        0.3
+      ]
     }
   },
-
   "debug": {
     "_comment": "Terrain3D debug overlays, for splitting 'the lighting is wrong' from 'the control map is wrong'. One of: none, grey, control, heightmap, colormap, checkered, autoshader. Must be `none` for a golden shot.",
     "terrain_view": "none"
   },
-
   "water": {
     "_comment": "Colours are graded by reconstructed water depth, so shallow_color is what you see over the beach shelf and deep_color is open sea. extent_multiplier pushes the plane past the terrain so the horizon is water, not the region edge.",
     "extent_multiplier": 24.0,
-    "shallow_color": [0.26, 0.55, 0.62],
-    "deep_color": [0.07, 0.20, 0.38],
+    "shallow_color": [
+      0.26,
+      0.55,
+      0.62
+    ],
+    "deep_color": [
+      0.07,
+      0.2,
+      0.38
+    ],
     "depth_falloff": 130.0,
-    "foam_color": [0.93, 0.95, 0.96],
+    "foam_color": [
+      0.93,
+      0.95,
+      0.96
+    ],
     "foam_depth": 13.0,
     "foam_sharpness": 2.4,
     "wave_scale": 0.008,
@@ -186,40 +211,57 @@
     "specular_amount": 0.45,
     "roughness_amount": 0.08
   },
-
   "lighting": {
     "_comment": "Low sun angle gives the long directional shadows that make ridgelines readable from a high camera.",
     "sun_pitch_degrees": -38.0,
     "sun_yaw_degrees": 130.0,
     "sun_energy": 1.35,
-    "sun_color": [1.0, 0.95, 0.86],
+    "sun_color": [
+      1.0,
+      0.95,
+      0.86
+    ],
     "sun_shadow_max_distance": 4200.0,
     "sun_angular_distance": 0.53,
     "shadow_bias": 0.35,
     "shadow_normal_bias": 14.0,
     "ambient_energy": 0.7,
     "fog_enabled": true,
-    "fog_color": [0.68, 0.72, 0.78],
+    "fog_color": [
+      0.68,
+      0.72,
+      0.78
+    ],
     "fog_density": 0.00035,
     "tonemap": "agx",
     "exposure": 1.15,
     "tonemap_white": 2.5,
     "saturation": 1.15,
     "contrast": 1.02,
-
     "sky": {
       "_comment": "PhysicalSkyMaterial. Turbidity is the haze dial - low is a clean alpine sky, high is humid and washed out. ground_color is what the lower hemisphere contributes to ambient, so it wants to resemble the terrain rather than being neutral grey.",
       "rayleigh_coefficient": 2.0,
-      "rayleigh_color": [0.26, 0.41, 0.58],
+      "rayleigh_color": [
+        0.26,
+        0.41,
+        0.58
+      ],
       "mie_coefficient": 0.005,
       "mie_eccentricity": 0.8,
-      "mie_color": [0.63, 0.77, 0.92],
+      "mie_color": [
+        0.63,
+        0.77,
+        0.92
+      ],
       "turbidity": 3.0,
       "sun_disk_scale": 1.0,
-      "ground_color": [0.42, 0.38, 0.31],
+      "ground_color": [
+        0.42,
+        0.38,
+        0.31
+      ],
       "energy_multiplier": 1.0
     },
-
     "sdfgi": {
       "_comment": "min_cell_size is in world units and drives everything: cascade0 covers roughly min_cell_size * 64, each further cascade doubles it. At 8.0 with 6 cascades the last cascade spans ~16k units, comfortably past the 4096-unit map. Terrain detail below one cell is invisible to GI, which is fine - this is for large-scale bounce, not contact detail (that is SSAO/SSIL's job).",
       "enabled": true,
@@ -233,7 +275,6 @@
       "normal_bias": 1.1,
       "probe_bias": 1.1
     },
-
     "ssao": {
       "_comment": "radius is world units. The 1.0 Godot default is sized for a person-scale interior and does nothing here; this needs to span the folds between terrain vertices and the base of a city wall.",
       "enabled": true,
@@ -246,7 +287,6 @@
       "light_affect": 0.1,
       "ao_channel_affect": 0.0
     },
-
     "ssil": {
       "_comment": "Coloured short-range bounce. Off by default: its effect is sub-pixel from the overview camera while it costs a full screen pass, and it was a measurable part of a 20-minute three-preset render. Turn it on for close work.",
       "enabled": false,
@@ -255,13 +295,20 @@
       "sharpness": 0.98,
       "normal_rejection": 1.0
     },
-
     "volumetric_fog": {
       "_comment": "length must reach past the far ridges from the overview camera or the fog stops in mid-air partway across the map. density is ~150x below Godot's default because optical depth is density*distance and the volume being filled is kilometres deep, not room-sized: 0.002 over a 6000-unit length is optical depth 12, i.e. fully opaque grey. Measured usable range here is 0.00004 (imperceptible) to 0.00012 (washed out).",
       "enabled": true,
-      "density": 0.00006,
-      "albedo": [0.82, 0.86, 0.92],
-      "emission": [0.0, 0.0, 0.0],
+      "density": 6e-05,
+      "albedo": [
+        0.82,
+        0.86,
+        0.92
+      ],
+      "emission": [
+        0.0,
+        0.0,
+        0.0
+      ],
       "emission_energy": 0.0,
       "anisotropy": 0.35,
       "length": 6000.0,
