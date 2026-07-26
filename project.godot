@@ -29,6 +29,16 @@ window/size/viewport_height=128
 ; about a second instead of losing a full render cycle to it.
 gdscript/warnings/treat_warnings_as_errors=true
 
+[importer_defaults]
+
+; Terrain3D textures (assets/textures/) need mipmaps for the far-distance LOD
+; blend it does between texture layers; Godot's texture import default is
+; mipmaps off, which otherwise has to be flipped by hand per-file every time
+; `make textures` re-vendors them into the (gitignored) assets/textures/ dir.
+texture={
+"mipmaps/generate": true
+}
+
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/terrain_3d/plugin.cfg")

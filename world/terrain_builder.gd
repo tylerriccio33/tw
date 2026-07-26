@@ -41,15 +41,26 @@ enum {
 	TEX_SNOW = 4,
 }
 
-## Placeholder material colours. M7 replaces these with AmbientCG PBR sets;
-## the ids and the control-map logic stay exactly as they are.
+## AmbientCG (CC0) source materials, one per texture slot. Raw maps live under
+## assets/textures/<slot>/; tools/pack_pbr_textures.py bakes them into the
+## albedo.png (RGB colour, A height) and normal_rough.png (RGB normal, A
+## roughness) pair that Terrain3D's asset system actually reads.
 const PALETTE := {
-	TEX_SAND: Color(0.76, 0.69, 0.52),
-	TEX_TAN: Color(0.66, 0.55, 0.36),
-	TEX_GRASS: Color(0.33, 0.40, 0.22),
-	TEX_ROCK: Color(0.44, 0.43, 0.41),
-	TEX_SNOW: Color(0.90, 0.91, 0.93),
+	TEX_SAND: "sand",  # Ground093A - pale eroded coastal sand
+	TEX_TAN: "tan",  # Ground072 - dry tan plains dirt
+	TEX_GRASS: "grass",  # Grass001
+	TEX_ROCK: "rock",  # Rock051 - grey rock with lichen
+	TEX_SNOW: "snow",  # Snow006
 }
+
+## Terrain3D multiplies world position by this to get texture UV, and clamps
+## it to [0.001, 2.0] - it is not "world units per tile", it's repeats per
+## world unit. 8.0 (an attempt at "repeat every ~8 units") silently clamped to
+## 2.0 and over-tiled so hard the mip chain blurred every material to a flat
+## average colour. 0.1 matches Terrain3D's own default and reads as a texture
+## repeating roughly every 10 world units, which stays sharp at these camera
+## distances without visible seams.
+const TEXTURE_UV_SCALE := 0.1
 
 ## Half the width of the generated map in world units, i.e. the terrain spans
 ## -map_extent..+map_extent on both axes. Water sizes itself from this.
@@ -305,46 +316,28 @@ func _build_noise(seed_value: int) -> void:
 	)
 
 
-## Builds a tileable placeholder texture: flat colour plus fine value noise so
-## surfaces have grain and read as terrain rather than as flat shading.
-func _make_placeholder_texture(base: Color, seed_value: int) -> ImageTexture:
-	const SIZE := 256
-	var noise := FastNoiseLite.new()
-	noise.seed = seed_value
-	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	noise.frequency = 0.05
-	noise.fractal_octaves = 4
-
-	var img := Image.create_empty(SIZE, SIZE, true, Image.FORMAT_RGBA8)
-	for y in SIZE:
-		for x in SIZE:
-			var n := noise.get_noise_2d(float(x), float(y)) * 0.16
-			(
-				img
-				. set_pixel(
-					x,
-					y,
-					Color(
-						clampf(base.r + n, 0.0, 1.0),
-						clampf(base.g + n, 0.0, 1.0),
-						clampf(base.b + n, 0.0, 1.0),
-						1.0,
-					)
-				)
-			)
-	img.generate_mipmaps()
-	return ImageTexture.create_from_image(img)
+## Loads a texture baked by tools/fetch_textures.py, through Godot's normal
+## import pipeline (`load`, not `Image.load`) so it works the same way any
+## other project texture does, exported build included. Missing files read as
+## a loud error rather than a silently blank material, since a typo'd slot
+## name would otherwise just render as invisible/white terrain.
+func _load_packed_texture(slot: String, map_name: String) -> Texture2D:
+	var path := "res://assets/textures/%s/%s.png" % [slot, map_name]
+	if not ResourceLoader.exists(path):
+		errors.append("could not find %s - run `make textures` to vendor ambientCG textures" % path)
+		return null
+	return load(path)
 
 
 func _build_assets() -> void:
 	var assets := Terrain3DAssets.new()
 	for id in [TEX_SAND, TEX_TAN, TEX_GRASS, TEX_ROCK, TEX_SNOW]:
+		var slot: String = PALETTE[id]
 		var asset := Terrain3DTextureAsset.new()
 		asset.id = id
-		asset.albedo_texture = _make_placeholder_texture(PALETTE[id], id * 977)
-		# Large UV scale keeps the 256px placeholder from visibly tiling when
-		# a single region spans 2048 world units.
-		asset.uv_scale = 0.08
+		asset.albedo_texture = _load_packed_texture(slot, "albedo")
+		asset.normal_texture = _load_packed_texture(slot, "normal_rough")
+		asset.uv_scale = TEXTURE_UV_SCALE
 		assets.set_texture(id, asset)
 	terrain.assets = assets
 

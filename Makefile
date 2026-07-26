@@ -10,7 +10,7 @@ else
 SHOT_ARGS :=
 endif
 
-.PHONY: help addons import shot diff sheet accept smoke api check test clean-shots campaign campaign-test campaign-smoke play play-shot
+.PHONY: help addons textures import shot diff sheet accept smoke api check test clean-shots campaign campaign-test campaign-smoke play play-shot
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -25,6 +25,7 @@ ci: ## Commit everything and push straight to main
 
 help:
 	@echo "make addons   - vendor the Terrain3D GDExtension into addons/"
+	@echo "make textures - vendor ambientCG PBR ground textures into assets/textures/"
 	@echo "make import   - reimport assets and register the GDExtension"
 	@echo "make shot     - render every preset in config/shots.json to shots/current/"
 	@echo "make diff     - PSNR table + shots/contact_sheet.png vs shots/golden/"
@@ -41,6 +42,9 @@ help:
 
 addons:
 	python3 tools/fetch_addons.py
+
+textures:
+	@uv run tools/fetch_textures.py
 
 # Godot only registers a GDExtension after a project import, so a fresh clone
 # renders an empty scene until this has run at least once.
