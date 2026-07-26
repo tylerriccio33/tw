@@ -4,10 +4,10 @@
   "seed": 20260725,
 
   "terrain": {
-    "_comment": "region_size * vertex_spacing = world units per region. 2 x 2 regions of 1024 verts at 2.0 spacing => a 4096-unit map spanning -2048..2048.",
+    "_comment": "region_size * vertex_spacing = world units per region. 4 x 4 regions of 1024 verts at 1.0 spacing => a 4096-unit map spanning -2048..2048, same extent as before but at 2x mesh density (1.0 matches Terrain3D's own default; 2.0 under-sampled the ridged mountain noise into visibly faceted slopes).",
     "region_size": 1024,
-    "vertex_spacing": 2.0,
-    "regions_across": 2,
+    "vertex_spacing": 1.0,
+    "regions_across": 4,
     "sea_level": 0.0,
     "ocean_depth": 160.0,
 
@@ -43,8 +43,8 @@
       "beach_blend": 22.0,
       "snow_height": 430.0,
       "snow_blend": 120.0,
-      "rock_slope_low": 17.0,
-      "rock_slope_high": 31.0,
+      "rock_slope_low": 20.0,
+      "rock_slope_high": 42.0,
       "moisture_frequency": 0.0009,
       "moisture_threshold": 0.56,
       "moisture_blend": 0.16,

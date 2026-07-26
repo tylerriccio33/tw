@@ -41,16 +41,16 @@ enum {
 	TEX_SNOW = 4,
 }
 
-## AmbientCG (CC0) source materials, one per texture slot. Raw maps live under
-## assets/textures/<slot>/; tools/pack_pbr_textures.py bakes them into the
-## albedo.png (RGB colour, A height) and normal_rough.png (RGB normal, A
+## CC0 source materials (ambientCG/Polyhaven), one per texture slot. Raw maps
+## live under assets/textures/<slot>/; tools/fetch_textures.py bakes them into
+## the albedo.png (RGB colour, A height) and normal_rough.png (RGB normal, A
 ## roughness) pair that Terrain3D's asset system actually reads.
 const PALETTE := {
-	TEX_SAND: "sand",  # Ground093A - pale eroded coastal sand
-	TEX_TAN: "tan",  # Ground072 - dry tan plains dirt
-	TEX_GRASS: "grass",  # Grass001
-	TEX_ROCK: "rock",  # Rock051 - grey rock with lichen
-	TEX_SNOW: "snow",  # Snow006
+	TEX_SAND: "sand",  # ambientCG Ground093A - pale eroded coastal sand
+	TEX_TAN: "tan",  # ambientCG Ground072 - dry tan plains dirt
+	TEX_GRASS: "grass",  # Polyhaven aerial_grass_rock
+	TEX_ROCK: "rock",  # Polyhaven marble_cliff_03 - stratified grey cliff rock
+	TEX_SNOW: "snow",  # ambientCG Snow006
 }
 
 ## Terrain3D multiplies world position by this to get texture UV, and clamps
@@ -60,7 +60,7 @@ const PALETTE := {
 ## average colour. 0.1 matches Terrain3D's own default and reads as a texture
 ## repeating roughly every 10 world units, which stays sharp at these camera
 ## distances without visible seams.
-const TEXTURE_UV_SCALE := 0.1
+const TEXTURE_UV_SCALE := 0.02
 
 ## Half the width of the generated map in world units, i.e. the terrain spans
 ## -map_extent..+map_extent on both axes. Water sizes itself from this.
@@ -122,6 +122,11 @@ func build(cfg: Dictionary, seed_value: int) -> void:
 	# washed-out blend at campaign-map camera distances) and macro variation
 	# to break up the flat, repeating look within a single texture slot.
 	terrain.material.blend_sharpness = 0.85
+	# Blends a zoomed-in detail tiling of each texture over the base tiling at
+	# close range, so the source photo's actual surface detail (rock cracks,
+	# pebbles) survives instead of being minified into an illegible grey blur
+	# at campaign-map camera distances.
+	terrain.material.dual_scaling = true
 	terrain.material.enable_macro_variation = true
 	terrain.material.macro_variation_slope = 0.2
 	# Subtle tint variants (pure white = no-op, see lightweight.gdshader) so
