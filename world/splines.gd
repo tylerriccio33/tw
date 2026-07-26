@@ -382,6 +382,12 @@ func _build_borders(cfg: Dictionary, map_extent: float, city_centres: PackedVect
 				continue
 			owner[iz * steps + ix] = _nearest_city(x, z, city_centres)
 
+	# Each boundary is one axis-aligned cell edge, so emitting them individually
+	# draws a hard staircase - the single most artificial-looking thing left in
+	# the frame. Instead the edges are collected, chained into continuous
+	# polylines and run through the same moving-average smoothing the rivers
+	# already use, which is what turns the staircase into a drawn line.
+	var segments: Array[PackedVector2Array] = []
 	for iz in steps:
 		for ix in steps:
 			var mine := owner[iz * steps + ix]
@@ -395,34 +401,95 @@ func _build_borders(cfg: Dictionary, map_extent: float, city_centres: PackedVect
 			if ix + 1 < steps:
 				var other := owner[iz * steps + ix + 1]
 				if other >= 0 and other != mine:
-					_add_ribbon(
-						parent,
-						_drape(
-							PackedVector3Array(
+					(
+						segments
+						. append(
+							PackedVector2Array(
 								[
-									Vector3(x + cell * 0.5, 0.0, z - cell * 0.5),
-									Vector3(x + cell * 0.5, 0.0, z + cell * 0.5),
+									Vector2(x + cell * 0.5, z - cell * 0.5),
+									Vector2(x + cell * 0.5, z + cell * 0.5),
 								]
 							)
-						),
-						width,
-						y_offset,
-						material
+						)
 					)
 			if iz + 1 < steps:
 				var other := owner[(iz + 1) * steps + ix]
 				if other >= 0 and other != mine:
-					_add_ribbon(
-						parent,
-						_drape(
-							PackedVector3Array(
+					(
+						segments
+						. append(
+							PackedVector2Array(
 								[
-									Vector3(x - cell * 0.5, 0.0, z + cell * 0.5),
-									Vector3(x + cell * 0.5, 0.0, z + cell * 0.5),
+									Vector2(x - cell * 0.5, z + cell * 0.5),
+									Vector2(x + cell * 0.5, z + cell * 0.5),
 								]
 							)
-						),
-						width,
-						y_offset,
-						material
+						)
 					)
+
+	var smoothing_passes := int(cfg["smoothing_passes"])
+	for chain in _chain_segments(segments):
+		if chain.size() < 2:
+			continue
+		var path := PackedVector3Array()
+		for p in chain:
+			path.append(Vector3(p.x, 0.0, p.y))
+		_add_ribbon(parent, _drape(_smooth(path, smoothing_passes)), width, y_offset, material)
+
+
+## Walks a soup of unordered grid edges into continuous polylines.
+##
+## Endpoints are snapped to a key before lookup: they come from the same
+## `-map_extent + i * cell` arithmetic on both sides of a shared corner, but
+## float addition does not guarantee the two paths produce identical bits, and
+## a near-miss would silently break every chain into its original segments.
+func _chain_segments(segments: Array[PackedVector2Array]) -> Array[PackedVector2Array]:
+	var adjacency: Dictionary = {}
+	var points: Dictionary = {}
+
+	for seg in segments:
+		var a := _point_key(seg[0])
+		var b := _point_key(seg[1])
+		points[a] = seg[0]
+		points[b] = seg[1]
+		if not adjacency.has(a):
+			adjacency[a] = ([] as Array[String])
+		if not adjacency.has(b):
+			adjacency[b] = ([] as Array[String])
+		(adjacency[a] as Array[String]).append(b)
+		(adjacency[b] as Array[String]).append(a)
+
+	var chains: Array[PackedVector2Array] = []
+	var visited: Dictionary = {}
+
+	# Start from endpoints (degree 1) so open runs are walked whole; anything
+	# left over afterwards is a closed loop, which can be entered anywhere.
+	var starts: Array[String] = []
+	for key in adjacency:
+		if (adjacency[key] as Array[String]).size() == 1:
+			starts.append(key)
+	for key in adjacency:
+		starts.append(key)
+
+	for start in starts:
+		if visited.has(start):
+			continue
+		var chain := PackedVector2Array()
+		var current: String = start
+		while current != "" and not visited.has(current):
+			visited[current] = true
+			chain.append(points[current])
+			var next := ""
+			for candidate in adjacency[current] as Array[String]:
+				if not visited.has(candidate):
+					next = candidate
+					break
+			current = next
+		if chain.size() >= 2:
+			chains.append(chain)
+
+	return chains
+
+
+func _point_key(p: Vector2) -> String:
+	return "%.2f,%.2f" % [p.x, p.y]

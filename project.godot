@@ -48,6 +48,26 @@ enabled=PackedStringArray("res://addons/terrain_3d/plugin.cfg")
 renderer/rendering_method="forward_plus"
 lights_and_shadows/directional_shadow/size=8192
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+; These govern the root viewport, which for the shot harness is only the
+; 128x128 window - shots/current/ comes from a SubViewport that carries its own
+; antialiasing, configured in config/shots.json and applied in tools/shoot.gd.
+; So what follows is really the setting for `make play` (live campaign map),
+; and it is kept in step with the capture path so the two do not diverge in
+; look. The one deliberate difference: 4x rather than the capture path's 8x,
+; because play is realtime and the shots are not.
+;
+; 2 = MSAA 4x (the enum is off/2x/4x/8x, so the int is one less than expected).
 anti_aliasing/quality/msaa_3d=2
-anti_aliasing/quality/screen_space_aa=1
-textures/default_filters/anisotropic_filtering_level=3
+; 0 = FXAA off. It was on (1) and does not survive contact with this scene: it
+; is a whole-screen blur with no knowledge of edges, so on terrain that is
+; almost entirely high-frequency photo texture it removes the detail the Phase 2
+; 4K/detiling work exists to add. MSAA already covers geometry edges and TAA
+; the shader aliasing FXAA was nominally there for.
+anti_aliasing/quality/screen_space_aa=0
+; TAA on, matching the capture viewport: it is the only one of the three that
+; resolves specular sparkle on water and sub-pixel tree canopies.
+anti_aliasing/quality/use_taa=true
+; 4 = 16x. The terrain is viewed at extreme grazing angles from every shot
+; preset, which is exactly the case anisotropic filtering exists for; 8x was
+; still visibly smearing the plains towards the horizon.
+textures/default_filters/anisotropic_filtering_level=4

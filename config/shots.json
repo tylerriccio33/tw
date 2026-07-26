@@ -1,7 +1,15 @@
 {
   "_comment": "Named camera presets. Every preset is rendered on `make shot` and diffed against shots/golden/. `overview` is the primary composition check; the others exist so a change that fixes one framing but breaks another is visible immediately.",
 
-  "resolution": [1920, 1080],
+  "_resolution_comment": "1440p rather than 1080p: at 1080p a tree canopy at overview distance is a handful of pixels and the 4K ground textures are minified past the point where any of the Phase 2 detiling/mipmap work is visible, so review renders could not show whether those changes had landed. Raising this scales render cost with pixel count, and golden PNGs change size - `make diff` refuses to compare mismatched sizes, so golden has to be re-accepted after a change here.",
+  "resolution": [2560, 1440],
+
+  "_anti_aliasing_comment": "Applied to the capture SubViewport in tools/shoot.gd, NOT via project.godot - the settings under rendering/anti_aliasing/quality/ there govern the 128x128 window, not the offscreen viewport these shots come from. msaa_3d is off|2x|4x|8x (spelled out rather than Godot's enum ints, where 2 confusingly means 4x). screen_space_aa is off|fxaa: FXAA is a blur that cannot tell an edge from a texture, and with MSAA covering geometry edges and TAA covering shader aliasing it has nothing left to fix here except detail - hence off by default, but wired up so it can be switched on and compared.",
+  "anti_aliasing": {
+    "msaa_3d": "8x",
+    "use_taa": true,
+    "screen_space_aa": "off"
+  },
 
   "presets": [
     {

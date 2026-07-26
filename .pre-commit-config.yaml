@@ -29,7 +29,7 @@ repos:
     hooks:
       - id: pyrefly
         name: pyrefly
-        entry: uv run --with pyrefly --with pillow --with numpy pyrefly check tools
+        entry: uv run --with pyrefly --with pillow --with numpy --with scipy pyrefly check tools
         language: system
         files: \.py$
         pass_filenames: false

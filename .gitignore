@@ -10,6 +10,9 @@
 # Vendored ambientCG PBR textures - run `make textures`
 /assets/textures/
 
+# Vendored Poly Haven CC0 tree textures - run `make foliage`
+/assets/foliage/
+
 # Terrain3D region data. The terrain is regenerated from config/world.json on
 # every run and never saved, so this is scratch.
 /data/

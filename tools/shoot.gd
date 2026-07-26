@@ -20,7 +20,31 @@ const OUT_DIR := "res://shots/current"
 ## Frames to render before capturing. Shadow atlases, sky and the Terrain3D
 ## clipmap all need a few frames to settle; capturing immediately yields a
 ## half-lit frame that differs run to run and destroys diff determinism.
-const SETTLE_FRAMES := 12
+##
+## Higher than the 12 that sufficed before SDFGI/TAA/volumetric fog: all three
+## are temporally accumulated and converge over tens of frames, not a handful.
+## SDFGI in particular propagates light one cascade per frame.
+##
+## Not higher still, though - frames stopped being cheap once the forest became
+## ~4500 alpha-scissored trees. Every extra frame is paid three times (once per
+## preset), so this is a deliberate compromise between GI convergence and an
+## iteration loop an agent can actually stay inside.
+const SETTLE_FRAMES := 24
+
+## Antialiasing modes, spelled as config strings rather than the raw enum ints
+## Godot stores. `msaa_3d=2` in project.godot means 4x, which is exactly the
+## kind of off-by-one an agent gets wrong silently; `"4x"` cannot be misread.
+const MSAA_MODES := {
+	"off": Viewport.MSAA_DISABLED,
+	"2x": Viewport.MSAA_2X,
+	"4x": Viewport.MSAA_4X,
+	"8x": Viewport.MSAA_8X,
+}
+
+const SCREEN_SPACE_AA_MODES := {
+	"off": Viewport.SCREEN_SPACE_AA_DISABLED,
+	"fxaa": Viewport.SCREEN_SPACE_AA_FXAA,
+}
 
 var _errors: PackedStringArray = []
 
@@ -114,6 +138,53 @@ func _apply_override(cfg: Dictionary, path: String, raw_value: String) -> void:
 	print("override: %s = %s (transient - world.json untouched)" % [path, value])
 
 
+## Antialiasing for the capture viewport, from shots.json's `anti_aliasing`.
+##
+## These have to be set here and cannot be left to project.godot's
+## `rendering/anti_aliasing/quality/*`: those apply to the root viewport - the
+## 128x128 window nobody looks at - while every pixel that reaches
+## shots/current/ comes from this SubViewport, which carries its own
+## independent msaa_3d/use_taa/screen_space_aa. Editing only the project
+## settings changes nothing about the output, which is a genuinely confusing
+## way to lose an afternoon.
+func _apply_anti_aliasing(viewport: SubViewport, shots_cfg: Dictionary) -> void:
+	var aa_value: Variant = shots_cfg.get("anti_aliasing")
+	if typeof(aa_value) != TYPE_DICTIONARY:
+		_fail("shots.json `anti_aliasing` must be an object")
+		return
+	var aa := aa_value as Dictionary
+
+	for key in ["msaa_3d", "use_taa", "screen_space_aa"]:
+		if not aa.has(key):
+			_fail("shots.json anti_aliasing is missing `%s`" % key)
+	if not _errors.is_empty():
+		return
+
+	var msaa := String(aa["msaa_3d"])
+	if not MSAA_MODES.has(msaa):
+		_fail(
+			(
+				"shots.json anti_aliasing.msaa_3d must be one of %s, got %s"
+				% [", ".join(PackedStringArray(MSAA_MODES.keys())), msaa]
+			)
+		)
+	var ssaa := String(aa["screen_space_aa"])
+	if not SCREEN_SPACE_AA_MODES.has(ssaa):
+		_fail(
+			(
+				"shots.json anti_aliasing.screen_space_aa must be one of %s, got %s"
+				% [", ".join(PackedStringArray(SCREEN_SPACE_AA_MODES.keys())), ssaa]
+			)
+		)
+	if not _errors.is_empty():
+		return
+
+	viewport.msaa_3d = MSAA_MODES[msaa]
+	viewport.use_taa = bool(aa["use_taa"])
+	viewport.screen_space_aa = SCREEN_SPACE_AA_MODES[ssaa]
+	print("anti-aliasing: msaa=%s taa=%s screen_space=%s" % [msaa, viewport.use_taa, ssaa])
+
+
 func _run() -> void:
 	var world_cfg := _load_json(WORLD_CONFIG)
 	var shots_cfg := _load_json(SHOTS_CONFIG)
@@ -146,8 +217,10 @@ func _run() -> void:
 	var viewport := SubViewport.new()
 	viewport.size = resolution
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	viewport.msaa_3d = Viewport.MSAA_4X
 	viewport.own_world_3d = true
+	_apply_anti_aliasing(viewport, shots_cfg)
+	if not _errors.is_empty():
+		return _finish()
 	add_child(viewport)
 
 	var world := WorldBuilder.new()
@@ -237,6 +310,13 @@ func _print_stats(s: Dictionary) -> void:
 			]
 		)
 	)
+	# Per-species too: a single `trees=` total looks healthy even when one
+	# species failed to load its atlas and its whole altitude band went bare.
+	var counts: Dictionary = s["tree_species"]
+	var parts := PackedStringArray()
+	for species in counts:
+		parts.append("%s=%d" % [species, counts[species]])
+	print("STATS species %s" % " ".join(parts))
 
 
 func _finish() -> void:

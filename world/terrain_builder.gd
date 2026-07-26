@@ -121,18 +121,13 @@ func build(cfg: Dictionary, seed_value: int) -> void:
 	# Sharper texture-to-texture transitions (default 0.5 reads as a soft,
 	# washed-out blend at campaign-map camera distances) and macro variation
 	# to break up the flat, repeating look within a single texture slot.
-	terrain.material.blend_sharpness = 0.85
-	# Blends a zoomed-in detail tiling of each texture over the base tiling at
-	# close range, so the source photo's actual surface detail (rock cracks,
-	# pebbles) survives instead of being minified into an illegible grey blur
-	# at campaign-map camera distances.
-	terrain.material.dual_scaling = true
 	terrain.material.enable_macro_variation = true
 	terrain.material.macro_variation_slope = 0.2
 	# Subtle tint variants (pure white = no-op, see lightweight.gdshader) so
 	# macro variation actually shows up instead of being a silent default.
 	terrain.material.macro_variation1 = Color(0.88, 0.86, 0.8)
 	terrain.material.macro_variation2 = Color(1.0, 0.97, 0.9)
+	_apply_material_params()
 
 	if terrain.region_size != region_size:
 		errors.append(
@@ -246,6 +241,43 @@ func _save_cached_regions(cache_dir: String) -> void:
 	terrain.data.save_directory(cache_dir)
 
 
+## Terrain3D's material exposes most of its interesting dials as *shader*
+## uniforms rather than as properties on Terrain3DMaterial, so they are
+## invisible to `make api` and can only be reached through set_shader_param().
+## Routing them through config makes them reachable from `make shot SET=`,
+## which is the only practical way to bisect a terrain-shading problem.
+##
+## The defaults these override are tuned for a first-person camera and are
+## actively wrong here: dual_scale_near/far default to 100/170 world units
+## while the overview camera sits 2450 units up, so the whole map renders
+## permanently past the "far" end and the feature only ever applies a tiling
+## reduction to whichever slot dual_scale_texture points at.
+func _apply_material_params() -> void:
+	var mat_cfg: Dictionary = _cfg["material"]
+	var mat := terrain.material
+
+	mat.blend_sharpness = float(mat_cfg["blend_sharpness"])
+	mat.dual_scaling = bool(mat_cfg["dual_scaling"])
+
+	# Distances are in world units and must straddle the camera distances the
+	# shot presets actually use, or dual scaling is a no-op in one direction.
+	mat.set_shader_param("dual_scale_near", float(mat_cfg["dual_scale_near"]))
+	mat.set_shader_param("dual_scale_far", float(mat_cfg["dual_scale_far"]))
+	mat.set_shader_param("dual_scale_reduction", float(mat_cfg["dual_scale_reduction"]))
+	mat.set_shader_param("dual_scale_texture", int(mat_cfg["dual_scale_texture"]))
+
+	# Below 1.0 biases sampling towards the sharper mip level; the far half of
+	# the map is otherwise averaged into flat colour before it reaches the eye.
+	mat.set_shader_param("mipmap_bias", float(mat_cfg["mipmap_bias"]))
+
+	# Steep faces get their UVs projected rather than taken from world XZ,
+	# which is what stops cliff rock smearing into vertical streaks. The
+	# threshold is a normal.y cutoff: lower means more of the slope qualifies.
+	mat.set_shader_param("enable_projection", bool(mat_cfg["enable_projection"]))
+	mat.set_shader_param("projection_threshold", float(mat_cfg["projection_threshold"]))
+	mat.set_shader_param("tri_scale_reduction", float(mat_cfg["tri_scale_reduction"]))
+
+
 ## Terrain3D ships debug overlays that isolate one input at a time. `grey`
 ## flattens albedo so only lighting/geometry remains; `control` colours each
 ## vertex by its texture id. Between them they localise almost any "why is the
@@ -345,6 +377,12 @@ func _load_packed_texture(slot: String, map_name: String) -> Texture2D:
 
 
 func _build_assets() -> void:
+	var mat_cfg: Dictionary = _cfg["material"]
+	var normal_depth := float(mat_cfg["normal_depth"])
+	var ao_strength := float(mat_cfg["ao_strength"])
+	var detiling_rotation := float(mat_cfg["detiling_rotation"])
+	var detiling_shift := float(mat_cfg["detiling_shift"])
+
 	var assets := Terrain3DAssets.new()
 	for id in [TEX_SAND, TEX_TAN, TEX_GRASS, TEX_ROCK, TEX_SNOW]:
 		var slot: String = PALETTE[id]
@@ -356,8 +394,13 @@ func _build_assets() -> void:
 		# Push normal-map depth and AO past their (flat, washed-out) defaults
 		# so the packed ambientCG maps actually read as bumpy/textured at
 		# campaign-map camera distances instead of near-flat color.
-		asset.normal_depth = 1.4
-		asset.ao_strength = 0.35
+		asset.normal_depth = normal_depth
+		asset.ao_strength = ao_strength
+		# Rotates and offsets the UVs per tile so a 1K photo scan stops reading
+		# as an obvious grid across a 4096-unit map. Left at Terrain3D's zero
+		# default this does nothing at all, which is what the plains looked like.
+		asset.detiling_rotation = detiling_rotation
+		asset.detiling_shift = detiling_shift
 		assets.set_texture(id, asset)
 	terrain.assets = assets
 

@@ -37,6 +37,24 @@
       "height": 520.0
     },
 
+    "material": {
+      "_comment": "Terrain3D shader uniforms, reachable only via set_shader_param (they do not appear in `make api`). Deliberately excluded from the region cache hash - none of these change the heightmap or control map, they only affect how it is shaded.",
+      "blend_sharpness": 0.85,
+      "normal_depth": 1.4,
+      "ao_strength": 0.35,
+      "detiling_rotation": 0.35,
+      "detiling_shift": 0.4,
+      "mipmap_bias": 0.7,
+      "enable_projection": true,
+      "projection_threshold": 0.62,
+      "tri_scale_reduction": 0.3,
+      "dual_scaling": true,
+      "dual_scale_texture": 3,
+      "dual_scale_near": 700.0,
+      "dual_scale_far": 2600.0,
+      "dual_scale_reduction": 0.3
+    },
+
     "palette": {
       "_comment": "Texture ids match the order of the assets built in terrain_builder. The reference map is arid: tan owns the plains and green is confined to wetter low ground, which is what stops it reading as generic green terrain.",
       "beach_height": 14.0,
@@ -54,7 +72,7 @@
 
   "forests": {
     "_comment": "Density mask decides where woods cluster; the height/slope gate then rejects surf and bare peaks. max_height is the treeline and should sit just under where snow starts blending (palette.snow_height - snow_blend), so forests stop before the mountains go white.",
-    "spacing": 22.0,
+    "spacing": 26.0,
     "jitter": 0.85,
     "density_frequency": 0.0011,
     "density_threshold": 0.50,
@@ -64,7 +82,25 @@
     "scale_min": 0.75,
     "scale_max": 1.65,
     "tree_height": 26.0,
-    "conifer_height_fraction": 0.55,
+    "conifer_height_fraction": 0.28,
+    "_species_comment": "Species split. conifer_height_fraction is where conifers take over as a fraction of the min..max_height band, blended over conifer_blend_fraction either side. Altitude alone is not enough - the slope gate rejects most high ground, so a pure height split leaves the conifer pool nearly empty - hence a separate low-frequency stand field that seeds conifer woods in the lowlands too. Raise conifer_stand_threshold for fewer, smaller stands.",
+    "conifer_blend_fraction": 0.1,
+    "conifer_stand_threshold": 0.56,
+    "conifer_stand_frequency": 0.0009,
+    "tint_jitter": 0.65,
+
+    "canopy": {
+      "_comment": "Trees are built from `<kind>_cards` single-leaf quads scattered over a canopy shell, each sampling one leaf cell that tools/fetch_foliage.py segmented out of the Poly Haven atlas. radius_fraction is the shell radius and leaf_fraction the size of one leaf, both as a fraction of tree_height; base_fraction is how far down the trunk the foliage starts, as a fraction of trunk height (below 1.0 buries the bare pole). Card counts are per-kind because a conifer spire needs many small twigs to read as solid while a broadleaf dome needs fewer, larger fronds. Raising cards is the direct dial for how dense a wood reads from above; it costs 2 triangles per card per tree.",
+      "conifer_cards": 34,
+      "conifer_radius_fraction": 0.30,
+      "conifer_leaf_fraction": 0.30,
+      "conifer_base_fraction": 0.35,
+      "broadleaf_cards": 22,
+      "broadleaf_radius_fraction": 0.42,
+      "broadleaf_leaf_fraction": 0.36,
+      "broadleaf_base_fraction": 0.85
+    },
+
     "trunk_color": [0.24, 0.18, 0.13],
     "conifer_color": [0.13, 0.24, 0.14],
     "broadleaf_color": [0.22, 0.34, 0.15]
@@ -120,7 +156,9 @@
     },
 
     "borders": {
-      "cell_size": 46.0,
+      "_comment": "Grid cell edges are chained into polylines and smoothed before drawing; without smoothing_passes the boundary is a hard axis-aligned staircase. cell_size was 46 with 6 passes and still stair-stepped visibly in ridge.png - a coarser grid plus more passes reads as a soft tapered ribbon instead.",
+      "cell_size": 64.0,
+      "smoothing_passes": 10,
       "width": 6.0,
       "y_offset": 2.8,
       "color": [0.85, 0.76, 0.30]
@@ -156,15 +194,83 @@
     "sun_energy": 1.35,
     "sun_color": [1.0, 0.95, 0.86],
     "sun_shadow_max_distance": 4200.0,
+    "sun_angular_distance": 0.53,
+    "shadow_bias": 0.35,
+    "shadow_normal_bias": 14.0,
     "ambient_energy": 0.7,
-    "sky_horizon_color": [0.72, 0.76, 0.82],
-    "sky_top_color": [0.36, 0.52, 0.74],
     "fog_enabled": true,
     "fog_color": [0.68, 0.72, 0.78],
     "fog_density": 0.00035,
-    "tonemap": "filmic",
-    "exposure": 1.0,
+    "tonemap": "agx",
+    "exposure": 1.15,
+    "tonemap_white": 2.5,
     "saturation": 1.15,
-    "contrast": 1.08
+    "contrast": 1.02,
+
+    "sky": {
+      "_comment": "PhysicalSkyMaterial. Turbidity is the haze dial - low is a clean alpine sky, high is humid and washed out. ground_color is what the lower hemisphere contributes to ambient, so it wants to resemble the terrain rather than being neutral grey.",
+      "rayleigh_coefficient": 2.0,
+      "rayleigh_color": [0.26, 0.41, 0.58],
+      "mie_coefficient": 0.005,
+      "mie_eccentricity": 0.8,
+      "mie_color": [0.63, 0.77, 0.92],
+      "turbidity": 3.0,
+      "sun_disk_scale": 1.0,
+      "ground_color": [0.42, 0.38, 0.31],
+      "energy_multiplier": 1.0
+    },
+
+    "sdfgi": {
+      "_comment": "min_cell_size is in world units and drives everything: cascade0 covers roughly min_cell_size * 64, each further cascade doubles it. At 8.0 with 6 cascades the last cascade spans ~16k units, comfortably past the 4096-unit map. Terrain detail below one cell is invisible to GI, which is fine - this is for large-scale bounce, not contact detail (that is SSAO/SSIL's job).",
+      "enabled": true,
+      "cascades": 4,
+      "min_cell_size": 8.0,
+      "y_scale": "50",
+      "use_occlusion": true,
+      "read_sky_light": true,
+      "bounce_feedback": 0.5,
+      "energy": 1.0,
+      "normal_bias": 1.1,
+      "probe_bias": 1.1
+    },
+
+    "ssao": {
+      "_comment": "radius is world units. The 1.0 Godot default is sized for a person-scale interior and does nothing here; this needs to span the folds between terrain vertices and the base of a city wall.",
+      "enabled": true,
+      "radius": 12.0,
+      "intensity": 2.0,
+      "power": 1.5,
+      "detail": 0.5,
+      "horizon": 0.06,
+      "sharpness": 0.98,
+      "light_affect": 0.1,
+      "ao_channel_affect": 0.0
+    },
+
+    "ssil": {
+      "_comment": "Coloured short-range bounce. Off by default: its effect is sub-pixel from the overview camera while it costs a full screen pass, and it was a measurable part of a 20-minute three-preset render. Turn it on for close work.",
+      "enabled": false,
+      "radius": 40.0,
+      "intensity": 1.0,
+      "sharpness": 0.98,
+      "normal_rejection": 1.0
+    },
+
+    "volumetric_fog": {
+      "_comment": "length must reach past the far ridges from the overview camera or the fog stops in mid-air partway across the map. density is ~150x below Godot's default because optical depth is density*distance and the volume being filled is kilometres deep, not room-sized: 0.002 over a 6000-unit length is optical depth 12, i.e. fully opaque grey. Measured usable range here is 0.00004 (imperceptible) to 0.00012 (washed out).",
+      "enabled": true,
+      "density": 0.00006,
+      "albedo": [0.82, 0.86, 0.92],
+      "emission": [0.0, 0.0, 0.0],
+      "emission_energy": 0.0,
+      "anisotropy": 0.35,
+      "length": 6000.0,
+      "detail_spread": 2.0,
+      "gi_inject": 1.0,
+      "ambient_inject": 0.4,
+      "sky_affect": 0.4,
+      "temporal_reprojection": true,
+      "temporal_reprojection_amount": 0.9
+    }
   }
 }

@@ -27,8 +27,12 @@ from PIL import Image, ImageEnhance
 ROOT = Path(__file__).resolve().parent.parent
 TEXTURES_DIR = ROOT / "assets" / "textures"
 
-RESOLUTION = "1K"
-RESOLUTION_LOWER = "1k"
+# 4K rather than 1K. assets/textures/ is gitignored and re-vendored by
+# `make textures`, so this costs download time and VRAM, not repo size. At 1K
+# a single tile had to cover so much of a 4096-unit map that the mip chain
+# averaged it to flat colour well before the overview camera's distance.
+RESOLUTION = "4K"
+RESOLUTION_LOWER = "4k"
 
 # slot name (matches terrain_builder.gd's PALETTE) -> (source, asset_id).
 MATERIALS = {
@@ -155,15 +159,23 @@ def main() -> None:
         slot_dir = TEXTURES_DIR / slot
         albedo_path = slot_dir / "albedo.png"
         normal_path = slot_dir / "normal_rough.png"
-        if albedo_path.is_file() and normal_path.is_file():
-            print(f"{slot} ({asset_id}): already present, skipping")
+        # Records what was vendored, so raising RESOLUTION actually re-fetches.
+        # A bare is_file() check cannot tell a 1K download from a 4K one, which
+        # made `make textures` silently no-op after a resolution change and
+        # left the render quietly running on the old maps.
+        stamp_path = slot_dir / f".vendored-{asset_id}-{RESOLUTION}"
+        if albedo_path.is_file() and normal_path.is_file() and stamp_path.is_file():
+            print(f"{slot} ({asset_id}): already present at {RESOLUTION}, skipping")
             continue
 
-        print(f"{slot} ({source}:{asset_id}):")
+        print(f"{slot} ({source}:{asset_id}) at {RESOLUTION}:")
         albedo, normal_rough = PACKERS[source](asset_id, slot)
         slot_dir.mkdir(parents=True, exist_ok=True)
         albedo.save(albedo_path)
         normal_rough.save(normal_path)
+        for stale in slot_dir.glob(".vendored-*"):
+            stale.unlink()
+        stamp_path.touch()
         print(
             f"  wrote {albedo_path.relative_to(ROOT)}, {normal_path.relative_to(ROOT)}"
         )
