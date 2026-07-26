@@ -14,9 +14,9 @@
   "presets": [
     {
       "name": "overview",
-      "_comment": "Matches the reference framing: high oblique, ~40 degrees down, wide enough to read the whole landmass silhouette.",
-      "position": [0.0, 2450.0, 3350.0],
-      "look_at": [0.0, 0.0, -350.0],
+      "_comment": "Matches the reference framing: low, grazing oblique (~13 degrees down), camera near ground level so terrain fills the frame and the sea reads as a thin band at the horizon.",
+      "position": [0.0, 1150.0, 2700.0],
+      "look_at": [0.0, 0.0, -500.0],
       "fov": 45.0
     },
     {
