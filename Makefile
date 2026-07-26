@@ -20,8 +20,8 @@ ci: ## Commit on a fresh branch, push, open a PR into main, and auto-merge it
 	fi
 	@echo "Staging everything"
 	@git add .
-# 	@echo "Running pre-commit"
-# 	@uvx prek run --all-files
+	@echo "Running pre-commit"
+	@uvx prek run --all-files
 	@echo "Committing with message: $(MSG)"
 	@git commit -m "$(MSG)"
 	@echo "Pushing to origin"
