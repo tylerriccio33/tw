@@ -5,7 +5,7 @@ shader_type canvas_item;
 // between two cells, so adjacent provinces read as bordered without any
 // actual border geometry.
 
-const int MAX_CITIES = 24;
+const int MAX_CITIES = 40;
 
 uniform vec2 city_pos[MAX_CITIES];
 uniform vec4 city_color[MAX_CITIES];

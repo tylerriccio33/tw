@@ -10,13 +10,57 @@ const ArmyLayer := preload("res://campaign/army_layer.gd")
 const ProvinceMap := preload("res://campaign/province_map.gd")
 const MAX_TURNS := 10
 
-# Map layout: cities are scattered procedurally (rejection-sampled, min
-# distance apart) rather than read off a generated 3D terrain. MAP_EXTENT
-# matches the Rust default (godot_api.rs) so nothing else has to change.
+# Map layout: MAP_EXTENT matches the Rust default (godot_api.rs) so nothing
+# else has to change.
 const MAP_EXTENT := 2048.0
-const CITY_COUNT := 8
-const CITY_MIN_DIST := 700.0
-const CITY_LAYOUT_SEED := 20260725
+
+# Very rough Europe: one province per modern country, plotted at each
+# country's approximate lat/lon centre and projected to map units by
+# _layout_europe_provinces(). This is a political sketch, not a real map -
+# borders are whatever the province_map shader's Voronoi cells work out to
+# be from these points, same as any other city layout.
+const EUROPE_COUNTRIES := [
+	{"name": "Iceland", "lat": 65.0, "lon": -18.0},
+	{"name": "Ireland", "lat": 53.4, "lon": -8.0},
+	{"name": "United Kingdom", "lat": 54.0, "lon": -2.5},
+	{"name": "Portugal", "lat": 39.5, "lon": -8.0},
+	{"name": "Spain", "lat": 40.0, "lon": -3.7},
+	{"name": "France", "lat": 46.5, "lon": 2.5},
+	{"name": "Belgium", "lat": 50.6, "lon": 4.5},
+	{"name": "Netherlands", "lat": 52.3, "lon": 5.5},
+	{"name": "Germany", "lat": 51.0, "lon": 10.0},
+	{"name": "Switzerland", "lat": 46.8, "lon": 8.2},
+	{"name": "Italy", "lat": 43.0, "lon": 12.5},
+	{"name": "Denmark", "lat": 56.0, "lon": 9.5},
+	{"name": "Norway", "lat": 61.0, "lon": 9.0},
+	{"name": "Sweden", "lat": 62.0, "lon": 15.0},
+	{"name": "Finland", "lat": 64.0, "lon": 26.0},
+	{"name": "Poland", "lat": 52.0, "lon": 19.0},
+	{"name": "Austria", "lat": 47.5, "lon": 14.5},
+	{"name": "Czechia", "lat": 49.8, "lon": 15.5},
+	{"name": "Slovakia", "lat": 48.7, "lon": 19.5},
+	{"name": "Hungary", "lat": 47.0, "lon": 19.5},
+	{"name": "Slovenia", "lat": 46.1, "lon": 14.8},
+	{"name": "Croatia", "lat": 45.1, "lon": 16.5},
+	{"name": "Bosnia", "lat": 44.0, "lon": 17.8},
+	{"name": "Serbia", "lat": 44.0, "lon": 21.0},
+	{"name": "Montenegro", "lat": 42.7, "lon": 19.3},
+	{"name": "Albania", "lat": 41.0, "lon": 20.0},
+	{"name": "North Macedonia", "lat": 41.6, "lon": 21.7},
+	{"name": "Greece", "lat": 39.0, "lon": 22.0},
+	{"name": "Bulgaria", "lat": 42.7, "lon": 25.3},
+	{"name": "Romania", "lat": 45.9, "lon": 24.9},
+	{"name": "Moldova", "lat": 47.0, "lon": 28.4},
+	{"name": "Ukraine", "lat": 49.0, "lon": 31.5},
+	{"name": "Belarus", "lat": 53.7, "lon": 28.0},
+	{"name": "Lithuania", "lat": 55.3, "lon": 23.9},
+	{"name": "Latvia", "lat": 56.9, "lon": 24.6},
+	{"name": "Estonia", "lat": 58.6, "lon": 25.0},
+]
+
+# Leaves a margin around the projected Europe blob so it doesn't touch the
+# edges of the pannable map.
+const EUROPE_LAYOUT_MARGIN := 0.85
 
 # Pan/zoom tuning. BASE_PPU is the pixels-per-world-unit at zoom 1.0, chosen
 # so the whole 2*MAP_EXTENT-tall map fits the 800px-tall viewport at
@@ -68,6 +112,7 @@ var city_markers: Dictionary = {}
 
 var _province_map: Node2D
 var _city_positions: PackedVector2Array = []
+var _city_names: PackedStringArray = []
 var _marker_positions: Dictionary = {}
 var _map_extent: float = 0.0
 var _cam_focus := Vector2.ZERO
@@ -103,29 +148,45 @@ const BUILDINGS := [
 const LOCKED_BUILDINGS := ["Castle", "Castle", "City"]
 
 
-## Rejection-sampled city layout: keeps picking random points in
-## [-MAP_EXTENT, MAP_EXTENT]^2 until `count` of them are placed, discarding
-## any candidate closer than CITY_MIN_DIST to one already kept. Seeded so a
-## given CITY_COUNT/CITY_MIN_DIST always lays out the same map.
-func _generate_city_positions(count: int) -> PackedVector2Array:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = CITY_LAYOUT_SEED
+## Projects EUROPE_COUNTRIES' lat/lon centres to map units with a simple
+## equirectangular projection (longitude scaled by cos(mean latitude) so
+## Europe isn't stretched east-west), fit to [-MAP_EXTENT, MAP_EXTENT]^2 with
+## EUROPE_LAYOUT_MARGIN of breathing room. Populates _city_names in the same
+## order as the returned positions. This is a rough political sketch, not a
+## real map projection - good enough for country-sized Voronoi provinces.
+func _layout_europe_provinces() -> PackedVector2Array:
+	var lat_min := INF
+	var lat_max := -INF
+	for c in EUROPE_COUNTRIES:
+		lat_min = min(lat_min, c["lat"])
+		lat_max = max(lat_max, c["lat"])
+	var lon_scale := cos(deg_to_rad((lat_min + lat_max) / 2.0))
+
+	var xs := PackedFloat64Array()
+	var ys := PackedFloat64Array()
+	for c in EUROPE_COUNTRIES:
+		xs.append(c["lon"] * lon_scale)
+		ys.append(-c["lat"])  # negate so higher latitude (north) plots higher on screen
+
+	var x_min := INF
+	var x_max := -INF
+	var y_min := INF
+	var y_max := -INF
+	for i in xs.size():
+		x_min = minf(x_min, xs[i])
+		x_max = maxf(x_max, xs[i])
+		y_min = minf(y_min, ys[i])
+		y_max = maxf(y_max, ys[i])
+	var span: float = maxf(x_max - x_min, y_max - y_min)
+	var scale: float = (MAP_EXTENT * 2.0 * EUROPE_LAYOUT_MARGIN) / span
+	var x_mid: float = (x_min + x_max) / 2.0
+	var y_mid: float = (y_min + y_max) / 2.0
 
 	var positions := PackedVector2Array()
-	var attempts := 0
-	var max_attempts := count * 500
-	while positions.size() < count and attempts < max_attempts:
-		attempts += 1
-		var candidate := Vector2(
-			rng.randf_range(-MAP_EXTENT, MAP_EXTENT), rng.randf_range(-MAP_EXTENT, MAP_EXTENT)
-		)
-		var ok := true
-		for p in positions:
-			if candidate.distance_to(p) < CITY_MIN_DIST:
-				ok = false
-				break
-		if ok:
-			positions.append(candidate)
+	_city_names = PackedStringArray()
+	for i in EUROPE_COUNTRIES.size():
+		positions.append(Vector2((xs[i] - x_mid) * scale, (ys[i] - y_mid) * scale))
+		_city_names.append(EUROPE_COUNTRIES[i]["name"])
 	return positions
 
 
@@ -152,7 +213,7 @@ func _ready() -> void:
 	_build_bottom_banner()
 
 	_map_extent = MAP_EXTENT
-	_city_positions = _generate_city_positions(CITY_COUNT)
+	_city_positions = _layout_europe_provinces()
 	if _city_positions.is_empty():
 		_fail_to_start("could not lay out any cities - nothing to play")
 		return
@@ -192,11 +253,11 @@ func _ready() -> void:
 	# off the edge of the world. Must be set before the game starts.
 	manager.set_map_extent(_map_extent)
 
-	# start_game_from_positions() emits turn_started synchronously, so
+	# start_game_from_named_positions() emits turn_started synchronously, so
 	# _refresh() can run before this function returns - city markers must
 	# already exist by then. _ensure_city_marker() below makes marker
 	# creation lazy so there is no ordering requirement between the two.
-	manager.start_game_from_positions(_city_positions, MAX_TURNS)
+	manager.start_game_from_named_positions(_city_names, _city_positions, MAX_TURNS)
 	_project_markers()
 	_refresh()
 	get_viewport().size_changed.connect(_on_viewport_resized)

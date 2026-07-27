@@ -6,7 +6,7 @@ extends Node2D
 ## city positions/owner colors into the shader each refresh.
 
 const SHADER := preload("res://campaign/province_map.gdshader")
-const MAX_CITIES := 24
+const MAX_CITIES := 40
 
 var _rect: ColorRect
 var _material: ShaderMaterial
