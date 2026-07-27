@@ -21,7 +21,6 @@ const MAX_TURNS := 10
 const CAM_HEIGHT := 750.0
 const CAM_BACK := 900.0
 const PAN_SPEED := 0.6  # fraction of map_extent per second, at zoom 1.0
-const EDGE_PAN_MARGIN := 24.0  # px from viewport edge that triggers edge-pan
 const ZOOM_STEP := 0.1  # per scroll-wheel notch
 const ZOOM_KEY_SPEED := 1.2  # zoom units/sec while Z/X is held
 const MIN_ZOOM := 0.6
@@ -236,21 +235,6 @@ func _process(delta: float) -> void:
 		move.x -= 1.0
 	if Input.is_key_pressed(KEY_D):
 		move.x += 1.0
-
-	# Edge-pan: cursor within EDGE_PAN_MARGIN px of a viewport edge pans same
-	# as the matching WASD key, so the mouse alone can scroll the map.
-	var viewport := get_viewport()
-	if viewport.get_window().has_focus():
-		var mouse_pos := viewport.get_mouse_position()
-		var size := viewport.get_visible_rect().size
-		if mouse_pos.x <= EDGE_PAN_MARGIN:
-			move.x -= 1.0
-		elif mouse_pos.x >= size.x - EDGE_PAN_MARGIN:
-			move.x += 1.0
-		if mouse_pos.y <= EDGE_PAN_MARGIN:
-			move.y -= 1.0
-		elif mouse_pos.y >= size.y - EDGE_PAN_MARGIN:
-			move.y += 1.0
 
 	var changed := false
 
