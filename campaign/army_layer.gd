@@ -10,9 +10,10 @@ extends Control
 ## Every rule of that lives in Rust (`Campaign::move_army`); this script only
 ## draws pieces and forwards orders.
 ##
-## The parent (campaign_ui.gd) owns the camera, the terrain and the manager and
-## hands them over in setup(); this node reports back through `log_message` and
-## `state_changed` rather than reaching up into its parent.
+## The parent (campaign_ui.gd) owns the manager and the world<->screen
+## projection (plain 2D pan/zoom, no camera object) and hands them over in
+## setup(); this node reports back through `log_message` and `state_changed`
+## rather than reaching up into its parent.
 
 signal log_message(text: String)
 ## Emitted when an order this node issued changed the campaign, so the parent
@@ -21,14 +22,13 @@ signal state_changed
 
 const PLAYER_FACTION := 0
 const MARKER_SIZE := Vector2(24, 24)
-const LIFT := 14.0  # world units above the terrain, so a piece isn't buried in a slope
 const MOVE_SECONDS := 0.7  # how long one army's move animation takes
 const RANGE_RING_POINTS := 48
 const RANGE_RING_COLOR := Color(1.0, 1.0, 1.0, 0.55)
 
 var _manager: Node
-var _camera: Camera3D
-var _terrain: Node
+var _world_to_screen: Callable
+var _screen_to_world: Callable
 var _faction_colors: Array[Color] = []
 
 var _range_ring: Line2D
@@ -43,10 +43,12 @@ var _selected_id: int = -1
 var _orders_locked := false
 
 
-func setup(manager: Node, camera: Camera3D, terrain: Node, faction_colors: Array[Color]) -> void:
+func setup(
+	manager: Node, world_to_screen: Callable, screen_to_world: Callable, faction_colors: Array[Color]
+) -> void:
 	_manager = manager
-	_camera = camera
-	_terrain = terrain
+	_world_to_screen = world_to_screen
+	_screen_to_world = screen_to_world
 	_faction_colors = faction_colors
 
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -77,44 +79,6 @@ func selected_army_id() -> int:
 	return _selected_id
 
 
-## Current drawn (x, z) ground position of every live army, keyed by id -
-## army_models.gd reads this to keep the 3D pieces in step with the same
-## tween-lagged position the 2D markers animate along.
-func ground_positions() -> Dictionary:
-	return _ground
-
-
-## ---------------------------------------------------------------------------
-## Geometry
-## ---------------------------------------------------------------------------
-
-
-## World-space point for a campaign (x, z) coordinate, lifted clear of the
-## ground so a piece on a slope still reads as standing on top of it.
-func _world_pos(ground: Vector2) -> Vector3:
-	var height := 0.0
-	if _terrain != null:
-		var sampled: float = _terrain.height_at(ground.x, ground.y)
-		if is_finite(sampled):
-			height = sampled
-	return Vector3(ground.x, height + LIFT, ground.y)
-
-
-## Inverse of the above: which campaign (x, z) a screen pixel points at, found
-## by intersecting the camera ray with the y=0 sea-level plane. Returns
-## Vector2.INF when the ray runs parallel to the plane or points at the sky.
-func _ground_point(screen: Vector2) -> Vector2:
-	var origin := _camera.project_ray_origin(screen)
-	var direction := _camera.project_ray_normal(screen)
-	if absf(direction.y) < 0.0001:
-		return Vector2.INF
-	var t := -origin.y / direction.y
-	if t <= 0.0:
-		return Vector2.INF
-	var hit := origin + direction * t
-	return Vector2(hit.x, hit.z)
-
-
 ## ---------------------------------------------------------------------------
 ## Markers
 ## ---------------------------------------------------------------------------
@@ -137,13 +101,10 @@ func _ensure_marker(army: Dictionary) -> Panel:
 
 func _marker_style(owner_id: int, selected: bool) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	# The knight model army_models.gd plants at this same ground point is now
-	# the actual visual; this ring is just a click target/selection halo at
-	# its feet, so the fill stays faint rather than blotting the model out.
 	var faction_color := _faction_colors[owner_id % _faction_colors.size()]
-	sb.bg_color = Color(faction_color, 0.25 if selected else 0.12)
+	sb.bg_color = Color(faction_color, 0.95 if selected else 0.85)
 	sb.set_border_width_all(3 if selected else 2)
-	sb.border_color = Color.WHITE if selected else faction_color
+	sb.border_color = Color.WHITE if selected else Color.BLACK
 	# Round it right off into a disc, so armies never read as city squares.
 	var radius := int(MARKER_SIZE.x / 2.0)
 	sb.corner_radius_top_left = radius
@@ -206,19 +167,13 @@ func _remove_marker(id: int) -> void:
 func project() -> void:
 	for id: int in _markers.keys():
 		var marker: Panel = _markers[id]
-		var world := _world_pos(_ground[id])
-		if _camera.is_position_behind(world):
-			marker.visible = false
-			continue
 		marker.visible = true
-		marker.position = _camera.unproject_position(world) - marker.size / 2.0
+		marker.position = _world_to_screen.call(_ground[id]) - marker.size / 2.0
 	_project_range_ring()
 
 
-## The selected army's remaining reach, as a world-space circle projected point
-## by point. Projecting the circle rather than drawing one on screen keeps it an
-## honest ellipse under the tilted camera, so what it covers really is where the
-## army can reach this turn.
+## The selected army's remaining reach, as a world-space circle projected
+## point by point.
 func _project_range_ring() -> void:
 	var radius := _army_field(_selected_id, "movement")
 	if _selected_id == -1 or not _ground.has(_selected_id) or radius <= 0.0:
@@ -229,11 +184,8 @@ func _project_range_ring() -> void:
 	var points := PackedVector2Array()
 	for i in RANGE_RING_POINTS:
 		var angle := TAU * float(i) / float(RANGE_RING_POINTS)
-		var world := _world_pos(centre + Vector2(cos(angle), sin(angle)) * radius)
-		if _camera.is_position_behind(world):
-			_range_ring.visible = false
-			return
-		points.append(_camera.unproject_position(world))
+		var world := centre + Vector2(cos(angle), sin(angle)) * radius
+		points.append(_world_to_screen.call(world))
 	_range_ring.points = points
 	_range_ring.visible = true
 
@@ -281,7 +233,7 @@ func select(army_id: int) -> void:
 
 ## Turns a screen click into a march order for the selected army.
 func order_selected_at_screen(screen_position: Vector2) -> void:
-	var ground := _ground_point(screen_position)
+	var ground: Vector2 = _screen_to_world.call(screen_position)
 	if ground != Vector2.INF:
 		order_selected_to(ground)
 
