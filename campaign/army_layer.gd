@@ -77,6 +77,13 @@ func selected_army_id() -> int:
 	return _selected_id
 
 
+## Current drawn (x, z) ground position of every live army, keyed by id -
+## army_models.gd reads this to keep the 3D pieces in step with the same
+## tween-lagged position the 2D markers animate along.
+func ground_positions() -> Dictionary:
+	return _ground
+
+
 ## ---------------------------------------------------------------------------
 ## Geometry
 ## ---------------------------------------------------------------------------
@@ -130,9 +137,13 @@ func _ensure_marker(army: Dictionary) -> Panel:
 
 func _marker_style(owner_id: int, selected: bool) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = _faction_colors[owner_id % _faction_colors.size()]
+	# The knight model army_models.gd plants at this same ground point is now
+	# the actual visual; this ring is just a click target/selection halo at
+	# its feet, so the fill stays faint rather than blotting the model out.
+	var faction_color := _faction_colors[owner_id % _faction_colors.size()]
+	sb.bg_color = Color(faction_color, 0.25 if selected else 0.12)
 	sb.set_border_width_all(3 if selected else 2)
-	sb.border_color = Color.WHITE if selected else Color(0.0, 0.0, 0.0, 0.7)
+	sb.border_color = Color.WHITE if selected else faction_color
 	# Round it right off into a disc, so armies never read as city squares.
 	var radius := int(MARKER_SIZE.x / 2.0)
 	sb.corner_radius_top_left = radius

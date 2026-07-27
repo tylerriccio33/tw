@@ -8,6 +8,7 @@ extends Node3D
 
 const WorldBuilder := preload("res://world/world_builder.gd")
 const ArmyLayer := preload("res://campaign/army_layer.gd")
+const ArmyModels := preload("res://campaign/army_models.gd")
 const WORLD_CONFIG := "res://config/world.json"
 const MAX_TURNS := 10
 
@@ -70,6 +71,7 @@ var _cam_zoom := 1.0
 var _selected_city_id: int = -1
 
 var _army_layer: Control
+var _army_models: Node3D
 var _ai_running := false
 
 # Bottom-banner widgets that get new data every _refresh(); built once in
@@ -165,6 +167,11 @@ func _ready() -> void:
 	_army_layer.setup(manager, _world_camera, world.terrain_builder, FACTION_COLORS)
 	_army_layer.log_message.connect(_append_log)
 	_army_layer.state_changed.connect(_refresh)
+
+	_army_models = ArmyModels.new()
+	_army_models.name = "ArmyModels"
+	add_child(_army_models)
+	_army_models.setup(manager, world.terrain_builder, FACTION_COLORS)
 	# City markers must not swallow the clicks that become move orders; their
 	# own child markers keep taking clicks regardless of the container filter.
 	cities_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -274,6 +281,9 @@ func _process(delta: float) -> void:
 	if changed:
 		_update_camera_transform()
 		_project_markers()
+
+	if _army_models != null:
+		_army_models.sync(manager.get_state(), _army_layer.ground_positions())
 
 
 func _unhandled_input(event: InputEvent) -> void:

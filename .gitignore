@@ -16,6 +16,9 @@
 # Vendored Quaternius CC0 building kit - run `make buildings`
 /assets/buildings/
 
+# Vendored Quaternius CC0 knight model - run `make armies`
+/assets/armies/
+
 # Cached itch.io download for tools/fetch_buildings.py (161MB zip; itch.io
 # gates it behind a pay-what-you-want click-through with no stable direct
 # URL, so unlike textures/foliage this cannot be curled unattended)
