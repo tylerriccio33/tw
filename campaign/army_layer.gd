@@ -44,7 +44,10 @@ var _orders_locked := false
 
 
 func setup(
-	manager: Node, world_to_screen: Callable, screen_to_world: Callable, faction_colors: Array[Color]
+	manager: Node,
+	world_to_screen: Callable,
+	screen_to_world: Callable,
+	faction_colors: Array[Color]
 ) -> void:
 	_manager = manager
 	_world_to_screen = world_to_screen

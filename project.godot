@@ -1,76 +1,32 @@
 ; Godot project configuration.
-;
-; The Terrain3D editor plugin is enabled here rather than through the editor
-; GUI so that a fresh clone renders correctly with no manual setup. The
-; GDExtension node classes register at runtime regardless of this line; the
-; plugin only adds editor tooling.
 
 config_version=5
 
 [application]
 
 config/name="tw"
-run/main_scene="res://tools/shoot.tscn"
+run/main_scene="res://campaign/campaign.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [display]
 
-; The OS window stays tiny and offscreen. All capture happens through a
-; SubViewport at full resolution, so iterating never hijacks the desktop.
-window/size/viewport_width=128
-window/size/viewport_height=128
+window/size/viewport_width=1280
+window/size/viewport_height=800
 
 [debug]
 
 ; A GDScript type-inference warning (e.g. `var x := some_untyped_call()`,
 ; which infers Variant rather than a real type) is otherwise silent until it
-; happens to misbehave at runtime, mid-render, three stages deep - promoting
-; it to a hard error lets `make check` (godot --check-only) catch it in
-; about a second instead of losing a full render cycle to it.
+; happens to misbehave at runtime - promoting it to a hard error lets
+; `make check` (godot --check-only) catch it in about a second instead of
+; losing a whole session to it.
 gdscript/warnings/treat_warnings_as_errors=true
-
-[importer_defaults]
-
-; Terrain3D textures (assets/textures/) need mipmaps for the far-distance LOD
-; blend it does between texture layers; Godot's texture import default is
-; mipmaps off, which otherwise has to be flipped by hand per-file every time
-; `make textures` re-vendors them into the (gitignored) assets/textures/ dir.
-texture={
-"mipmaps/generate": true
-}
-
-[editor_plugins]
-
-enabled=PackedStringArray("res://addons/terrain_3d/plugin.cfg")
 
 [rendering]
 
 renderer/rendering_method="forward_plus"
-lights_and_shadows/directional_shadow/size=8192
-lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
-; These govern the root viewport, which for the shot harness is only the
-; 128x128 window - shots/current/ comes from a SubViewport that carries its own
-; antialiasing, configured in config/shots.json and applied in tools/shoot.gd.
-; So what follows is really the setting for `make play` (live campaign map),
-; and it is kept in step with the capture path so the two do not diverge in
-; look. The one deliberate difference: previously 4x vs. the capture path's
-; 8x because play is realtime and the shots are not; now off entirely - TAA
-; below already resolves geometry edges as well as shader/specular aliasing,
-; so MSAA on top of it was doubling up AA cost for no visible gain, which
-; showed up as camera-pan frame drops.
-;
-; 0 = MSAA off (the enum is off/2x/4x/8x).
+; MSAA/FXAA off, TAA on: matches the campaign map's 2D province rendering
+; plus the 3D knight army layer, which is the only remaining 3D content.
 anti_aliasing/quality/msaa_3d=0
-; 0 = FXAA off. It was on (1) and does not survive contact with this scene: it
-; is a whole-screen blur with no knowledge of edges, so on terrain that is
-; almost entirely high-frequency photo texture it removes the detail the Phase 2
-; 4K/detiling work exists to add. MSAA already covers geometry edges and TAA
-; the shader aliasing FXAA was nominally there for.
 anti_aliasing/quality/screen_space_aa=0
-; TAA on, matching the capture viewport: it is the only one of the three that
-; resolves specular sparkle on water and sub-pixel tree canopies.
 anti_aliasing/quality/use_taa=true
-; 4 = 16x. The terrain is viewed at extreme grazing angles from every shot
-; preset, which is exactly the case anisotropic filtering exists for; 8x was
-; still visibly smearing the plains towards the horizon.
-textures/default_filters/anisotropic_filtering_level=4
