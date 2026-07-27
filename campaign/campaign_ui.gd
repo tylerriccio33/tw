@@ -1,13 +1,29 @@
 extends Node3D
 ## Thin GDScript glue: builds the real 3D world from config/world.json, sets
-## up a static tilted strategy-map camera over it, and drives the Rust CampaignManager
-## with the world's real city positions instead of a hardcoded square. City
-## markers/dropdown/end-turn button render state on every signal instead of
-## polling - unchanged from before this script also owned world/camera setup.
+## up a tilted strategy-map camera over it (WASD/edge pan, scroll zoom) and
+## drives the Rust CampaignManager with the world's real city positions
+## instead of a hardcoded square. City markers/dropdown/end-turn button
+## render state on every signal instead of polling - unchanged from before
+## this script also owned world/camera setup.
 
 const WorldBuilder := preload("res://world/world_builder.gd")
 const WORLD_CONFIG := "res://config/world.json"
 const MAX_TURNS := 10
+
+# Camera pan/zoom tuning, matching target-state.png's close-in TW campaign
+# framing (terrain/water fills the frame, no sky band) rather than a distant
+# island overview. WASD/edge-pan slides the ground-plane focus point the
+# camera looks at; the scroll wheel scales CAM_HEIGHT/CAM_BACK from that
+# focus. Height/back are absolute world units (not scaled by map_extent) so
+# zoom stays a local, ground-level view regardless of map size.
+const CAM_HEIGHT := 750.0
+const CAM_BACK := 900.0
+const PAN_SPEED := 0.6  # fraction of map_extent per second, at zoom 1.0
+const EDGE_PAN_MARGIN := 24.0  # px from viewport edge that triggers edge-pan
+const ZOOM_STEP := 0.1  # per scroll-wheel notch
+const ZOOM_KEY_SPEED := 1.2  # zoom units/sec while Z/X is held
+const MIN_ZOOM := 0.6
+const MAX_ZOOM := 2.2
 
 const FACTION_COLORS: Array[Color] = [
 	Color.INDIAN_RED, Color.CORNFLOWER_BLUE, Color.MEDIUM_SEA_GREEN, Color.GOLDENROD
@@ -41,6 +57,10 @@ var city_markers: Dictionary = {}
 var _world_camera: Camera3D
 var _city_centres: PackedVector3Array = []
 var _marker_positions: Dictionary = {}
+var _map_extent: float = 0.0
+var _cam_focus := Vector3.ZERO
+var _cam_zoom := 1.0
+var _selected_city_id: int = -1
 
 # Bottom-banner widgets that get new data every _refresh(); built once in
 # _build_bottom_banner() and then just written into on each turn/battle event.
@@ -109,17 +129,8 @@ func _ready() -> void:
 	_world_camera.fov = 45.0
 	_world_camera.near = 1.0
 	_world_camera.far = 20000.0
-	var map_extent: float = world.terrain_builder.map_extent
+	_map_extent = world.terrain_builder.map_extent
 	add_child(_world_camera)
-	# Tilted strategy-map angle (a la Total War) instead of a dead-vertical
-	# top-down shot: pulled back much further than it is elevated, so
-	# look_at() pitches the camera down at ~23 degrees. The previous 45-degree
-	# framing looked straight down into shadowed mountain crevices, which
-	# reads as black shadow-acne tearing across half the range; a shallow
-	# raking angle grazes past those faces instead and matches the reference.
-	_world_camera.global_position = Vector3(0.0, map_extent * 0.75, map_extent * 1.8)
-	_world_camera.look_at(Vector3.ZERO, Vector3.UP)
-	_world_camera.make_current()
 
 	world.set_camera(_world_camera)
 	if not world.errors.is_empty():
@@ -134,6 +145,18 @@ func _ready() -> void:
 	var positions := PackedVector2Array()
 	for c in _city_centres:
 		positions.append(Vector2(c.x, c.z))
+
+	# Close-in TW-style campaign framing (matches target-state.png): start
+	# centred over the cities' midpoint rather than the map origin, which can
+	# land anywhere from open ocean to a bare cliff depending on the seed.
+	var centre := Vector3.ZERO
+	for c in _city_centres:
+		centre += c
+	centre /= _city_centres.size()
+	_cam_focus = Vector3(centre.x, 0.0, centre.z)
+	_cam_zoom = 1.0
+	_update_camera_transform()
+	_world_camera.make_current()
 
 	manager.turn_started.connect(_on_turn_started)
 	manager.battle_resolved.connect(_on_battle_resolved)
@@ -150,9 +173,88 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_project_markers)
 
 
-## Screen position of every city, from its real 3D centre through the static
-## tilted camera. Computed once (plus on resize) since the camera never
-## moves - re-running every frame would be wasted work.
+## Recomputes the camera's world transform from _cam_focus/_cam_zoom, keeping
+## the fixed TW-style pitch. Called whenever pan or zoom actually changes the
+## camera, not every frame - the transform is otherwise unchanged.
+func _update_camera_transform() -> void:
+	_world_camera.global_position = _cam_focus + Vector3(0.0, CAM_HEIGHT, CAM_BACK) * _cam_zoom
+	_world_camera.look_at(_cam_focus, Vector3.UP)
+
+
+func _process(delta: float) -> void:
+	if _world_camera == null:
+		return
+	var move := Vector2.ZERO
+	if Input.is_key_pressed(KEY_W):
+		move.y -= 1.0
+	if Input.is_key_pressed(KEY_S):
+		move.y += 1.0
+	if Input.is_key_pressed(KEY_A):
+		move.x -= 1.0
+	if Input.is_key_pressed(KEY_D):
+		move.x += 1.0
+
+	# Edge-pan: cursor within EDGE_PAN_MARGIN px of a viewport edge pans same
+	# as the matching WASD key, so the mouse alone can scroll the map.
+	var viewport := get_viewport()
+	if viewport.get_window().has_focus():
+		var mouse_pos := viewport.get_mouse_position()
+		var size := viewport.get_visible_rect().size
+		if mouse_pos.x <= EDGE_PAN_MARGIN:
+			move.x -= 1.0
+		elif mouse_pos.x >= size.x - EDGE_PAN_MARGIN:
+			move.x += 1.0
+		if mouse_pos.y <= EDGE_PAN_MARGIN:
+			move.y -= 1.0
+		elif mouse_pos.y >= size.y - EDGE_PAN_MARGIN:
+			move.y += 1.0
+
+	var changed := false
+
+	if move != Vector2.ZERO:
+		move = move.normalized()
+		var forward := -_world_camera.global_transform.basis.z
+		forward.y = 0.0
+		forward = forward.normalized()
+		var right := _world_camera.global_transform.basis.x
+		right.y = 0.0
+		right = right.normalized()
+		var offset := (
+			(right * move.x + forward * -move.y) * PAN_SPEED * _map_extent * _cam_zoom * delta
+		)
+		_cam_focus = (_cam_focus + offset).limit_length(_map_extent)
+		changed = true
+
+	# Z zooms in, X zooms out - mirrors the scroll wheel but held-key smooth.
+	var zoom_delta := 0.0
+	if Input.is_key_pressed(KEY_Z):
+		zoom_delta -= 1.0
+	if Input.is_key_pressed(KEY_X):
+		zoom_delta += 1.0
+	if zoom_delta != 0.0:
+		_cam_zoom = clampf(_cam_zoom + zoom_delta * ZOOM_KEY_SPEED * delta, MIN_ZOOM, MAX_ZOOM)
+		changed = true
+
+	if changed:
+		_update_camera_transform()
+		_project_markers()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_cam_zoom = clampf(_cam_zoom - ZOOM_STEP, MIN_ZOOM, MAX_ZOOM)
+			_update_camera_transform()
+			_project_markers()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_cam_zoom = clampf(_cam_zoom + ZOOM_STEP, MIN_ZOOM, MAX_ZOOM)
+			_update_camera_transform()
+			_project_markers()
+
+
+## Screen position of every city, from its real 3D centre through the
+## current camera transform. Re-run whenever the camera pans/zooms (see
+## _process/_unhandled_input above) as well as once at startup and on resize.
 func _project_markers() -> void:
 	for i in _city_centres.size():
 		var pos := _world_camera.unproject_position(_city_centres[i])
@@ -172,6 +274,9 @@ func _ensure_city_marker(city: Dictionary) -> ColorRect:
 	var marker := ColorRect.new()
 	marker.size = Vector2(32, 32)
 	marker.position = pos - marker.size / 2.0
+	marker.mouse_filter = Control.MOUSE_FILTER_STOP
+	marker.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	marker.gui_input.connect(_on_city_marker_input.bind(id))
 	cities_root.add_child(marker)
 	city_markers[id] = marker
 
@@ -181,6 +286,22 @@ func _ensure_city_marker(city: Dictionary) -> ColorRect:
 	cities_root.add_child(label)
 
 	return marker
+
+
+## Clicking a city marker selects it: if it belongs to another faction it's
+## picked as the attack target (mirrored into the dropdown attack_city()
+## already reads from), otherwise it's just shown in the bottom info panel.
+func _on_city_marker_input(event: InputEvent, city_id: int) -> void:
+	if not (
+		event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT
+	):
+		return
+	_selected_city_id = city_id
+	for i in target_option.item_count:
+		if target_option.get_item_id(i) == city_id:
+			target_option.select(i)
+			break
+	_refresh_bottom_banner(manager.get_state())
 
 
 func _refresh() -> void:
@@ -595,10 +716,16 @@ func _format_stat(n: int) -> String:
 func _refresh_bottom_banner(state: Dictionary) -> void:
 	var current_faction: int = state["current_faction"]
 	var shown_city: Dictionary = {}
-	for city in state["cities"]:
-		if int(city["owner"]) == current_faction:
-			shown_city = city
-			break
+	if _selected_city_id != -1:
+		for city in state["cities"]:
+			if int(city["id"]) == _selected_city_id:
+				shown_city = city
+				break
+	if shown_city.is_empty():
+		for city in state["cities"]:
+			if int(city["owner"]) == current_faction:
+				shown_city = city
+				break
 	if shown_city.is_empty() and not state["cities"].is_empty():
 		shown_city = state["cities"][0]
 	if shown_city.is_empty():
