@@ -7,6 +7,7 @@ extends Node3D
 ## this script also owned world/camera setup.
 
 const WorldBuilder := preload("res://world/world_builder.gd")
+const ArmyLayer := preload("res://campaign/army_layer.gd")
 const WORLD_CONFIG := "res://config/world.json"
 const MAX_TURNS := 10
 
@@ -28,6 +29,12 @@ const MAX_ZOOM := 2.2
 const FACTION_COLORS: Array[Color] = [
 	Color.INDIAN_RED, Color.CORNFLOWER_BLUE, Color.MEDIUM_SEA_GREEN, Color.GOLDENROD
 ]
+
+# Armies. The player is faction 0; every other faction is played by the Rust
+# side's random AI when its turn comes round (see _run_ai_factions). The pieces
+# themselves live in campaign/army_layer.gd.
+const PLAYER_FACTION := 0
+const AI_STEP_SECONDS := 0.35  # pause between AI factions, so turns stay legible
 
 # Total War-style HUD palette, sampled off the reference reveal-stream
 # screenshot: a mid steel-blue header/tab color, cream parchment panels, and
@@ -61,6 +68,9 @@ var _map_extent: float = 0.0
 var _cam_focus := Vector3.ZERO
 var _cam_zoom := 1.0
 var _selected_city_id: int = -1
+
+var _army_layer: Control
+var _ai_running := false
 
 # Bottom-banner widgets that get new data every _refresh(); built once in
 # _build_bottom_banner() and then just written into on each turn/battle event.
@@ -149,6 +159,16 @@ func _ready() -> void:
 		_fail_to_start("set_camera failed: %s" % ", ".join(world.errors))
 		return
 
+	_army_layer = ArmyLayer.new()
+	_army_layer.name = "ArmyMarkers"
+	add_child(_army_layer)
+	_army_layer.setup(manager, _world_camera, world.terrain_builder, FACTION_COLORS)
+	_army_layer.log_message.connect(_append_log)
+	_army_layer.state_changed.connect(_refresh)
+	# City markers must not swallow the clicks that become move orders; their
+	# own child markers keep taking clicks regardless of the container filter.
+	cities_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 	_city_centres = world.city_centres()
 	if _city_centres.is_empty():
 		_fail_to_start("world built with 0 cities - nothing to play")
@@ -174,6 +194,10 @@ func _ready() -> void:
 	manager.battle_resolved.connect(_on_battle_resolved)
 	manager.game_over.connect(_on_game_over)
 	attack_button.pressed.connect(_on_attack_pressed)
+
+	# Armies are clamped to the real terrain extent, so a random AI walk can't
+	# march off the edge of the world. Must be set before the game starts.
+	manager.set_map_extent(_map_extent)
 
 	# start_game_from_positions() emits turn_started synchronously, so
 	# _refresh() can run before this function returns - city markers must
@@ -262,6 +286,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			_cam_zoom = clampf(_cam_zoom + ZOOM_STEP, MIN_ZOOM, MAX_ZOOM)
 			_update_camera_transform()
 			_project_markers()
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			# Right-click on open map = "march there", Total War style. The
+			# order goes to the model as raw world coordinates; how far the
+			# army actually gets is the model's call (see move_army).
+			_army_layer.order_selected_at_screen(event.position)
+		elif event.button_index == MOUSE_BUTTON_LEFT:
+			# A left-click that reached here missed every marker, so it's a
+			# deselect.
+			_army_layer.select(-1)
 
 
 ## Screen position of every city, from its real 3D centre through the
@@ -274,6 +307,8 @@ func _project_markers() -> void:
 		if city_markers.has(i):
 			var marker: ColorRect = city_markers[i]
 			marker.position = pos - marker.size / 2.0
+	if _army_layer != null:
+		_army_layer.project()
 
 
 func _ensure_city_marker(city: Dictionary) -> ColorRect:
@@ -333,8 +368,21 @@ func _refresh() -> void:
 				% [faction["name"], faction["money"], faction["cities"], alive_marker]
 			)
 		)
+	var selected_army: int = _army_layer.selected_army_id()
+	if selected_army != -1:
+		for army in state["armies"]:
+			if int(army["id"]) == selected_army:
+				lines.append(
+					(
+						"[%s] %d / %d move points"
+						% [army["name"], int(army["movement"]), int(army["max_movement"])]
+					)
+				)
+	elif int(state["current_faction"]) == PLAYER_FACTION:
+		lines.append("Click an army to select, right-click the map to march.")
 	status_label.text = "\n".join(lines)
 
+	_army_layer.sync(state)
 	_rebuild_target_options(state)
 	_refresh_bottom_banner(state)
 
@@ -368,7 +416,11 @@ func _on_attack_pressed() -> void:
 
 
 func _on_end_turn_pressed() -> void:
+	if _ai_running:
+		return
+	_army_layer.select(-1)
 	manager.end_turn()
+	_run_ai_factions()
 
 
 func _on_turn_started(faction_id: int, turn: int) -> void:
@@ -393,6 +445,25 @@ func _on_game_over(_winner_id: int) -> void:
 
 func _append_log(text: String) -> void:
 	log_label.append_text(text + "\n")
+
+
+## Plays every AI faction in sequence after the player ends their turn,
+## pausing between them so a whole round of army moves is watchable instead of
+## resolving in a single frame. Player orders are locked out for the duration.
+func _run_ai_factions() -> void:
+	_ai_running = true
+	_army_layer.set_orders_locked(true)
+	end_turn_button.disabled = true
+
+	while not manager.is_game_over() and manager.current_faction_id() != PLAYER_FACTION:
+		manager.run_ai_turn()
+		_refresh()
+		await get_tree().create_timer(ArmyLayer.MOVE_SECONDS + AI_STEP_SECONDS).timeout
+		manager.end_turn()
+
+	_ai_running = false
+	_army_layer.set_orders_locked(false)
+	_refresh()
 
 
 ## ---------------------------------------------------------------------------
@@ -753,4 +824,4 @@ func _refresh_bottom_banner(state: Dictionary) -> void:
 		_city_stat_value_labels[key].text = _format_stat(income * multiplier)
 
 	end_turn_button.text = "END TURN %d" % int(state["turn"])
-	end_turn_button.disabled = bool(state["game_over"])
+	end_turn_button.disabled = bool(state["game_over"]) or _ai_running

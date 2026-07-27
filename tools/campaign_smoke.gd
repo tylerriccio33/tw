@@ -11,6 +11,16 @@ extends SceneTree
 var turn_started_count := 0
 var battle_count := 0
 var game_over_fired := false
+var army_moved_count := 0
+var army_battle_count := 0
+
+
+func _on_army_moved(_id: int, _from: Vector2, _to: Vector2, _spent: float, _left: float) -> void:
+	army_moved_count += 1
+
+
+func _on_army_battle(_report: Dictionary) -> void:
+	army_battle_count += 1
 
 
 func _on_turn_started(_faction_id: int, _turn: int) -> void:
@@ -159,7 +169,101 @@ func _initialize() -> void:
 	)
 
 	manager2.free()
+
+	failures.append_array(_check_armies())
 	_finish(failures)
+
+
+## Exercises the army half of the API on a fresh game: every faction should
+## start with one garrisoned army, a player-issued move should spend points and
+## emit army_moved, an over-long order should still move (capped at the pool),
+## and a few AI turns should keep armies inside the map and eventually fight.
+func _check_armies() -> Array[String]:
+	var failures: Array[String] = []
+
+	var manager: Object = ClassDB.instantiate("CampaignManager")
+	if manager == null:
+		return ["armies: CampaignManager failed to instantiate"]
+
+	army_moved_count = 0
+	army_battle_count = 0
+	manager.army_moved.connect(_on_army_moved)
+	manager.army_battle.connect(_on_army_battle)
+
+	manager.set_map_extent(2048.0)
+	manager.start_default_game()
+
+	var state: Dictionary = manager.get_state()
+	if state["armies"].size() != 4:
+		failures.append("armies: expected one army per faction, got %d" % state["armies"].size())
+	for army in state["armies"]:
+		if int(army["garrisoned"]) == -1:
+			failures.append("armies: army %d should start garrisoned" % int(army["id"]))
+		if float(army["movement"]) != float(army["max_movement"]):
+			failures.append("armies: army %d should start with a full move pool" % int(army["id"]))
+
+	# The first faction's army marches somewhere harmless and should spend
+	# exactly the distance it covered.
+	var first: Dictionary = state["armies"][0]
+	var move_points: float = float(first["max_movement"])
+	var start := Vector2(float(first["x"]), float(first["y"]))
+	if not manager.move_army(int(first["id"]), start.x, start.y - 50.0):
+		failures.append("armies: a short move order was rejected")
+	var after: Dictionary = _find_army(manager.get_state(), int(first["id"]))
+	if after.is_empty():
+		failures.append("armies: army vanished after a harmless move")
+	elif not is_equal_approx(float(after["movement"]), move_points - 50.0):
+		failures.append(
+			(
+				"armies: a 50-unit move should cost 50 points, left %.2f of %.2f"
+				% [float(after["movement"]), move_points]
+			)
+		)
+	if army_moved_count == 0:
+		failures.append("armies: army_moved never fired")
+
+	# Ordering past the remaining pool must still move, capped, rather than
+	# failing outright.
+	if not manager.move_army(int(first["id"]), start.x, start.y - 99999.0):
+		failures.append("armies: an over-long move order should be capped, not rejected")
+	after = _find_army(manager.get_state(), int(first["id"]))
+	if not after.is_empty() and float(after["movement"]) > 0.001:
+		failures.append("armies: an over-long move should drain the whole pool")
+
+	# Let the random AI run the rest of the campaign out.
+	manager.end_turn()
+	var iterations := 0
+	while not manager.is_game_over() and iterations < 500:
+		manager.run_ai_turn()
+		manager.end_turn()
+		iterations += 1
+
+	var extent: float = float(manager.get_state()["map_extent"])
+	for army in manager.get_state()["armies"]:
+		if absf(float(army["x"])) > extent + 0.001 or absf(float(army["y"])) > extent + 0.001:
+			failures.append(
+				(
+					"armies: army %d wandered off the map to (%.1f, %.1f)"
+					% [int(army["id"]), float(army["x"]), float(army["y"])]
+				)
+			)
+
+	print(
+		(
+			"campaign smoke (armies): moves=%d battles=%d ai_turns=%d"
+			% [army_moved_count, army_battle_count, iterations]
+		)
+	)
+
+	manager.free()
+	return failures
+
+
+func _find_army(state: Dictionary, army_id: int) -> Dictionary:
+	for army in state["armies"]:
+		if int(army["id"]) == army_id:
+			return army
+	return {}
 
 
 func _finish(failures: Array[String]) -> void:
