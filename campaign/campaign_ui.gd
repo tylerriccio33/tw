@@ -108,6 +108,18 @@ func _fail_to_start(message: String) -> void:
 
 
 func _ready() -> void:
+	# project.godot pins the main window to 128x128 for the offscreen
+	# screenshot harness, so nothing there sets up UI scaling. Configure it
+	# here instead, scoped to the live campaign session only: canvas_items
+	# scaling rescales every Control (fonts, buttons, banner cards) by the
+	# ratio of the actual window size to this 1280x800 baseline - the
+	# resolution the HUD's pixel offsets/card sizes were laid out against -
+	# so the HUD grows instead of staying pinned to its original pixel size
+	# when the window is resized.
+	get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	get_window().content_scale_size = Vector2i(1280, 800)
+	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+
 	_build_bottom_banner()
 
 	var cfg := _load_world_config()
