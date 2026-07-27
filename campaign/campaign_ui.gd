@@ -1,73 +1,27 @@
 extends Node2D
-## Thin GDScript glue: procedurally scatters cities across a flat 2D map,
-## renders a province-per-city political background, sets up a pannable/
-## zoomable 2D "camera" over it (WASD/edge pan, scroll zoom) and drives the
-## Rust CampaignManager with those city positions. City markers/dropdown/
-## end-turn button render state on every signal instead of polling -
+## Thin GDScript glue: loads the region-polygon political map (province_map.gd,
+## a port of Thomas Holtvedt's grand-strategy-simple tutorial), derives one
+## city per map region for the Rust CampaignManager, and sets up a pannable/
+## zoomable 2D "camera" over it (WASD/edge pan, scroll zoom). City markers/
+## dropdown/end-turn button render state on every signal instead of polling -
 ## unchanged from before this script also owned world/camera setup.
 
 const ArmyLayer := preload("res://campaign/army_layer.gd")
 const ProvinceMap := preload("res://campaign/province_map.gd")
 const MAX_TURNS := 10
 
-# Map layout: MAP_EXTENT matches the Rust default (godot_api.rs) so nothing
-# else has to change.
-const MAP_EXTENT := 2048.0
+# The map is Thomas Holtvedt's grand-strategy-simple region bitmap (a
+# Scandinavia/Baltic political sketch), loaded at its native 100x100 pixel
+# size by province_map.gd. MAP_SCALE blows that up into world units so pan
+# speed/zoom/army movement feel the same as before the source image's own
+# tiny pixel grid would otherwise imply.
+const MAP_SCALE := 20.0
 
-# Very rough Europe: one province per modern country, plotted at each
-# country's approximate lat/lon centre and projected to map units by
-# _layout_europe_provinces(). This is a political sketch, not a real map -
-# borders are whatever the province_map shader's Voronoi cells work out to
-# be from these points, same as any other city layout.
-const EUROPE_COUNTRIES := [
-	{"name": "Iceland", "lat": 65.0, "lon": -18.0},
-	{"name": "Ireland", "lat": 53.4, "lon": -8.0},
-	{"name": "United Kingdom", "lat": 54.0, "lon": -2.5},
-	{"name": "Portugal", "lat": 39.5, "lon": -8.0},
-	{"name": "Spain", "lat": 40.0, "lon": -3.7},
-	{"name": "France", "lat": 46.5, "lon": 2.5},
-	{"name": "Belgium", "lat": 50.6, "lon": 4.5},
-	{"name": "Netherlands", "lat": 52.3, "lon": 5.5},
-	{"name": "Germany", "lat": 51.0, "lon": 10.0},
-	{"name": "Switzerland", "lat": 46.8, "lon": 8.2},
-	{"name": "Italy", "lat": 43.0, "lon": 12.5},
-	{"name": "Denmark", "lat": 56.0, "lon": 9.5},
-	{"name": "Norway", "lat": 61.0, "lon": 9.0},
-	{"name": "Sweden", "lat": 62.0, "lon": 15.0},
-	{"name": "Finland", "lat": 64.0, "lon": 26.0},
-	{"name": "Poland", "lat": 52.0, "lon": 19.0},
-	{"name": "Austria", "lat": 47.5, "lon": 14.5},
-	{"name": "Czechia", "lat": 49.8, "lon": 15.5},
-	{"name": "Slovakia", "lat": 48.7, "lon": 19.5},
-	{"name": "Hungary", "lat": 47.0, "lon": 19.5},
-	{"name": "Slovenia", "lat": 46.1, "lon": 14.8},
-	{"name": "Croatia", "lat": 45.1, "lon": 16.5},
-	{"name": "Bosnia", "lat": 44.0, "lon": 17.8},
-	{"name": "Serbia", "lat": 44.0, "lon": 21.0},
-	{"name": "Montenegro", "lat": 42.7, "lon": 19.3},
-	{"name": "Albania", "lat": 41.0, "lon": 20.0},
-	{"name": "North Macedonia", "lat": 41.6, "lon": 21.7},
-	{"name": "Greece", "lat": 39.0, "lon": 22.0},
-	{"name": "Bulgaria", "lat": 42.7, "lon": 25.3},
-	{"name": "Romania", "lat": 45.9, "lon": 24.9},
-	{"name": "Moldova", "lat": 47.0, "lon": 28.4},
-	{"name": "Ukraine", "lat": 49.0, "lon": 31.5},
-	{"name": "Belarus", "lat": 53.7, "lon": 28.0},
-	{"name": "Lithuania", "lat": 55.3, "lon": 23.9},
-	{"name": "Latvia", "lat": 56.9, "lon": 24.6},
-	{"name": "Estonia", "lat": 58.6, "lon": 25.0},
-]
-
-# Leaves a margin around the projected Europe blob so it doesn't touch the
-# edges of the pannable map.
-const EUROPE_LAYOUT_MARGIN := 0.85
-
-# Pan/zoom tuning. BASE_PPU is the pixels-per-world-unit at zoom 1.0, chosen
-# so the whole 2*MAP_EXTENT-tall map fits the 800px-tall viewport at
-# startup (800 / (2*MAP_EXTENT)) - a province map needs to read as a map on
-# first look, not a close-in crop of one or two provinces. The scroll
+# Pan/zoom tuning. _base_ppu is the pixels-per-world-unit at zoom 1.0, computed
+# at runtime from the map's actual size once province_map.gd has loaded it -
+# chosen so the whole map fits an 800px-tall viewport at startup. The scroll
 # wheel/Z/X keys zoom in from there.
-const BASE_PPU := 800.0 / (2.0 * MAP_EXTENT)
+var _base_ppu: float = 1.0
 const PAN_SPEED := 0.6  # fraction of map_extent per second, at zoom 1.0
 const ZOOM_STEP := 0.1  # per scroll-wheel notch
 const ZOOM_KEY_SPEED := 1.2  # zoom units/sec while Z/X is held
@@ -148,48 +102,6 @@ const BUILDINGS := [
 const LOCKED_BUILDINGS := ["Castle", "Castle", "City"]
 
 
-## Projects EUROPE_COUNTRIES' lat/lon centres to map units with a simple
-## equirectangular projection (longitude scaled by cos(mean latitude) so
-## Europe isn't stretched east-west), fit to [-MAP_EXTENT, MAP_EXTENT]^2 with
-## EUROPE_LAYOUT_MARGIN of breathing room. Populates _city_names in the same
-## order as the returned positions. This is a rough political sketch, not a
-## real map projection - good enough for country-sized Voronoi provinces.
-func _layout_europe_provinces() -> PackedVector2Array:
-	var lat_min := INF
-	var lat_max := -INF
-	for c in EUROPE_COUNTRIES:
-		lat_min = min(lat_min, c["lat"])
-		lat_max = max(lat_max, c["lat"])
-	var lon_scale := cos(deg_to_rad((lat_min + lat_max) / 2.0))
-
-	var xs := PackedFloat64Array()
-	var ys := PackedFloat64Array()
-	for c in EUROPE_COUNTRIES:
-		xs.append(c["lon"] * lon_scale)
-		ys.append(-c["lat"])  # negate so higher latitude (north) plots higher on screen
-
-	var x_min := INF
-	var x_max := -INF
-	var y_min := INF
-	var y_max := -INF
-	for i in xs.size():
-		x_min = minf(x_min, xs[i])
-		x_max = maxf(x_max, xs[i])
-		y_min = minf(y_min, ys[i])
-		y_max = maxf(y_max, ys[i])
-	var span: float = maxf(x_max - x_min, y_max - y_min)
-	var scale: float = (MAP_EXTENT * 2.0 * EUROPE_LAYOUT_MARGIN) / span
-	var x_mid: float = (x_min + x_max) / 2.0
-	var y_mid: float = (y_min + y_max) / 2.0
-
-	var positions := PackedVector2Array()
-	_city_names = PackedStringArray()
-	for i in EUROPE_COUNTRIES.size():
-		positions.append(Vector2((xs[i] - x_mid) * scale, (ys[i] - y_mid) * scale))
-		_city_names.append(EUROPE_COUNTRIES[i]["name"])
-	return positions
-
-
 func _fail_to_start(message: String) -> void:
 	printerr("error: ", message)
 	status_label.text = message
@@ -212,16 +124,31 @@ func _ready() -> void:
 
 	_build_bottom_banner()
 
-	_map_extent = MAP_EXTENT
-	_city_positions = _layout_europe_provinces()
-	if _city_positions.is_empty():
-		_fail_to_start("could not lay out any cities - nothing to play")
-		return
-
 	_province_map = ProvinceMap.new()
 	_province_map.name = "ProvinceMap"
 	world_layer.add_child(_province_map)
-	_province_map.setup(_map_extent)
+	_province_map.setup()
+	_province_map.region_clicked.connect(_on_region_clicked)
+
+	# Centre the source bitmap's top-left-origin pixel space on the world
+	# origin and blow it up by MAP_SCALE, so the rest of this script's
+	# pan/zoom/army-clamping math (which all assumes a map centred on
+	# [-_map_extent, _map_extent]) doesn't have to know the map is a bitmap.
+	var half_size: Vector2 = _province_map.map_size * MAP_SCALE / 2.0
+	_map_extent = maxf(half_size.x, half_size.y)
+	_province_map.position = -half_size
+	_province_map.scale = Vector2.ONE * MAP_SCALE
+	_base_ppu = 800.0 / (2.0 * _map_extent)
+
+	_city_names = PackedStringArray()
+	_city_positions = PackedVector2Array()
+	for region_name in _province_map.region_centers:
+		_city_names.append(region_name)
+		var local_pos: Vector2 = _province_map.region_centers[region_name]
+		_city_positions.append(local_pos * MAP_SCALE - half_size)
+	if _city_positions.is_empty():
+		_fail_to_start("could not lay out any cities - nothing to play")
+		return
 
 	_army_layer = ArmyLayer.new()
 	_army_layer.name = "ArmyMarkers"
@@ -282,7 +209,7 @@ func _ready() -> void:
 ## the size_changed wiring in _ready()), since --resolution/window resizes
 ## don't take effect inside the same frame that requests them.
 func _update_camera_transform() -> void:
-	var pixels_per_unit := BASE_PPU / _cam_zoom
+	var pixels_per_unit := _base_ppu / _cam_zoom
 	var viewport_center := get_viewport_rect().size / 2.0
 	world_layer.position = viewport_center - _cam_focus * pixels_per_unit
 	world_layer.scale = Vector2.ONE * pixels_per_unit
@@ -418,18 +345,28 @@ func _on_city_marker_input(event: InputEvent, city_id: int) -> void:
 	_refresh_bottom_banner(manager.get_state())
 
 
+## Clicking a province polygon on the map mirrors _on_city_marker_input:
+## selects the same-named city so the bottom banner and attack dropdown show
+## it, exactly as clicking that city's marker would.
+func _on_region_clicked(region_name: String) -> void:
+	var state: Dictionary = manager.get_state()
+	for city in state["cities"]:
+		if String(city["name"]) == region_name:
+			_selected_city_id = int(city["id"])
+			for i in target_option.item_count:
+				if target_option.get_item_id(i) == _selected_city_id:
+					target_option.select(i)
+					break
+			_refresh_bottom_banner(state)
+			return
+
+
 func _refresh() -> void:
 	var state: Dictionary = manager.get_state()
 
-	var province_positions := PackedVector2Array()
-	var province_colors := PackedColorArray()
 	for city in state["cities"]:
 		var marker: ColorRect = _ensure_city_marker(city)
-		var owner_color: Color = FACTION_COLORS[int(city["owner"]) % FACTION_COLORS.size()]
-		marker.color = owner_color
-		province_positions.append(Vector2(city["x"], city["y"]))
-		province_colors.append(owner_color)
-	_province_map.update_cities(province_positions, province_colors)
+		marker.color = FACTION_COLORS[int(city["owner"]) % FACTION_COLORS.size()]
 
 	var lines: Array[String] = []
 	lines.append("Turn %d / %d" % [state["turn"], state["max_turns"]])
