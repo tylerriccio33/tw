@@ -74,13 +74,22 @@ func build(cfg: Dictionary, seed_value: int, map_extent: float, terrain_builder:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value + 606
 
-	# One transform bucket per species, so each species is one MultiMesh and
-	# therefore one draw call. Colours ride alongside in the same order.
+	# Transforms are bucketed per species *and* per grid cell (buckets[species]
+	# is a Dictionary keyed by cell Vector2i) rather than one flat array per
+	# species. A single MultiMesh spanning the whole map is either entirely
+	# on-screen or entirely off - Godot's visibility_range culls a node by its
+	# own AABB, so it cannot drop just the far side of one giant mesh. Splitting
+	# into cells gives each cell its own small AABB, so visibility_range_end
+	# below actually stops distant cells from being drawn (or even traversed by
+	# the renderer) as the camera pans/zooms, instead of paying for all ~4500
+	# trees every frame regardless of where the camera is looking. Colours ride
+	# alongside in the same per-cell arrays.
+	var lod_cell_size := float(cfg["lod_cell_size"])
 	var buckets: Dictionary = {}
 	var tints: Dictionary = {}
 	for species in CONIFER_SPECIES + BROADLEAF_SPECIES:
-		buckets[species] = ([] as Array[Transform3D])
-		tints[species] = ([] as Array[Color])
+		buckets[species] = {}
+		tints[species] = {}
 
 	var conifer_line := min_height + (max_height - min_height) * conifer_fraction
 	var conifer_band := (max_height - min_height) * conifer_blend
@@ -138,11 +147,18 @@ func build(cfg: Dictionary, seed_value: int, map_extent: float, terrain_builder:
 			)
 			var pool: Array = CONIFER_SPECIES if rng.randf() < conifer_chance else BROADLEAF_SPECIES
 			var species: String = pool[rng.randi_range(0, pool.size() - 1)]
-			(buckets[species] as Array[Transform3D]).append(xform)
+
+			var cell := Vector2i(int(floor(x / lod_cell_size)), int(floor(z / lod_cell_size)))
+			var species_cells: Dictionary = buckets[species]
+			var species_tints: Dictionary = tints[species]
+			if not species_cells.has(cell):
+				species_cells[cell] = ([] as Array[Transform3D])
+				species_tints[cell] = ([] as Array[Color])
+			(species_cells[cell] as Array[Transform3D]).append(xform)
 			# Per-instance tint, multiplied over the photo albedo. Without it
 			# every tree of a species is the same colour and a wood reads as
 			# one stamp repeated, which no amount of silhouette variation hides.
-			(tints[species] as Array[Color]).append(
+			(species_tints[cell] as Array[Color]).append(
 				Color.WHITE.lerp(
 					Color(
 						rng.randf_range(0.78, 1.12),
@@ -167,15 +183,31 @@ func build(cfg: Dictionary, seed_value: int, map_extent: float, terrain_builder:
 		return
 
 	var tree_height := float(cfg["tree_height"])
+	var view_distance := float(cfg["view_distance"])
+	var view_distance_margin := float(cfg["view_distance_margin"])
 	for species in buckets:
-		var transforms: Array[Transform3D] = buckets[species]
-		if transforms.is_empty():
+		var species_cells: Dictionary = buckets[species]
+		if species_cells.is_empty():
 			continue
 		var mesh := _make_tree(species, tree_height, cfg)
 		if mesh == null:
 			return
-		_add_multimesh(species, mesh, transforms, tints[species])
-		_species_counts[species] = transforms.size()
+		var species_count := 0
+		for cell in species_cells:
+			var transforms: Array[Transform3D] = species_cells[cell]
+			if transforms.is_empty():
+				continue
+			var colors: Array[Color] = tints[species][cell]
+			_add_multimesh(
+				"%s_%d_%d" % [species, cell.x, cell.y],
+				mesh,
+				transforms,
+				colors,
+				view_distance,
+				view_distance_margin
+			)
+			species_count += transforms.size()
+		_species_counts[species] = species_count
 
 	if not errors.is_empty():
 		return
@@ -191,7 +223,12 @@ func stats() -> Dictionary:
 
 
 func _add_multimesh(
-	node_name: String, mesh: Mesh, transforms: Array[Transform3D], colors: Array[Color]
+	node_name: String,
+	mesh: Mesh,
+	transforms: Array[Transform3D],
+	colors: Array[Color],
+	view_distance: float,
+	view_distance_margin: float
 ) -> void:
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
@@ -212,6 +249,15 @@ func _add_multimesh(
 	# Canopy cards are thin and double-sided; without this they wink out as
 	# the shadow pass culls them edge-on and the wood loses its ground shadow.
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_DOUBLE_SIDED
+	# Each node is one grid cell's worth of one species (see the bucket comment
+	# in build()), so this AABB is small enough that visibility_range_end
+	# actually drops whole cells past view_distance instead of an all-or-
+	# nothing decision over the entire forest. The margin cross-fades the cut
+	# so cells don't hard-pop as the camera pans/zooms past the threshold.
+	if view_distance > 0.0:
+		node.visibility_range_end = view_distance
+		node.visibility_range_end_margin = view_distance_margin
+		node.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 	add_child(node)
 
 

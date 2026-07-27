@@ -80,6 +80,10 @@
     "conifer_stand_threshold": 0.56,
     "conifer_stand_frequency": 0.0009,
     "tint_jitter": 0.65,
+    "_lod_comment": "Trees are grouped into lod_cell_size x lod_cell_size grid cells per species (one MultiMesh draw call per cell instead of per species), so visibility_range_end can drop whole cells once they're farther than view_distance from the camera rather than paying to draw all ~4500 trees regardless of where the camera is looking. view_distance_margin cross-fades the cut so cells don't hard-pop; set view_distance to 0 to disable culling entirely.",
+    "lod_cell_size": 512.0,
+    "view_distance": 3400.0,
+    "view_distance_margin": 500.0,
     "canopy": {
       "_comment": "Trees are built from `<kind>_cards` single-leaf quads scattered over a canopy shell, each sampling one leaf cell that tools/fetch_foliage.py segmented out of the Poly Haven atlas. radius_fraction is the shell radius and leaf_fraction the size of one leaf, both as a fraction of tree_height; base_fraction is how far down the trunk the foliage starts, as a fraction of trunk height (below 1.0 buries the bare pole). Card counts are per-kind because a conifer spire needs many small twigs to read as solid while a broadleaf dome needs fewer, larger fronds. Raising cards is the direct dial for how dense a wood reads from above; it costs 2 triangles per card per tree.",
       "conifer_cards": 34,
@@ -264,7 +268,7 @@
     },
     "sdfgi": {
       "_comment": "min_cell_size is in world units and drives everything: cascade0 covers roughly min_cell_size * 64, each further cascade doubles it. At 8.0 with 6 cascades the last cascade spans ~16k units, comfortably past the 4096-unit map. Terrain detail below one cell is invisible to GI, which is fine - this is for large-scale bounce, not contact detail (that is SSAO/SSIL's job).",
-      "enabled": true,
+      "enabled": false,
       "cascades": 4,
       "min_cell_size": 8.0,
       "y_scale": "50",
