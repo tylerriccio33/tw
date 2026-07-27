@@ -256,10 +256,17 @@ func _on_marker_input(event: InputEvent, army_id: int) -> void:
 	if not (event is InputEventMouseButton and event.pressed):
 		return
 	if event.button_index == MOUSE_BUTTON_LEFT:
-		select(army_id)
+		# Left-clicking our own army selects it; left-clicking an enemy piece
+		# while we have an army selected is a move order onto that ground
+		# (which resolves the same as any other march), otherwise it's just
+		# an (ignored) selection of an uncommandable piece.
+		if _selected_id != -1 and _ground.has(army_id):
+			order_selected_to(_ground[army_id])
+		else:
+			select(army_id)
 	elif event.button_index == MOUSE_BUTTON_RIGHT and _ground.has(army_id):
-		# Right-clicking an enemy piece is an attack order: march onto it and
-		# let the arrival resolve into a field battle.
+		# Right-clicking any piece is an attack order: march onto it and let
+		# the arrival resolve into a field battle.
 		order_selected_to(_ground[army_id])
 
 

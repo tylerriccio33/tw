@@ -280,15 +280,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			_cam_zoom = clampf(_cam_zoom + ZOOM_STEP, MIN_ZOOM, MAX_ZOOM)
 			_update_camera_transform()
 			_project_markers()
-		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			# Right-click on open map = "march there", Total War style. The
-			# order goes to the model as raw world coordinates; how far the
-			# army actually gets is the model's call (see move_army).
-			_army_layer.order_selected_at_screen(event.position)
 		elif event.button_index == MOUSE_BUTTON_LEFT:
-			# A left-click that reached here missed every marker, so it's a
-			# deselect.
-			_army_layer.select(-1)
+			# Left-click on open map = "march there". A left-click that
+			# reached here missed every marker; if an army is selected this
+			# is a move order, otherwise it's a deselect.
+			if _army_layer.selected_army_id() != -1:
+				_army_layer.order_selected_at_screen(event.position)
+			else:
+				_army_layer.select(-1)
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			# Right-click on open map does nothing; right-click only attacks
+			# via the marker handler in army_layer._on_marker_input.
+			pass
 
 
 ## Screen position of every city, from its real 3D centre through the
@@ -373,7 +376,9 @@ func _refresh() -> void:
 					)
 				)
 	elif int(state["current_faction"]) == PLAYER_FACTION:
-		lines.append("Click an army to select, right-click the map to march.")
+		lines.append(
+			"Click an army to select, left-click the map to march, right-click an enemy to attack."
+		)
 	status_label.text = "\n".join(lines)
 
 	_army_layer.sync(state)
