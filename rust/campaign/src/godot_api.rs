@@ -206,6 +206,63 @@ impl CampaignManager {
         self.signals().turn_started().emit(faction_id, turn);
     }
 
+    /// Same as `start_game_from_positions`, but takes a real name per city
+    /// (`names[i]` for `city_positions[i]`) instead of the generic "City N" -
+    /// used for the curated Europe province layout, where each point is a
+    /// named country rather than a random scatter. `names` and
+    /// `city_positions` must be the same length; ownership is still assigned
+    /// round-robin (`owner = index % num_factions`) across up to 4 factions.
+    #[func]
+    fn start_game_from_named_positions(
+        &mut self,
+        names: PackedStringArray,
+        city_positions: PackedVector2Array,
+        max_turns: i64,
+    ) {
+        const ROSTER: [&str; 4] = ["Red", "Blue", "Green", "Yellow"];
+
+        let num_cities = city_positions.len();
+        if num_cities == 0 || names.len() != num_cities {
+            self.campaign = None;
+            return;
+        }
+        let num_factions = num_cities.clamp(1, 4);
+
+        let factions: Vec<Faction> = (0..num_factions)
+            .map(|i| Faction {
+                id: i as u32,
+                name: ROSTER[i].into(),
+                money: 100,
+                alive: true,
+            })
+            .collect();
+
+        let cities: Vec<City> = city_positions
+            .as_slice()
+            .iter()
+            .zip(names.as_slice().iter())
+            .enumerate()
+            .map(|(i, (v, name))| City {
+                id: i as u32,
+                name: name.to_string(),
+                income: 20,
+                position: (v.x, v.y),
+                owner: (i % num_factions) as u32,
+            })
+            .collect();
+
+        let mut campaign =
+            Campaign::new(factions, cities, max_turns as u32).with_map_extent(self.map_extent);
+        Self::spawn_starting_armies(&mut campaign);
+        self.campaign = Some(campaign);
+
+        let (faction_id, turn) = {
+            let c = self.campaign.as_ref().unwrap();
+            (c.current_faction_id() as i64, c.turn as i64)
+        };
+        self.signals().turn_started().emit(faction_id, turn);
+    }
+
     #[func]
     fn current_faction_id(&self) -> i64 {
         self.campaign

@@ -1,25 +1,27 @@
-extends Node3D
-## Thin GDScript glue: builds the real 3D world from config/world.json, sets
-## up a tilted strategy-map camera over it (WASD/edge pan, scroll zoom) and
-## drives the Rust CampaignManager with the world's real city positions
-## instead of a hardcoded square. City markers/dropdown/end-turn button
-## render state on every signal instead of polling - unchanged from before
-## this script also owned world/camera setup.
+extends Node2D
+## Thin GDScript glue: loads the region-polygon political map (province_map.gd,
+## a port of Thomas Holtvedt's grand-strategy-simple tutorial), derives one
+## city per map region for the Rust CampaignManager, and sets up a pannable/
+## zoomable 2D "camera" over it (WASD/edge pan, scroll zoom). City markers/
+## dropdown/end-turn button render state on every signal instead of polling -
+## unchanged from before this script also owned world/camera setup.
 
-const WorldBuilder := preload("res://world/world_builder.gd")
 const ArmyLayer := preload("res://campaign/army_layer.gd")
-const ArmyModels := preload("res://campaign/army_models.gd")
-const WORLD_CONFIG := "res://config/world.json"
+const ProvinceMap := preload("res://campaign/province_map.gd")
 const MAX_TURNS := 10
 
-# Camera pan/zoom tuning, matching target-state.png's close-in TW campaign
-# framing (terrain/water fills the frame, no sky band) rather than a distant
-# island overview. WASD/edge-pan slides the ground-plane focus point the
-# camera looks at; the scroll wheel scales CAM_HEIGHT/CAM_BACK from that
-# focus. Height/back are absolute world units (not scaled by map_extent) so
-# zoom stays a local, ground-level view regardless of map size.
-const CAM_HEIGHT := 750.0
-const CAM_BACK := 900.0
+# The map is Thomas Holtvedt's grand-strategy-simple region bitmap (a
+# Scandinavia/Baltic political sketch), loaded at its native 100x100 pixel
+# size by province_map.gd. MAP_SCALE blows that up into world units so pan
+# speed/zoom/army movement feel the same as before the source image's own
+# tiny pixel grid would otherwise imply.
+const MAP_SCALE := 20.0
+
+# Pan/zoom tuning. _base_ppu is the pixels-per-world-unit at zoom 1.0, computed
+# at runtime from the map's actual size once province_map.gd has loaded it -
+# chosen so the whole map fits an 800px-tall viewport at startup. The scroll
+# wheel/Z/X keys zoom in from there.
+var _base_ppu: float = 1.0
 const PAN_SPEED := 0.6  # fraction of map_extent per second, at zoom 1.0
 const ZOOM_STEP := 0.1  # per scroll-wheel notch
 const ZOOM_KEY_SPEED := 1.2  # zoom units/sec while Z/X is held
@@ -50,6 +52,7 @@ const FONT_SEMIBOLD := preload("res://assets/fonts/Baloo2-SemiBold.ttf")
 const FONT_BOLD := preload("res://assets/fonts/Baloo2-Bold.ttf")
 
 @onready var manager: Node = $CampaignManager
+@onready var world_layer: Node2D = $WorldLayer
 @onready var status_label: Label = $UI/StatusLabel
 @onready var log_label: RichTextLabel = $UI/LogLabel
 @onready var target_option: OptionButton = $UI/Controls/TargetOption
@@ -61,16 +64,16 @@ var end_turn_button: Button
 
 var city_markers: Dictionary = {}
 
-var _world_camera: Camera3D
-var _city_centres: PackedVector3Array = []
+var _province_map: Node2D
+var _city_positions: PackedVector2Array = []
+var _city_names: PackedStringArray = []
 var _marker_positions: Dictionary = {}
 var _map_extent: float = 0.0
-var _cam_focus := Vector3.ZERO
+var _cam_focus := Vector2.ZERO
 var _cam_zoom := 1.0
 var _selected_city_id: int = -1
 
 var _army_layer: Control
-var _army_models: Node3D
 var _ai_running := false
 
 # Bottom-banner widgets that get new data every _refresh(); built once in
@@ -99,18 +102,6 @@ const BUILDINGS := [
 const LOCKED_BUILDINGS := ["Castle", "Castle", "City"]
 
 
-func _load_world_config() -> Dictionary:
-	if not FileAccess.file_exists(WORLD_CONFIG):
-		return {}
-	var text := FileAccess.get_file_as_string(WORLD_CONFIG)
-	if text.is_empty():
-		return {}
-	var json := JSON.new()
-	if json.parse(text) != OK or typeof(json.data) != TYPE_DICTIONARY:
-		return {}
-	return json.data
-
-
 func _fail_to_start(message: String) -> void:
 	printerr("error: ", message)
 	status_label.text = message
@@ -133,99 +124,115 @@ func _ready() -> void:
 
 	_build_bottom_banner()
 
-	var cfg := _load_world_config()
-	if cfg.is_empty():
-		_fail_to_start("could not load %s" % WORLD_CONFIG)
-		return
+	_province_map = ProvinceMap.new()
+	_province_map.name = "ProvinceMap"
+	world_layer.add_child(_province_map)
+	_province_map.setup()
+	_province_map.region_clicked.connect(_on_region_clicked)
 
-	var world := WorldBuilder.new()
-	world.name = "World"
-	add_child(world)
-	world.build(cfg)
-	if not world.built or not world.errors.is_empty():
-		_fail_to_start("world build failed: %s" % ", ".join(world.errors))
-		return
+	# Centre the source bitmap's top-left-origin pixel space on the world
+	# origin and blow it up by MAP_SCALE, so the rest of this script's
+	# pan/zoom/army-clamping math (which all assumes a map centred on
+	# [-_map_extent, _map_extent]) doesn't have to know the map is a bitmap.
+	var half_size: Vector2 = _province_map.map_size * MAP_SCALE / 2.0
+	_map_extent = maxf(half_size.x, half_size.y)
+	_province_map.position = -half_size
+	_province_map.scale = Vector2.ONE * MAP_SCALE
+	_base_ppu = 800.0 / (2.0 * _map_extent)
 
-	_world_camera = Camera3D.new()
-	_world_camera.name = "WorldCamera"
-	_world_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
-	_world_camera.fov = 45.0
-	_world_camera.near = 1.0
-	_world_camera.far = 20000.0
-	_map_extent = world.terrain_builder.map_extent
-	add_child(_world_camera)
-
-	world.set_camera(_world_camera)
-	if not world.errors.is_empty():
-		_fail_to_start("set_camera failed: %s" % ", ".join(world.errors))
+	_city_names = PackedStringArray()
+	_city_positions = PackedVector2Array()
+	for region_name in _province_map.region_centers:
+		_city_names.append(region_name)
+		var local_pos: Vector2 = _province_map.region_centers[region_name]
+		_city_positions.append(local_pos * MAP_SCALE - half_size)
+	if _city_positions.is_empty():
+		_fail_to_start("could not lay out any cities - nothing to play")
 		return
 
 	_army_layer = ArmyLayer.new()
 	_army_layer.name = "ArmyMarkers"
 	add_child(_army_layer)
-	_army_layer.setup(manager, _world_camera, world.terrain_builder, FACTION_COLORS)
+	_army_layer.setup(manager, _world_to_screen, _screen_to_world, FACTION_COLORS)
 	_army_layer.log_message.connect(_append_log)
 	_army_layer.state_changed.connect(_refresh)
 
-	_army_models = ArmyModels.new()
-	_army_models.name = "ArmyModels"
-	add_child(_army_models)
-	_army_models.setup(manager, world.terrain_builder, FACTION_COLORS)
 	# City markers must not swallow the clicks that become move orders; their
 	# own child markers keep taking clicks regardless of the container filter.
 	cities_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	_city_centres = world.city_centres()
-	if _city_centres.is_empty():
-		_fail_to_start("world built with 0 cities - nothing to play")
-		return
-
-	var positions := PackedVector2Array()
-	for c in _city_centres:
-		positions.append(Vector2(c.x, c.z))
-
-	# Close-in TW-style campaign framing (matches target-state.png): start
-	# centred over the cities' midpoint rather than the map origin, which can
-	# land anywhere from open ocean to a bare cliff depending on the seed.
-	var centre := Vector3.ZERO
-	for c in _city_centres:
+	# Close-in TW-style campaign framing: start centred over the cities'
+	# midpoint rather than the map origin.
+	var centre := Vector2.ZERO
+	for c in _city_positions:
 		centre += c
-	centre /= _city_centres.size()
-	_cam_focus = Vector3(centre.x, 0.0, centre.z)
+	centre /= _city_positions.size()
+	_cam_focus = centre
 	_cam_zoom = 1.0
 	_update_camera_transform()
-	_world_camera.make_current()
 
 	manager.turn_started.connect(_on_turn_started)
 	manager.battle_resolved.connect(_on_battle_resolved)
 	manager.game_over.connect(_on_game_over)
 	attack_button.pressed.connect(_on_attack_pressed)
 
-	# Armies are clamped to the real terrain extent, so a random AI walk can't
-	# march off the edge of the world. Must be set before the game starts.
+	# Armies are clamped to the map extent, so a random AI walk can't march
+	# off the edge of the world. Must be set before the game starts.
 	manager.set_map_extent(_map_extent)
 
-	# start_game_from_positions() emits turn_started synchronously, so
+	# start_game_from_named_positions() emits turn_started synchronously, so
 	# _refresh() can run before this function returns - city markers must
 	# already exist by then. _ensure_city_marker() below makes marker
 	# creation lazy so there is no ordering requirement between the two.
-	manager.start_game_from_positions(positions, MAX_TURNS)
+	manager.start_game_from_named_positions(_city_names, _city_positions, MAX_TURNS)
 	_project_markers()
 	_refresh()
-	get_viewport().size_changed.connect(_project_markers)
+	get_viewport().size_changed.connect(_on_viewport_resized)
+
+	# --resolution/window-manager resizes don't land in get_viewport_rect()
+	# within the same frame that requests them, so a transform computed here
+	# synchronously can be centred on a stale (e.g. project-default) rect.
+	# One deferred re-run after the window has actually settled fixes that
+	# without waiting on a signal that may or may not fire.
+	await get_tree().process_frame
+	_update_camera_transform()
+	_project_markers()
 
 
-## Recomputes the camera's world transform from _cam_focus/_cam_zoom, keeping
-## the fixed TW-style pitch. Called whenever pan or zoom actually changes the
-## camera, not every frame - the transform is otherwise unchanged.
+## Recomputes world_layer's position/scale from _cam_focus/_cam_zoom - this
+## stands in for what a Camera2D would do, without needing an actual camera
+## node, since city/army markers project manually via _world_to_screen.
+## Uses get_viewport_rect().size (not the fixed content_scale_size) so this
+## stays correct under CONTENT_SCALE_ASPECT_EXPAND, which reveals more than
+## 1280x800 on wider/taller windows - the same rect every Control here
+## anchors against. Must be re-run whenever that rect actually changes (see
+## the size_changed wiring in _ready()), since --resolution/window resizes
+## don't take effect inside the same frame that requests them.
 func _update_camera_transform() -> void:
-	_world_camera.global_position = _cam_focus + Vector3(0.0, CAM_HEIGHT, CAM_BACK) * _cam_zoom
-	_world_camera.look_at(_cam_focus, Vector3.UP)
+	var pixels_per_unit := _base_ppu / _cam_zoom
+	var viewport_center := get_viewport_rect().size / 2.0
+	world_layer.position = viewport_center - _cam_focus * pixels_per_unit
+	world_layer.scale = Vector2.ONE * pixels_per_unit
+
+
+func _on_viewport_resized() -> void:
+	_update_camera_transform()
+	_project_markers()
+
+
+## World-space point for a screen pixel, from world_layer's current
+## position/scale. Returns Vector2.INF only theoretically (scale never 0).
+func _screen_to_world(screen: Vector2) -> Vector2:
+	if world_layer.scale.x == 0.0:
+		return Vector2.INF
+	return (screen - world_layer.position) / world_layer.scale
+
+
+func _world_to_screen(world: Vector2) -> Vector2:
+	return world_layer.position + world * world_layer.scale
 
 
 func _process(delta: float) -> void:
-	if _world_camera == null:
-		return
 	var move := Vector2.ZERO
 	if Input.is_key_pressed(KEY_W):
 		move.y -= 1.0
@@ -240,16 +247,9 @@ func _process(delta: float) -> void:
 
 	if move != Vector2.ZERO:
 		move = move.normalized()
-		var forward := -_world_camera.global_transform.basis.z
-		forward.y = 0.0
-		forward = forward.normalized()
-		var right := _world_camera.global_transform.basis.x
-		right.y = 0.0
-		right = right.normalized()
-		var offset := (
-			(right * move.x + forward * -move.y) * PAN_SPEED * _map_extent * _cam_zoom * delta
+		_cam_focus = (_cam_focus + move * PAN_SPEED * _map_extent * _cam_zoom * delta).limit_length(
+			_map_extent
 		)
-		_cam_focus = (_cam_focus + offset).limit_length(_map_extent)
 		changed = true
 
 	# Z zooms in, X zooms out - mirrors the scroll wheel but held-key smooth.
@@ -265,9 +265,6 @@ func _process(delta: float) -> void:
 	if changed:
 		_update_camera_transform()
 		_project_markers()
-
-	if _army_models != null:
-		_army_models.sync(manager.get_state(), _army_layer.ground_positions())
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -294,12 +291,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			pass
 
 
-## Screen position of every city, from its real 3D centre through the
-## current camera transform. Re-run whenever the camera pans/zooms (see
-## _process/_unhandled_input above) as well as once at startup and on resize.
+## Screen position of every city, from its world position through the
+## current pan/zoom. Re-run whenever that changes (see _process/
+## _unhandled_input above) as well as once at startup and on resize.
 func _project_markers() -> void:
-	for i in _city_centres.size():
-		var pos := _world_camera.unproject_position(_city_centres[i])
+	for i in _city_positions.size():
+		var pos := _world_to_screen(_city_positions[i])
 		_marker_positions[i] = pos
 		if city_markers.has(i):
 			var marker: ColorRect = city_markers[i]
@@ -346,6 +343,22 @@ func _on_city_marker_input(event: InputEvent, city_id: int) -> void:
 			target_option.select(i)
 			break
 	_refresh_bottom_banner(manager.get_state())
+
+
+## Clicking a province polygon on the map mirrors _on_city_marker_input:
+## selects the same-named city so the bottom banner and attack dropdown show
+## it, exactly as clicking that city's marker would.
+func _on_region_clicked(region_name: String) -> void:
+	var state: Dictionary = manager.get_state()
+	for city in state["cities"]:
+		if String(city["name"]) == region_name:
+			_selected_city_id = int(city["id"])
+			for i in target_option.item_count:
+				if target_option.get_item_id(i) == _selected_city_id:
+					target_option.select(i)
+					break
+			_refresh_bottom_banner(state)
+			return
 
 
 func _refresh() -> void:
