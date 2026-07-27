@@ -1,18 +1,28 @@
 extends Node2D
-## Political background of the campaign map: a flat-colored region bitmap
-## (campaign/map_data/region_map.png, one solid color per province) turned
-## into real polygon geometry at load time, exactly as Thomas Holtvedt's
-## grand-strategy-simple tutorial does it - scan every pixel color, trace
-## each color's opaque region into polygons with BitMap.opaque_to_polygons(),
-## and give each polygon an Area2D so it can hover-highlight and take clicks.
-## No shader, no Voronoi cells - the map's provinces are exactly the blobs of
-## color the source image already draws.
+## Political background of the campaign map: a small flat-colored region
+## bitmap (campaign/map_data/region_map.png, one solid color per province)
+## is turned into real polygon geometry at load time, exactly as Thomas
+## Holtvedt's grand-strategy-simple tutorial does it - scan every pixel
+## color, trace each color's opaque region into polygons with
+## BitMap.opaque_to_polygons(), and give each polygon an Area2D so it can
+## hover-highlight and take clicks. No shader, no Voronoi cells - the map's
+## provinces are exactly the blobs of color the source image already draws.
+##
+## The visible map art is a separate, full-resolution painted texture
+## (campaign/map_data/backdrop.png) stretched to cover the same rect the
+## polygons were traced in. Keeping it decoupled from region_map.png means
+## the pixel-scan setup stays fast (region_map.png stays small) while the
+## backdrop can be as high-res as we want. Region polygons render on top as
+## near-transparent fills so the painted terrain shows through.
 
 signal region_clicked(region_name: String)
 
 const RegionArea := preload("res://campaign/region_area.gd")
 const MAP_TEXTURE := preload("res://campaign/map_data/region_map.png")
+const BACKDROP_TEXTURE := preload("res://campaign/map_data/backdrop.png")
 const REGIONS_FILE := "res://campaign/map_data/regions.txt"
+const BORDER_WIDTH := 0.55
+const BORDER_COLOR := Color(0.05, 0.04, 0.03, 0.95)
 
 ## region name -> centroid of its polygon points, in the source image's own
 ## pixel space (top-left origin, +y down). The caller decides how to place
@@ -39,6 +49,7 @@ func setup() -> void:
 		var region := Area2D.new()
 		region.set_script(RegionArea)
 		region.region_name = regions_by_color[region_color]
+		region.base_color = Color(region_color)
 		region.name = region_color
 		region.clicked.connect(func(name: String): region_clicked.emit(name))
 		regions_root.add_child(region)
@@ -53,6 +64,15 @@ func setup() -> void:
 			fill.polygon = polygon
 			region.add_child(collision)
 			region.add_child(fill)
+
+			var border := Line2D.new()
+			border.points = polygon
+			border.add_point(polygon[0])
+			border.width = BORDER_WIDTH
+			border.default_color = BORDER_COLOR
+			border.joint_mode = Line2D.LINE_JOINT_ROUND
+			region.add_child(border)
+
 			for p in polygon:
 				centroid_sum += p
 				centroid_count += 1
@@ -62,8 +82,13 @@ func setup() -> void:
 
 	var sprite := Sprite2D.new()
 	sprite.name = "Sprite2D"
-	sprite.texture = MAP_TEXTURE
+	sprite.texture = BACKDROP_TEXTURE
 	sprite.centered = false
+	# BACKDROP_TEXTURE is a full-resolution painted map, independent of
+	# MAP_TEXTURE's (small, fast-to-scan) pixel size - stretch it to cover
+	# exactly the same map_size rect the region polygons were traced in.
+	var backdrop_size: Vector2 = BACKDROP_TEXTURE.get_size()
+	sprite.scale = Vector2(map_size.x / backdrop_size.x, map_size.y / backdrop_size.y)
 	add_child(sprite)
 	move_child(sprite, 0)
 

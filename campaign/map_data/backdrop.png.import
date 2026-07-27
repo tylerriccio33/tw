@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bc647jquq35sx"
-path="res://.godot/imported/target-state.png-b25232737897424aa4cd23a0ead06c87.ctex"
+uid="uid://dqgrusghxa5vf"
+path="res://.godot/imported/backdrop.png-96c4861b82f88dd3b7a573a069b136a1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://target-state.png"
-dest_files=["res://.godot/imported/target-state.png-b25232737897424aa4cd23a0ead06c87.ctex"]
+source_file="res://campaign/map_data/backdrop.png"
+dest_files=["res://.godot/imported/backdrop.png-96c4861b82f88dd3b7a573a069b136a1.ctex"]
 
 [params]
 

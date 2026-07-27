@@ -6,7 +6,16 @@ extends Area2D
 
 signal clicked(region_name: String)
 
+## Region fills sit above the painted backdrop map, tinted with each
+## region's own political color (baked into region_map.png) so ownership
+## reads clearly at a glance, HOI4/EU4-style. Hover brightens further.
+const FILL_ALPHA := 0.55
+const HOVER_ALPHA := 0.85
+
 var region_name: String = ""
+## The region's own political color, from region_map.png - set by
+## province_map.gd right after this node is created.
+var base_color: Color = Color.WHITE
 
 
 func _ready() -> void:
@@ -18,19 +27,19 @@ func _ready() -> void:
 
 func _on_child_entered_tree(node: Node) -> void:
 	if node is Polygon2D:
-		node.color = Color(1, 1, 1, 0.5)
+		node.color = Color(base_color, FILL_ALPHA)
 
 
 func _on_mouse_entered() -> void:
 	for node in get_children():
 		if node is Polygon2D:
-			node.color = Color(1, 1, 1, 1)
+			node.color = Color(base_color, HOVER_ALPHA)
 
 
 func _on_mouse_exited() -> void:
 	for node in get_children():
 		if node is Polygon2D:
-			node.color = Color(1, 1, 1, 0.5)
+			node.color = Color(base_color, FILL_ALPHA)
 
 
 func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> void:

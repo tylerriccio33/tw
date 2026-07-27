@@ -1,10 +1,17 @@
 {
-	"#3fff31" : "Norway"
-	,"#d44a31" : "Sweden"
-	,"#d49f48" : "Finland"
-	,"#d43c48" : "Denmark"
-	,"#d48da0" : "Northern Germany"
-	,"#cc1513" : "Lithuania"
-	,"#27d1a0" : "Latvia"
-	,"#278da0" : "Estonia"
+ "#e6194b": "British_Isles",
+ "#3cb44b": "France",
+ "#ffe119": "Iberia",
+ "#4363d8": "Scandinavia",
+ "#f58231": "Germany",
+ "#911eb4": "Poland_Baltics",
+ "#46f0f0": "Western_Russia",
+ "#bfef45": "Italy",
+ "#fabed4": "Balkans",
+ "#469990": "Greece",
+ "#dcbeff": "Turkey",
+ "#9a6324": "Caucasus",
+ "#808000": "North_Africa",
+ "#ffd8b1": "Egypt_Levant",
+ "#c65102": "Persia"
 }

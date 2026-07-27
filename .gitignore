@@ -18,6 +18,11 @@
 # Rendered shots (scratch output of make play-shot / hud-shot).
 /shots/play/
 
+# Reference/target mockups dropped at repo root during design work - not
+# game assets, not meant to be committed.
+/target-phase*.png
+/target-phase*.png.import
+
 # Editors
 .vscode/
 .idea/
