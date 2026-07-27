@@ -25,11 +25,11 @@
       "_comment": "Ridged noise gated by a low-frequency belt mask. belt_low/high select roughly the top quarter of the belt noise - open them up and mountains swallow the entire map, which is the single easiest way to lose the campaign-map read.",
       "frequency": 0.0009,
       "octaves": 4,
-      "ridge_power": 1.5,
+      "ridge_power": 1.1,
       "belt_frequency": 0.00075,
       "belt_low": 0.58,
       "belt_high": 0.82,
-      "height": 520.0
+      "height": 160.0
     },
     "material": {
       "_comment": "Terrain3D shader uniforms, reachable only via set_shader_param (they do not appear in `make api`). Deliberately excluded from the region cache hash - none of these change the heightmap or control map, they only affect how it is shaded.",
@@ -145,7 +145,7 @@
     "rivers": {
       "count": 9,
       "source_attempts": 900,
-      "source_height": 240.0,
+      "source_height": 110.0,
       "step": 14.0,
       "max_steps": 700,
       "min_points": 18,
