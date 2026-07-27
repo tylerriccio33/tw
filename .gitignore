@@ -4,38 +4,18 @@
 # Godot
 .godot/
 
-# Vendored GDExtension (42MB of prebuilt binaries) - run `make addons`
-/addons/terrain_3d/
-
-# Vendored ambientCG PBR textures - run `make textures`
-/assets/textures/
-
-# Vendored Poly Haven CC0 tree textures - run `make foliage`
-/assets/foliage/
-
-# Vendored Quaternius CC0 building kit - run `make buildings`
+# Vendored Quaternius CC0 building kit (unused by the 2D province map; kept
+# on disk locally, no fetch target)
 /assets/buildings/
 
 # Vendored Quaternius CC0 knight model - run `make armies`
 /assets/armies/
 
-# Cached itch.io download for tools/fetch_buildings.py (161MB zip; itch.io
-# gates it behind a pay-what-you-want click-through with no stable direct
-# URL, so unlike textures/foliage this cannot be curled unattended)
-/tools/vendor_cache/
-
-# Terrain3D region data. The terrain is regenerated from config/world.json on
-# every run and never saved, so this is scratch.
-/data/
-
 # Python
 **/__pycache__/
 *.pyc
 
-# Rendered shots. shots/golden/ IS committed - it is the diff baseline.
-/shots/current/
-/shots/contact_sheet.png
-/shots/sheet.png
+# Rendered shots (scratch output of make play-shot / hud-shot).
 /shots/play/
 
 # Editors

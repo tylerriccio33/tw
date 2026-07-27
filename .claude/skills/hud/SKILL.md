@@ -24,7 +24,7 @@ Reference for editing the Total War-style HUD in the live campaign game (`campai
 
 ## Scaling with window size
 
-The main window is pinned to `128x128` in `project.godot` for the offscreen screenshot harness (`tools/shoot.gd`) — that setting is irrelevant to live play, which goes through `make play`'s `--resolution` override. To make the whole HUD (fonts, buttons, banner cards) scale proportionally when the window is resized, `_ready()` in `campaign_ui.gd` sets canvas-item content scaling on the window:
+`project.godot`'s default window size is `1280x800`; `make play`'s `--resolution` flag overrides it per launch. To make the whole HUD (fonts, buttons, banner cards) scale proportionally when the window is resized, `_ready()` in `campaign_ui.gd` sets canvas-item content scaling on the window:
 
 ```gdscript
 get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS

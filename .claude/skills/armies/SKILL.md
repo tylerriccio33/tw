@@ -28,7 +28,7 @@ Only `alive` armies are included (`godot_api.rs:278`). There's no push/diff — 
 
 ## Spawning
 
-`spawn_starting_armies` (`godot_api.rs:419`) is called unconditionally at the end of both `start_game()` and `start_game_from_positions()` — one army per faction, named `"{faction} Army"`, planted on and garrisoned in that faction's *first* owned city. There's no recruitment system; this fixed one-army-per-faction roster is the entire order of battle for a campaign. If armies aren't appearing, the bug is almost never here — check that `campaign/campaign.tscn` is actually the scene being run (see `make play`; the editor's default Play button loads `tools/shoot.tscn` per `project.godot`'s `run/main_scene`, not the campaign).
+`spawn_starting_armies` (`godot_api.rs:419`) is called unconditionally at the end of both `start_game()` and `start_game_from_positions()` — one army per faction, named `"{faction} Army"`, planted on and garrisoned in that faction's *first* owned city. There's no recruitment system; this fixed one-army-per-faction roster is the entire order of battle for a campaign. If armies aren't appearing, the bug is almost never here — check that `campaign/campaign.tscn` is actually the scene being run (see `make play`; `project.godot`'s `run/main_scene` points at it).
 
 ## Movement (`model.rs:302-356`, `Campaign::move_army`)
 
