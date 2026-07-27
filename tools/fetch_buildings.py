@@ -5,13 +5,14 @@
 """Vendor Quaternius's CC0 Medieval Village MegaKit into assets/buildings/.
 
 Unlike tools/fetch_textures.py and tools/fetch_foliage.py, this cannot hit a
-stable CDN URL unattended: itch.io serves the pack through a
-pay-what-you-want click-through page that mints a session-scoped, expiring
-download token, not a fixed link. So the fetch step is split in two:
+stable CDN URL unattended. itch.io serves the pack through a
+pay-what-you-want click-through page. That page mints a session-scoped,
+expiring download token instead of a fixed link. So the fetch step splits
+into two:
 
   1. A human (or an agent driving a real browser) downloads the free
-     "Standard" zip from https://quaternius.itch.io/medieval-village-megakit
-     ("No thanks, just take me to the downloads") and saves it to
+     "Standard" zip from https://quaternius.itch.io/medieval-village-megakit.
+     ("No thanks, just take me to the downloads".) They save it to
      tools/vendor_cache/medieval_village_megakit_standard.zip.
   2. This script unpacks that cached zip's glTF/ directory (meshes, .bin
      buffers and the shared texture atlas) into assets/buildings/kit/.

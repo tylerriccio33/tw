@@ -27,6 +27,11 @@ repos:
     hooks:
       - id: shellcheck
 
+  - repo: https://github.com/tylerriccio33/slop-lint
+    rev: 4fdac2683ebd70d78f2f01dfef989b82f6a186dc
+    hooks:
+      - id: slop-lint
+
   - repo: local
     hooks:
       - id: pyrefly

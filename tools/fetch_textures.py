@@ -6,11 +6,12 @@
 """Vendor terrain PBR textures from ambientCG/Polyhaven (CC0) into assets/textures/.
 
 Not committed to git (packed textures run ~1-2MB each, five slots). Run
-`make textures` after a fresh clone. Terrain3D reads exactly two textures per
-material - an albedo texture (RGB colour, A height) and a normal texture
-(RGB normal, A roughness) - so each source (which ships those as four
-separate Color/NormalGL/Roughness/Displacement maps) gets packed into that
-pair in memory; the intermediate maps are never written to disk.
+`make textures` after a fresh clone. Terrain3D reads exactly two textures
+per material. One is an albedo texture (RGB colour, A height). The other
+is a normal texture (RGB normal, A roughness). Each source ships those as
+four separate Color/NormalGL/Roughness/Displacement maps, so this script
+packs them into that pair in memory. The intermediate maps never touch
+disk.
 
 world/terrain_builder.gd loads assets/textures/<slot>/{albedo,normal_rough}.png
 by slot name; the TEX_* -> slot mapping lives in its PALETTE constant.
@@ -27,10 +28,11 @@ from PIL import Image, ImageEnhance
 ROOT = Path(__file__).resolve().parent.parent
 TEXTURES_DIR = ROOT / "assets" / "textures"
 
-# 4K rather than 1K. assets/textures/ is gitignored and re-vendored by
-# `make textures`, so this costs download time and VRAM, not repo size. At 1K
-# a single tile had to cover so much of a 4096-unit map that the mip chain
-# averaged it to flat colour well before the overview camera's distance.
+# 4K rather than 1K. .gitignore excludes assets/textures/, and `make
+# textures` re-vendors it, so this costs download time and VRAM, not repo
+# size. At 1K a single tile had to cover so much of a 4096-unit map that the
+# mip chain averaged it to flat colour well before the overview camera's
+# distance.
 RESOLUTION = "4K"
 RESOLUTION_LOWER = "4k"
 
@@ -159,10 +161,11 @@ def main() -> None:
         slot_dir = TEXTURES_DIR / slot
         albedo_path = slot_dir / "albedo.png"
         normal_path = slot_dir / "normal_rough.png"
-        # Records what was vendored, so raising RESOLUTION actually re-fetches.
-        # A bare is_file() check cannot tell a 1K download from a 4K one, which
-        # made `make textures` silently no-op after a resolution change and
-        # left the render quietly running on the old maps.
+        # Records which asset this script vendored, so raising RESOLUTION
+        # actually re-fetches. A bare is_file() check cannot tell a 1K
+        # download from a 4K one. That gap let `make textures` silently
+        # no-op after a resolution change and left the render quietly
+        # running on the previous maps.
         stamp_path = slot_dir / f".vendored-{asset_id}-{RESOLUTION}"
         if albedo_path.is_file() and normal_path.is_file() and stamp_path.is_file():
             print(f"{slot} ({asset_id}): already present at {RESOLUTION}, skipping")

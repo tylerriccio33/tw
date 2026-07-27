@@ -5,10 +5,11 @@
 # ///
 """Tile every preset in shots/current/ into one labelled contact sheet.
 
-diff_shots.py's sheet only exists once there is a golden/ to compare against,
-which is useless while a scene is still changing shape - there is nothing to
-diff yet. This tiles whatever is in shots/current/ on its own, so one image
-read shows every preset instead of opening overview/coast/ridge separately.
+diff_shots.py's sheet only exists once there is a golden/ to compare
+against. That is useless while a scene is still changing shape, since there
+is nothing to diff yet. This tiles whatever is in shots/current/ on its
+own. One image read then shows every preset, instead of opening
+overview/coast/ridge separately.
 
 Exit codes: 0 on success, 1 if shots/current/ is empty or missing.
 """

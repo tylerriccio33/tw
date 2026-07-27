@@ -5,13 +5,13 @@
 # ///
 """Crop shots/play/play.png down to just the bottom HUD banner.
 
-play_shot.sh captures the whole OS window (titlebar chrome + game content)
-at whatever --resolution `make play` was launched with (RESOLUTION env var,
-default 1280x800). The HUD banner (city panel/buildings row/end-turn ribbon,
-see campaign_ui.gd) is anchored to roughly the bottom 40% of the content
-area, so this trims off the titlebar and the map above it and writes
-shots/play/hud.png - one crop to review just the HUD instead of eyeballing a
-full 1280x800 window shot.
+play_shot.sh captures the whole OS window (titlebar chrome + game content).
+It uses whatever --resolution you launched `make play` with (RESOLUTION env
+var, default 1280x800). campaign_ui.gd anchors the HUD banner (city
+panel/buildings row/end-turn ribbon) to roughly the bottom 40% of the
+content area. So this trims off the titlebar and the map above it and
+writes shots/play/hud.png. That gives one crop to review just the HUD
+instead of eyeballing a full 1280x800 window shot.
 """
 
 import os

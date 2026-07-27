@@ -5,18 +5,19 @@
 # ///
 """Vendor CC0 tree textures from Poly Haven into assets/foliage/.
 
-Deliberately fetches the *textures* of Poly Haven's photoscanned trees and not
-their meshes. Those meshes are 1-7 million triangles each (a fir is ~7M), and
-world/scatter.gd places ~4500 trees - three orders of magnitude past what the
-whole scene can afford. Decimating them is not an option either: they are built
-from thousands of separate alpha-mapped twig cards, which quadric collapse
-turns into confetti.
+Deliberately fetches the *textures* of Poly Haven's photoscanned trees, not
+their meshes. Those meshes run 1-7 million triangles each (a fir is ~7M).
+world/scatter.gd places ~4500 trees, three orders of magnitude past what the
+whole scene can afford. Decimating them is not an option either. Each tree
+consists of thousands of separate alpha-mapped twig cards, and quadric
+collapse turns those into confetti.
 
-So the geometry is built in world/scatter.gd as alpha-mapped cross-cards (a
-trunk plus a handful of textured quads, ~100 triangles per tree) and these
-photoscanned PBR maps are what gets drawn on it. That is how real-time tree
-assets are actually authored, and at campaign-map camera distance essentially
-all of the visual quality lives in the texture rather than the silhouette.
+So world/scatter.gd builds the geometry itself: alpha-mapped cross-cards (a
+trunk plus a handful of textured quads, ~100 triangles per tree). These
+photoscanned PBR maps are what gets drawn on it. That is how developers
+actually author real-time tree assets. At campaign-map camera distance,
+essentially all of the visual quality lives in the texture rather than the
+silhouette.
 
 Not committed to git (~2MB per map, six maps per species). Run `make foliage`
 after a fresh clone. world/scatter.gd loads assets/foliage/<species>/*.png.
@@ -42,11 +43,11 @@ BARK_RES = "1k"
 
 # species -> (polyhaven asset id, canopy map prefix, bark map prefix).
 #
-# Poly Haven is not consistent about these prefixes across assets - a fir calls
-# its foliage "twig" and its wood "bark", the island trees say "leaves" and
-# "branches", the jacaranda says "leaves" and "trunk" - so each is spelled out
-# rather than guessed. A wrong prefix 404s loudly at fetch time instead of
-# silently vendoring a tree with no leaves.
+# Poly Haven is not consistent about these prefixes across assets. A fir
+# calls its foliage "twig" and its wood "bark". The island trees say
+# "leaves" and "branches". The jacaranda says "leaves" and "trunk". So this
+# table spells out each one rather than guessing. A wrong prefix 404s
+# loudly at fetch time instead of silently vendoring a tree with no leaves.
 SPECIES = {
     "conifer_fir": ("fir_tree_01", "twig", "bark"),
     "conifer_sapling": ("fir_sapling_medium", "twigs", "branches"),
@@ -66,16 +67,16 @@ def fail(msg: str) -> None:
 def find_cells(alpha: Image.Image) -> list[dict[str, float]]:
     """Locate each individual leaf/twig in a foliage atlas, as normalised UV rects.
 
-    These atlases are not canopy textures - they are sheets of separate leaves
-    and single twigs (Poly Haven maps each one onto its own tiny card on the
-    original photoscan). Stretching a whole sheet across one big quad yields
-    five giant floating leaves and a tree that reads as bare sticks, which is
-    exactly what the first attempt looked like.
+    These atlases are not canopy textures. They are sheets of separate
+    leaves and single twigs. Poly Haven maps each one onto its own tiny card
+    on the original photoscan. Stretching a whole sheet across one big quad
+    yields five giant floating leaves. It reads as a tree of bare sticks.
+    That is exactly what the first attempt looked like.
 
-    So the sheet is segmented here, at vendor time, and world/scatter.gd builds
-    a canopy from many small cards that each sample one cell. Doing it by
-    connected components rather than assuming a grid is what lets all five
-    species share one code path despite having visibly different layouts.
+    So this function segments the sheet here, at vendor time. world/scatter.gd
+    then builds a canopy from many small cards that each sample one cell.
+    Segmenting by connected components, rather than assuming a grid, lets all
+    five species share one code path. They have visibly different layouts.
     """
     mask = np.array(alpha) > 127
     labels, count = ndimage.label(mask)
@@ -95,16 +96,17 @@ def find_cells(alpha: Image.Image) -> list[dict[str, float]]:
         if area / total < 0.0008:
             continue
         # The conifer sheets have a full-height bark strip baked down one edge.
-        # It is a legitimate connected component but it is not foliage, and
-        # used as a leaf card it renders as a giant brown slab.
+        # It is a legitimate connected component, but it is not foliage. Used
+        # as a leaf card, it renders as a giant brown slab.
         if cell_h > 0.9 * height or cell_w > 0.9 * width:
             continue
         # A single leaf occupying most of the sheet means segmentation failed
-        # (usually everything bled together); better to drop it than to emit
+        # (usually everything bled together). Better to drop it than to emit
         # one enormous card.
-        # Generous, because a jacaranda frond is a single compound leaf that
-        # legitimately covers a third of its sheet; at 0.25 they were all
-        # discarded and the species came back with one usable cell.
+        # This threshold is generous, because a jacaranda frond is a single
+        # compound leaf that legitimately covers a third of its sheet. At
+        # 0.25, this dropped them all, and the species came back with only
+        # one usable cell.
         if area / total > 0.45:
             continue
 
@@ -124,7 +126,7 @@ def find_cells(alpha: Image.Image) -> list[dict[str, float]]:
 
 
 def _download(url: str) -> bytes:
-    # Poly Haven's CDN occasionally 403s the default urllib User-Agent; a
+    # Poly Haven's CDN occasionally 403s the default urllib User-Agent. A
     # browser-like one works. Same workaround as tools/fetch_textures.py.
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
@@ -169,9 +171,10 @@ def build_species(species: str, asset: str, canopy: str, bark: str) -> None:
     canopy_albedo.putalpha(canopy_alpha)
 
     canopy_normal = _fetch_map(asset, f"{canopy}_nor_gl", CANOPY_RES).convert("RGB")
-    # ARM = AO in red, roughness in green, metalness in blue. Godot reads each
-    # channel separately via BaseMaterial3D's *_texture_channel properties, so
-    # it is used as-is rather than being split into three files.
+    # ARM = AO in red, roughness in green, metalness in blue. Godot reads
+    # each channel separately via BaseMaterial3D's *_texture_channel
+    # properties, so this script keeps it as-is rather than splitting it
+    # into three files.
     canopy_arm = _fetch_map(asset, f"{canopy}_arm", CANOPY_RES).convert("RGB")
 
     bark_diff = _fetch_map(asset, f"{bark}_diff", BARK_RES).convert("RGB")

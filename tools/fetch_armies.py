@@ -4,9 +4,9 @@
 # ///
 """Vendor Quaternius's CC0 LowPoly Animated Knight into assets/armies/.
 
-Unlike tools/fetch_buildings.py, this asset is mirrored on OpenGameArt behind
-a stable, unauthenticated URL rather than itch.io's session-scoped download
-token, so the whole fetch can run unattended in one step.
+Unlike tools/fetch_buildings.py, OpenGameArt mirrors this asset behind a
+stable, unauthenticated URL. It skips itch.io's session-scoped download
+token, so the whole fetch runs unattended in one step.
 
 campaign/army_models.gd loads assets/armies/kit/KnightCharacter.fbx and tints
 it per faction to draw standing armies on the campaign map.
@@ -28,8 +28,8 @@ STAMP = ROOT / "assets" / "armies" / ".vendored-knight-character-quaternius"
 
 DOWNLOAD_URL = "https://opengameart.org/sites/default/files/Knight%20Character%20by%20%40Quaternius.zip"
 
-# Just the rigged body - the separate helmet/weapon accessory meshes in the
-# pack are parented to bones for outfit variety we don't use yet.
+# Just the rigged body. The pack parents separate helmet/weapon accessory
+# meshes to bones for outfit variety we don't use yet.
 MEMBER = "Knight Character by @Quaternius/FBX/KnightCharacter.fbx"
 
 

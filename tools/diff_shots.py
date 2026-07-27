@@ -5,13 +5,13 @@
 # ///
 """Compare shots/current against shots/golden.
 
-Prints a per-preset PSNR table and writes a contact sheet
-(shots/contact_sheet.png) laying out golden | current | amplified difference
-for every preset, so a single image read tells you what moved.
+Prints a per-preset PSNR table. Writes a contact sheet
+(shots/contact_sheet.png) with golden, current, and amplified difference
+panels for every preset. One image read shows what moved.
 
 Exit codes: 0 identical, 2 differences found, 1 harness problem (missing
 files, size mismatch). Differences are not failures - they are usually the
-point - but they are distinguishable from breakage.
+point. But they are distinguishable from breakage.
 """
 
 import sys
@@ -48,16 +48,16 @@ def psnr(a: np.ndarray, b: np.ndarray) -> float:
 def compare_dirs(dir_a: Path, dir_b: Path, min_psnr: float) -> None:
     """Gate two render directories on a PSNR floor instead of byte equality.
 
-    `make accept` used to render twice and require the two runs to be
-    byte-identical. That was a genuinely good check - it caught anything
-    reading an unseeded RNG or the wall clock - but TAA, SDFGI and volumetric
-    fog are all temporally accumulated and will not reproduce bit-exactly in a
+    `make accept` used to render twice and require the two runs to match
+    byte-for-byte. That was a genuinely good check: it caught anything
+    reading an unseeded RNG or the wall clock. But TAA, SDFGI, and volumetric
+    fog all accumulate temporally. They will not reproduce bit-exactly in a
     fixed frame budget, so the strict form now fails on correct renders.
 
-    A PSNR floor keeps most of the value: temporal jitter between two runs of
-    the same config lands far above it, while a real nondeterminism bug (an
-    unseeded seed, a wall-clock-driven wave phase) moves whole regions of the
-    image and craters the score well below.
+    A PSNR floor keeps most of the value. Temporal jitter between two runs of
+    the same config lands far above it. A real nondeterminism bug - an
+    unseeded seed, a wall-clock-driven wave phase - moves whole regions of
+    the image. It craters the score well below the floor.
     """
     shots_a = sorted(dir_a.glob("*.png"))
     if not shots_a:
