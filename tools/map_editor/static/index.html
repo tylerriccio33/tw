@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TW Map Editor</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="sidebar">
+    <h1>Map Editor</h1>
+    <div class="hint">
+      Click to place points. <b>Enter</b>/dbl-click closes a shape.
+      <b>Backspace</b> undo point. <b>Esc</b> cancel shape.
+      <b>WASD</b> to pan, <b>Z/X</b> to zoom out/in. Ctrl/Cmd+wheel also zooms.
+    </div>
+
+    <button id="newRegionBtn">+ New Region</button>
+    <button id="newShapeBtn" disabled>+ New Shape (island/exclave)</button>
+    <button id="editVerticesBtn" disabled>Edit Vertices: Off</button>
+
+    <div id="regionList"></div>
+
+    <div class="footer-actions">
+      <button id="reloadBtn">Reload From Live Game</button>
+      <button id="saveBtn">Save Draft</button>
+      <button id="exportBtn" class="primary">Export to Dev</button>
+    </div>
+    <div class="hint">Export writes to tools/map_editor/dev_map_data/. Run <b>make promote-map</b> to copy that into campaign/map_data/ for the game to use.</div>
+    <div id="status"></div>
+  </div>
+
+  <div id="viewport">
+    <div id="stage">
+      <img id="bgImage">
+      <svg id="overlay"></svg>
+    </div>
+  </div>
+
+  <script src="/static/editor.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 GODOT ?= godot
 
-.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots
+.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor promote-map
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -23,6 +23,8 @@ help:
 	@echo "make play          - build the extension and open the campaign map in a window"
 	@echo "make play-shot     - screenshot the whole campaign window to shots/play/play.png"
 	@echo "make hud-shot      - screenshot just the bottom HUD banner to shots/play/hud.png"
+	@echo "make map-editor    - launch the browser-based territory border editor (tools/map_editor)"
+	@echo "make promote-map   - copy the traced dev map (tools/map_editor/dev_map_data) into campaign/map_data for the game to use"
 
 armies:
 	@uv run tools/fetch_armies.py
@@ -80,3 +82,27 @@ hud-shot: play-shot
 
 clean-shots:
 	rm -rf shots/play
+
+# Runs the territory-border tracing tool at http://localhost:8765. Exports
+# from the editor always land in tools/map_editor/dev_map_data/ - nothing
+# touches the live campaign/map_data/ until you run `make promote-map`.
+map-editor:
+	cd tools/map_editor && uv run server.py
+
+# Copies the traced dev map into campaign/map_data/, where
+# campaign/province_map.gd actually loads region_map.png + regions.txt
+# from. Run this after tracing/editing borders in `make map-editor` and
+# exporting, once you're happy with the result.
+#
+# Also forces a Godot reimport: Godot caches region_map.png as a .ctex
+# under .godot/imported/, keyed by content hash, and `make play` never
+# triggers a reimport itself - overwriting the source PNG alone leaves the
+# game rendering the stale cached texture, so newly-added territories
+# silently don't show up until this runs.
+promote-map:
+	@test -f tools/map_editor/dev_map_data/region_map.png -a -f tools/map_editor/dev_map_data/regions.txt \
+		|| (echo "No dev map to promote - export from the map editor first (make map-editor)."; exit 1)
+	cp tools/map_editor/dev_map_data/region_map.png campaign/map_data/region_map.png
+	cp tools/map_editor/dev_map_data/regions.txt campaign/map_data/regions.txt
+	$(GODOT) --headless --import
+	@echo "Promoted dev map -> campaign/map_data/ and reimported"
