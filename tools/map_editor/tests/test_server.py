@@ -105,6 +105,34 @@ def test_export_project_fills_land_gaps_but_not_sea(tmp_path):
     assert tuple(region_map[25, 150]) == (255, 255, 255)
 
 
+def test_export_project_clips_a_polygon_traced_over_the_sea(tmp_path):
+    # An overly loose polygon spans the whole land/sea split (x=0..190 on
+    # a 200px-wide two-tone backdrop where sea starts at x=100). Export
+    # must clip the sea-side portion back to background, not ship a
+    # region painted over open water.
+    image_path = tmp_path / "backdrop.png"
+    make_two_tone_image(image_path, width=200, height=100)
+
+    project = {
+        "image_size": [200, 100],
+        "regions": [
+            {
+                "name": "Oversized",
+                "color": "#ff00ff",
+                "polygons": [[[0, 0], [190, 0], [190, 50], [0, 50]]],
+            }
+        ],
+    }
+
+    srv.export_project(project, image_path, tmp_path / "out")
+
+    region_map = np.array(
+        Image.open(tmp_path / "out" / "region_map.png").convert("RGB")
+    )
+    assert tuple(region_map[25, 20]) == (255, 0, 255)  # land side, kept
+    assert tuple(region_map[25, 180]) == (255, 255, 255)  # sea side, clipped
+
+
 def test_export_project_skips_unnamed_regions(tmp_path):
     image_path = tmp_path / "backdrop.png"
     make_image(image_path, size=(10, 10))

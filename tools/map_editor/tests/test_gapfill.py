@@ -1,8 +1,8 @@
-"""Unit tests for gapfill.fill_land_gaps, isolated from the exporter."""
+"""Unit tests for gapfill's fill/clip functions, isolated from the exporter."""
 
 import numpy as np
 
-from gapfill import fill_land_gaps
+from gapfill import clip_sea_overflow, fill_land_gaps
 
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
@@ -15,16 +15,16 @@ def make_canvas(width=20, height=20, fill=WHITE):
     return canvas
 
 
-def test_fills_single_gap_pixel_with_neighboring_region_color():
+def test_fills_small_gap_with_neighboring_region_color():
     canvas = make_canvas()
     canvas[:, :10] = RED  # region covering the left half
     land_mask = np.ones((20, 20), dtype=bool)  # everything is land
 
-    filled = fill_land_gaps(canvas, land_mask)
+    filled = fill_land_gaps(canvas, land_mask, max_gap_px=8)
 
-    # Every previously-white land pixel must now match the red region
-    # exactly (the only region color available), not stay white or blend.
-    assert np.all(filled == RED)
+    # A gap within max_gap_px of the region must take its exact color,
+    # not stay white or blend.
+    assert np.all(filled[:, 10:18] == RED)
 
 
 def test_leaves_sea_background_untouched():
@@ -73,6 +73,21 @@ def test_no_gaps_returns_canvas_unchanged():
     assert np.array_equal(filled, canvas)
 
 
+def test_does_not_flood_a_large_untraced_land_area():
+    # A whole untraced country (30px of background, all land) sits next to
+    # one small colored region. This must NOT get annexed by that region's
+    # color - only the strip within max_gap_px of it should fill.
+    canvas = make_canvas(width=50)
+    canvas[:, :5] = RED  # the only traced region
+    land_mask = np.ones((20, 50), dtype=bool)
+
+    filled = fill_land_gaps(canvas, land_mask, max_gap_px=8)
+
+    assert np.all(filled[:, :5] == RED)
+    assert np.all(filled[:, 14:] == WHITE)  # far side of the untraced country
+    assert np.all(filled[:, 5:13] == RED)  # within max_gap_px, bridged
+
+
 def test_does_not_mutate_input_canvas():
     canvas = make_canvas()
     canvas[:, :10] = RED
@@ -80,5 +95,75 @@ def test_does_not_mutate_input_canvas():
     land_mask = np.ones((20, 20), dtype=bool)
 
     fill_land_gaps(canvas, land_mask)
+
+    assert np.array_equal(canvas, original)
+
+
+# ---------------------------------------------------------------------------
+# clip_sea_overflow
+# ---------------------------------------------------------------------------
+
+
+def test_clips_region_color_that_overshoots_onto_sea():
+    # A polygon traced too loosely paints red across the whole 20x20
+    # canvas, but only the left half is actually land. The overflow
+    # (10x20=200px) clears the default min_area_px floor.
+    canvas = make_canvas()
+    canvas[:, :] = RED
+    land_mask = np.zeros((20, 20), dtype=bool)
+    land_mask[:, :10] = True
+
+    clipped = clip_sea_overflow(canvas, land_mask, min_area_px=50)
+
+    assert np.all(clipped[:, :10] == RED)
+    assert np.all(clipped[:, 10:] == WHITE)
+
+
+def test_clip_has_no_distance_cap_unlike_gap_fill():
+    # Overflow far from the true shore (not just a coastline sliver) must
+    # still clip - this is what fixes a badly-traced polygon that covers
+    # a whole sea, not just fills a stray pixel.
+    canvas = make_canvas(width=100)
+    canvas[:, :] = RED
+    land_mask = np.zeros((20, 100), dtype=bool)
+    land_mask[:, :5] = True  # true shore is only 5px in; the rest is sea
+
+    clipped = clip_sea_overflow(canvas, land_mask, min_area_px=50)
+
+    assert np.all(clipped[:, :5] == RED)
+    assert np.all(clipped[:, 5:] == WHITE)
+
+
+def test_clip_ignores_small_overflow_specks_below_min_area():
+    # A handful of scattered single-pixel "sea" misclassifications inside
+    # an otherwise-land region (river glare, shadow, texture noise) must
+    # not get punched into holes.
+    canvas = make_canvas()
+    canvas[:, :] = RED
+    land_mask = np.ones((20, 20), dtype=bool)
+    land_mask[5, 5] = False  # a single stray "sea" pixel deep in the region
+
+    clipped = clip_sea_overflow(canvas, land_mask, min_area_px=50)
+
+    assert np.array_equal(clipped, canvas)
+
+
+def test_clip_leaves_background_and_in_bounds_land_untouched():
+    canvas = make_canvas()
+    canvas[:, :10] = RED
+    land_mask = np.ones((20, 20), dtype=bool)  # everything is land
+
+    clipped = clip_sea_overflow(canvas, land_mask)
+
+    assert np.array_equal(clipped, canvas)
+
+
+def test_clip_does_not_mutate_input_canvas():
+    canvas = make_canvas()
+    canvas[:, :] = RED
+    original = canvas.copy()
+    land_mask = np.zeros((20, 20), dtype=bool)
+
+    clip_sea_overflow(canvas, land_mask)
 
     assert np.array_equal(canvas, original)

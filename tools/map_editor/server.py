@@ -41,7 +41,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
-from gapfill import fill_land_gaps
+from gapfill import clip_sea_overflow, fill_land_gaps
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -332,7 +332,8 @@ def export_project(project: dict, image_path: Path, out_dir: Path) -> dict:
         regions_by_color[color] = name.replace(" ", "_")
 
     land_mask = build_land_mask(image_path)
-    filled = fill_land_gaps(np.array(canvas), land_mask)
+    clipped = clip_sea_overflow(np.array(canvas), land_mask)
+    filled = fill_land_gaps(clipped, land_mask)
     canvas = Image.fromarray(filled)
 
     out_dir.mkdir(parents=True, exist_ok=True)
