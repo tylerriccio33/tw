@@ -36,8 +36,12 @@ def make_two_tone_image(path: Path, width=200, height=100):
 
 
 def test_export_project_writes_flat_raster_and_color_map(tmp_path):
+    # Two-tone backdrop (land on the left, sea on the right) so gap-filling
+    # only extends the polygon's region into land, leaving the sea side as
+    # background - see test_export_project_fills_land_gaps_but_not_sea below
+    # for the gap-filling behavior itself.
     image_path = tmp_path / "backdrop.png"
-    make_image(image_path, size=(20, 20))
+    make_two_tone_image(image_path, width=20, height=20)
 
     project = {
         "image_size": [20, 20],
@@ -56,11 +60,49 @@ def test_export_project_writes_flat_raster_and_color_map(tmp_path):
         Image.open(tmp_path / "out" / "region_map.png").convert("RGB")
     )
     assert tuple(region_map[5, 5]) == (255, 0, 0)
-    assert tuple(region_map[15, 15]) != (255, 0, 0)  # outside the polygon
+    assert tuple(region_map[15, 15]) != (255, 0, 0)  # sea side, left as background
 
     names = json.loads((tmp_path / "out" / "regions.txt").read_text())
     assert names == {"#ff0000": "Northlands"}
     assert result["region_count"] == 1
+
+
+def test_export_project_fills_land_gaps_but_not_sea(tmp_path):
+    # Two adjacent land polygons with a 1px unassigned gap between them at
+    # x=10, plus untouched background on the sea side (x>=100). Gap-filling
+    # must cover the land gap with the nearest region's exact color and
+    # leave the sea background alone.
+    image_path = tmp_path / "backdrop.png"
+    make_two_tone_image(image_path, width=200, height=100)
+
+    project = {
+        "image_size": [200, 100],
+        "regions": [
+            {
+                "name": "West",
+                "color": "#ff0000",
+                "polygons": [[[0, 0], [9, 0], [9, 50], [0, 50]]],
+            },
+            {
+                "name": "East",
+                "color": "#00ff00",
+                "polygons": [[[11, 0], [90, 0], [90, 50], [11, 50]]],
+            },
+        ],
+    }
+
+    srv.export_project(project, image_path, tmp_path / "out")
+
+    region_map = np.array(
+        Image.open(tmp_path / "out" / "region_map.png").convert("RGB")
+    )
+    # The 1px land gap at x=10 must take one of the two exact region
+    # colors, not white and not a blend.
+    gap_color = tuple(region_map[25, 10])
+    assert gap_color in {(255, 0, 0), (0, 255, 0)}
+    # Sea-side background (x=150, well past the land/sea split at x=100)
+    # must stay untouched.
+    assert tuple(region_map[25, 150]) == (255, 255, 255)
 
 
 def test_export_project_skips_unnamed_regions(tmp_path):
@@ -194,6 +236,18 @@ def test_classify_coastline_finds_split_near_boundary(tmp_path):
     # The true land/sea split is at x=100; traced points should cluster
     # near it rather than at the canvas edges (0 or 200).
     assert any(80 <= x <= 120 for x in xs)
+
+
+def test_build_land_mask_matches_known_land_and_sea_sides(tmp_path):
+    image_path = tmp_path / "two_tone.png"
+    make_two_tone_image(image_path, width=200, height=100)
+
+    land_mask = srv.build_land_mask(image_path)
+
+    assert land_mask.shape == (100, 200)
+    assert land_mask.dtype == bool
+    assert land_mask[50, 20]  # well inside the land (red-biased) half
+    assert not land_mask[50, 180]  # well inside the sea (blue-biased) half
 
 
 def test_load_or_build_coastline_caches_to_disk(tmp_path, monkeypatch):

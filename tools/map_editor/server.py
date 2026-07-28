@@ -41,6 +41,8 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
+from gapfill import fill_land_gaps
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DEV_DIR_DEFAULT = Path(__file__).resolve().parent / "dev_map_data"
@@ -242,18 +244,17 @@ def load_or_build_coastline(image_path: Path, cache_path: Path) -> dict:
     return {"lines": result["lines"]}
 
 
-def classify_coastline(image_path: Path) -> list:
-    """Classify land vs. sea in image_path and trace the boundary between
-    them, for use as a snapping aid when drawing region borders.
+def _classify_sea_mask(image_path: Path):
+    """Shared land/sea heuristic: classify per-pixel on blue-vs-red bias at
+    a downscaled working resolution, then denoise with morphology. Returns
+    (sea_mask_work, full_w, full_h, work_w, work_h).
 
-    Painted terrain art like ours renders water in cool navy/teal tones
-    and land in warm tan/green/brown. We classify per-pixel on
-    blue-vs-red bias rather than region-growing from a "known sea" seed.
-    The art's texture noise and its haze over distant land make
-    flood-fill unreliable here.
+    Our painted terrain art renders water in cool navy/teal tones and land
+    in warm tan/green/brown. We classify on channel bias rather than
+    region-growing from a "known sea" seed. Texture noise and haze over
+    distant land make flood-fill unreliable here.
 
-    This is a coarse heuristic, not per-pixel-exact. It gives border
-    snapping something to pull towards, not a precise terrain mask."""
+    This is a coarse heuristic, not per-pixel-exact."""
     full = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
     full_h, full_w = full.shape[:2]
 
@@ -269,6 +270,29 @@ def classify_coastline(image_path: Path) -> list:
     kernel = np.ones((COASTLINE_MORPH_KERNEL, COASTLINE_MORPH_KERNEL), np.uint8)
     sea_mask = cv2.morphologyEx(sea_mask, cv2.MORPH_OPEN, kernel)
     sea_mask = cv2.morphologyEx(sea_mask, cv2.MORPH_CLOSE, kernel)
+
+    return sea_mask, full_w, full_h, work_w, work_h
+
+
+def build_land_mask(image_path: Path) -> np.ndarray:
+    """Full-resolution boolean mask, True where image_path counts as land.
+    Used by gapfill.fill_land_gaps to fill coastline gaps in the exported
+    region raster. Same coarse heuristic as classify_coastline, just
+    returned as a mask instead of traced into boundary lines."""
+    sea_mask, full_w, full_h, _work_w, _work_h = _classify_sea_mask(image_path)
+    sea_mask_full = cv2.resize(
+        sea_mask, (full_w, full_h), interpolation=cv2.INTER_NEAREST
+    )
+    return sea_mask_full == 0
+
+
+def classify_coastline(image_path: Path) -> list:
+    """Classify land vs. sea in image_path and trace the boundary between
+    them, for use as a snapping aid when drawing region borders.
+
+    This is a coarse heuristic, not per-pixel-exact. It gives border
+    snapping something to pull towards, not a precise terrain mask."""
+    sea_mask, full_w, full_h, work_w, work_h = _classify_sea_mask(image_path)
 
     contours, _ = cv2.findContours(sea_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     scale_x, scale_y = full_w / work_w, full_h / work_h
@@ -306,6 +330,10 @@ def export_project(project: dict, image_path: Path, out_dir: Path) -> dict:
             pts = [(float(x), float(y)) for x, y in polygon]
             draw.polygon(pts, fill=color)
         regions_by_color[color] = name.replace(" ", "_")
+
+    land_mask = build_land_mask(image_path)
+    filled = fill_land_gaps(np.array(canvas), land_mask)
+    canvas = Image.fromarray(filled)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     region_map_path = out_dir / "region_map.png"
