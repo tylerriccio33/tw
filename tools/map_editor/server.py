@@ -311,9 +311,100 @@ def classify_coastline(image_path: Path) -> list:
     return lines
 
 
+def _segments_properly_intersect(p1, p2, p3, p4) -> bool:
+    def orientation(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    d1 = orientation(p3, p4, p1)
+    d2 = orientation(p3, p4, p2)
+    d3 = orientation(p1, p2, p3)
+    d4 = orientation(p1, p2, p4)
+    return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0)) and d1 != 0 and d2 != 0
+
+
+def polygon_self_intersects(points: list[tuple[float, float]]) -> bool:
+    """True if any two non-adjacent edges of the closed polygon cross.
+    A self-crossing polygon fills unpredictably: PIL's scanline fill
+    doesn't follow a torn/bowtie shape the way a human eye would. This
+    is how a mistraced faction border ends up rendering as a
+    disconnected fragment instead of the intended landmass."""
+    n = len(points)
+    edges = [(points[i], points[(i + 1) % n]) for i in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            if j == i + 1 or (i == 0 and j == n - 1):
+                continue  # adjacent edges share a vertex, not a crossing
+            if _segments_properly_intersect(*edges[i], *edges[j]):
+                return True
+    return False
+
+
+def validate_project(project: dict, size: tuple[int, int]) -> list[str]:
+    """Invariants a region_map.png/regions.txt export depends on. A
+    violation means the export misrepresents what was drawn: a dropped
+    faction, a torn shape, or an off-map border. export_project
+    refuses to write anything until these are clean."""
+    width, height = size
+    problems = []
+    name_by_color: dict[str, str] = {}
+
+    for region in project.get("regions", []):
+        name = region.get("name", "").strip()
+        if not name:
+            continue
+        color = region.get("color", "#808080").strip().lower()
+
+        prior_name = name_by_color.get(color)
+        if prior_name is not None and prior_name != name:
+            problems.append(
+                f"'{name}' and '{prior_name}' both use color {color} - "
+                "regions.txt maps one name per color, so one of them "
+                "will be silently dropped from the exported map"
+            )
+        else:
+            name_by_color[color] = name
+
+        for poly_idx, polygon in enumerate(region.get("polygons", [])):
+            if len(polygon) < 3:
+                continue
+            pts = [(float(x), float(y)) for x, y in polygon]
+
+            out_of_bounds = [
+                (x, y) for x, y in pts if not (0 <= x <= width and 0 <= y <= height)
+            ]
+            if out_of_bounds:
+                x, y = out_of_bounds[0]
+                problems.append(
+                    f"'{name}' polygon {poly_idx} has a point "
+                    f"({x:.1f}, {y:.1f}) outside the {width}x{height} map"
+                )
+
+            if len(set(pts)) < len(pts):
+                problems.append(
+                    f"'{name}' polygon {poly_idx} revisits the same point "
+                    "twice - that pinches the shape into a self-touching "
+                    "loop instead of the intended territory"
+                )
+            elif polygon_self_intersects(pts):
+                problems.append(
+                    f"'{name}' polygon {poly_idx} crosses itself - it will "
+                    "render as a torn or disconnected shape instead of the "
+                    "intended territory"
+                )
+
+    return problems
+
+
 def export_project(project: dict, image_path: Path, out_dir: Path) -> dict:
     with Image.open(image_path) as src:
         size = src.size
+
+    problems = validate_project(project, size)
+    if problems:
+        raise ValueError(
+            "Export blocked, the map data doesn't make sense:\n"
+            + "\n".join(f"- {p}" for p in problems)
+        )
 
     canvas = Image.new("RGB", size, "white")
     draw = ImageDraw.Draw(canvas)

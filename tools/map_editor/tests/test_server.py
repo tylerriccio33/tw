@@ -150,6 +150,167 @@ def test_export_project_skips_unnamed_regions(tmp_path):
     assert names == {}
 
 
+# ---------------------------------------------------------------------------
+# validate_project / export_project rejection - the editor must not be able
+# to produce a region_map.png + regions.txt that can't faithfully round-trip
+# through province_map.gd: a dropped faction (color collision), a torn or
+# pinched shape (self-intersecting or repeated-point polygon), or a border
+# that reaches off the map.
+# ---------------------------------------------------------------------------
+
+
+def test_validate_project_flags_duplicate_color_across_regions():
+    project = {
+        "image_size": [100, 100],
+        "regions": [
+            {
+                "name": "France",
+                "color": "#c65102",
+                "polygons": [[[0, 0], [10, 0], [10, 10]]],
+            },
+            {
+                "name": "Persia",
+                "color": "#c65102",
+                "polygons": [[[50, 50], [60, 50], [60, 60]]],
+            },
+        ],
+    }
+
+    problems = srv.validate_project(project, (100, 100))
+
+    assert any("France" in p and "Persia" in p and "#c65102" in p for p in problems)
+
+
+def test_validate_project_allows_same_color_reused_under_the_same_name():
+    # Multiple polygons for one region under its own name/color is normal
+    # (e.g. an archipelago); only a *different* name reusing a color is a
+    # collision.
+    project = {
+        "image_size": [100, 100],
+        "regions": [
+            {
+                "name": "Italy",
+                "color": "#bfef45",
+                "polygons": [
+                    [[0, 0], [10, 0], [10, 10]],
+                    [[50, 50], [60, 50], [60, 60]],
+                ],
+            }
+        ],
+    }
+
+    assert srv.validate_project(project, (100, 100)) == []
+
+
+def test_validate_project_flags_self_intersecting_polygon():
+    # A bowtie: edges (0,0)->(10,10) and (10,0)->(0,10) cross in the middle.
+    project = {
+        "image_size": [100, 100],
+        "regions": [
+            {
+                "name": "Bowtie",
+                "color": "#123456",
+                "polygons": [[[0, 0], [10, 0], [0, 10], [10, 10]]],
+            }
+        ],
+    }
+
+    problems = srv.validate_project(project, (100, 100))
+
+    assert any("crosses itself" in p for p in problems)
+
+
+def test_validate_project_flags_repeated_point_in_polygon():
+    # Mirrors the real England bug: point 0 and a later point are the exact
+    # same coordinate, pinching the polygon into a self-touching loop that
+    # renders as a torn/disconnected fragment instead of one landmass.
+    project = {
+        "image_size": [300, 300],
+        "regions": [
+            {
+                "name": "England",
+                "color": "#c50202",
+                "polygons": [
+                    [
+                        [174.0, 137.0],
+                        [288.0, 114.0],
+                        [231.7, 8.3],
+                        [184.9, 3.6],
+                        [212.0, 47.0],
+                        [199.2, 56.9],
+                        [181.0, 89.0],
+                        [174.0, 137.0],  # same as point 0
+                        [202.2, 96.8],
+                    ]
+                ],
+            }
+        ],
+    }
+
+    problems = srv.validate_project(project, (300, 300))
+
+    assert any("revisits the same point" in p for p in problems)
+
+
+def test_validate_project_flags_point_outside_the_map():
+    project = {
+        "image_size": [100, 100],
+        "regions": [
+            {
+                "name": "Overboard",
+                "color": "#123456",
+                "polygons": [[[50, 50], [120, 50], [90, 90]]],
+            }
+        ],
+    }
+
+    problems = srv.validate_project(project, (100, 100))
+
+    assert any("outside the 100x100 map" in p for p in problems)
+
+
+def test_validate_project_accepts_a_clean_project():
+    project = {
+        "image_size": [100, 100],
+        "regions": [
+            {
+                "name": "Clean",
+                "color": "#123456",
+                "polygons": [[[10, 10], [90, 10], [90, 90], [10, 90]]],
+            }
+        ],
+    }
+
+    assert srv.validate_project(project, (100, 100)) == []
+
+
+def test_export_project_rejects_invalid_project_without_writing_files(tmp_path):
+    image_path = tmp_path / "backdrop.png"
+    make_image(image_path, size=(100, 100))
+    project = {
+        "image_size": [100, 100],
+        "regions": [
+            {
+                "name": "France",
+                "color": "#c65102",
+                "polygons": [[[0, 0], [10, 0], [10, 10]]],
+            },
+            {
+                "name": "Persia",
+                "color": "#c65102",
+                "polygons": [[[50, 50], [60, 50], [60, 60]]],
+            },
+        ],
+    }
+
+    with pytest.raises(ValueError, match="France"):
+        srv.export_project(project, image_path, tmp_path / "out")
+
+    # A rejected export must not leave a half-written/corrupt output behind.
+    assert not (tmp_path / "out" / "region_map.png").exists()
+    assert not (tmp_path / "out" / "regions.txt").exists()
+
+
 def test_import_from_raster_recovers_region_and_color(tmp_path):
     image_path = tmp_path / "backdrop.png"
     make_image(image_path, size=(30, 30))
@@ -405,6 +566,42 @@ def test_api_export_writes_dev_files(running_server):
     assert status == 200 and body["ok"] is True
     assert (dev_dir / "region_map.png").is_file()
     assert (dev_dir / "regions.txt").is_file()
+
+
+def test_api_export_rejects_invalid_project_over_http(running_server):
+    server, dev_dir, _game_dir = running_server
+    payload = {
+        "image_size": [200, 100],
+        "regions": [
+            {
+                "name": "France",
+                "color": "#c65102",
+                "polygons": [[[0, 0], [10, 0], [10, 10]]],
+            },
+            {
+                "name": "Persia",
+                "color": "#c65102",
+                "polygons": [[[50, 50], [60, 50], [60, 60]]],
+            },
+        ],
+    }
+    port = server.server_address[1]
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        f"http://localhost:{port}/api/export",
+        data=body,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        urllib.request.urlopen(req)
+        assert False, "expected a 500 for an invalid project"
+    except urllib.error.HTTPError as e:
+        assert e.code == 500
+        error_body = json.loads(e.read())
+        assert error_body["ok"] is False
+        assert "France" in error_body["error"]
+
+    assert not (dev_dir / "region_map.png").exists()
 
 
 def test_api_coastline_returns_lines_and_is_cached(running_server):

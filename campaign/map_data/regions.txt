@@ -1,6 +1,4 @@
 {
- "#e6194b": "British_Isles",
- "#ffe119": "Iberia",
  "#4363d8": "Scandinavia",
  "#f58231": "Germany",
  "#911eb4": "Poland_Baltics",
@@ -12,5 +10,7 @@
  "#9a6324": "Caucasus",
  "#808000": "North_Africa",
  "#ffd8b1": "Egypt_Levant",
- "#c65102": "France"
+ "#c65102": "France",
+ "#c50202": "England",
+ "#aec502": "Iberia"
 }

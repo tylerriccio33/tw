@@ -1,6 +1,6 @@
 GODOT ?= godot
 
-.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test promote-map
+.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-preview promote-map
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -25,6 +25,7 @@ help:
 	@echo "make hud-shot      - screenshot just the bottom HUD banner to shots/play/hud.png"
 	@echo "make map-editor    - launch the browser-based territory border editor (tools/map_editor)"
 	@echo "make map-editor-test - run the map editor's pytest suite (project I/O, raster round-trip, coastline classification)"
+	@echo "make map-editor-preview - render dev_map_data/project.json to a single PNG (tools/map_editor/dev_map_data/preview.png), no browser needed"
 	@echo "make promote-map   - copy the traced dev map (tools/map_editor/dev_map_data) into campaign/map_data for the game to use"
 
 armies:
@@ -92,6 +93,16 @@ map-editor:
 
 map-editor-test:
 	cd tools/map_editor && uv run --group dev pytest -q
+
+# Renders dev_map_data/project.json as a single PNG (region colors
+# overlaid on the real terrain backdrop) without opening a browser -
+# tools/map_editor/dev_map_data/preview.png. Runs the same
+# validate_project + export_project path the editor's Export button
+# uses, so any invalid polygon (self-intersecting, revisits a point,
+# color collision, off-map) gets outlined in red on the image and
+# listed on stdout instead of silently producing a bad export.
+map-editor-preview:
+	cd tools/map_editor && uv run preview.py
 
 # Copies the traced dev map into campaign/map_data/, where
 # campaign/province_map.gd actually loads region_map.png + regions.txt

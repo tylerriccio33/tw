@@ -18,7 +18,7 @@ nobody drew.
 import cv2
 import numpy as np
 
-MAX_GAP_PX = 8  # widest untraced strip a gap-fill will bridge
+MAX_GAP_PX = 12  # widest untraced strip a gap-fill will bridge
 MIN_OVERFLOW_AREA_PX = 3000  # smallest contiguous sea-overflow blob to clip
 
 
