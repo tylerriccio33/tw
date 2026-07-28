@@ -1,6 +1,6 @@
 GODOT ?= godot
 
-.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor promote-map
+.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test promote-map
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -24,6 +24,7 @@ help:
 	@echo "make play-shot     - screenshot the whole campaign window to shots/play/play.png"
 	@echo "make hud-shot      - screenshot just the bottom HUD banner to shots/play/hud.png"
 	@echo "make map-editor    - launch the browser-based territory border editor (tools/map_editor)"
+	@echo "make map-editor-test - run the map editor's pytest suite (project I/O, raster round-trip, coastline classification)"
 	@echo "make promote-map   - copy the traced dev map (tools/map_editor/dev_map_data) into campaign/map_data for the game to use"
 
 armies:
@@ -88,6 +89,9 @@ clean-shots:
 # touches the live campaign/map_data/ until you run `make promote-map`.
 map-editor:
 	cd tools/map_editor && uv run server.py
+
+map-editor-test:
+	cd tools/map_editor && uv run --group dev pytest -q
 
 # Copies the traced dev map into campaign/map_data/, where
 # campaign/province_map.gd actually loads region_map.png + regions.txt

@@ -33,9 +33,16 @@ repos:
     hooks:
       - id: pyrefly
         name: pyrefly
-        entry: uv run --with pyrefly --with pillow --with numpy --with scipy --with opencv-python-headless pyrefly check tools
+        entry: uv run --with pyrefly --with pillow --with numpy --with scipy --with opencv-python-headless --with pytest pyrefly check tools
         language: system
         files: \.py$
+        pass_filenames: false
+
+      - id: map-editor-tests
+        name: map-editor tests (pytest)
+        entry: bash -c 'cd tools/map_editor && uv run --group dev pytest -q'
+        language: system
+        files: ^tools/map_editor/.*\.py$
         pass_filenames: false
 
       - id: gdformat

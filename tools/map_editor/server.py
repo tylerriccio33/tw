@@ -49,12 +49,20 @@ GAME_DIR_DEFAULT = REPO_ROOT / "campaign" / "map_data"
 MIN_CONTOUR_AREA = 12  # px^2, drops single-pixel noise contours on import
 SIMPLIFY_EPSILON = 1.2  # px, cv2.approxPolyDP tolerance on import
 
+COASTLINE_WORK_WIDTH = 900  # px, classification runs on a downscaled copy for speed
+COASTLINE_BLUE_BIAS = 8  # min (B - R) for a pixel to count as "sea"-toned
+COASTLINE_MORPH_KERNEL = 7  # px, smooths the sea mask and drops speckle before tracing
+COASTLINE_MIN_CONTOUR_AREA = 120  # px^2 at working resolution, drops speckle contours
+COASTLINE_SIMPLIFY_EPSILON = 2.0  # px at working resolution
+
 
 def make_handler(args: argparse.Namespace):
     image_path = Path(args.image).resolve()
     dev_dir = Path(args.dev_dir).resolve()
     game_dir = Path(args.game_dir).resolve()
     project_path = dev_dir / "project.json"
+    coastline_cache_path = dev_dir / "coastline.json"
+    coastline_cache: dict = {}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *a):
@@ -97,6 +105,13 @@ def make_handler(args: argparse.Namespace):
                 self._send_json(
                     load_project(project_path, dev_dir, game_dir, image_path)
                 )
+            elif path == "/api/coastline":
+                nonlocal coastline_cache
+                if not coastline_cache:
+                    coastline_cache = load_or_build_coastline(
+                        image_path, coastline_cache_path
+                    )
+                self._send_json(coastline_cache)
             elif path == "/api/reload-from-game":
                 project = import_from_raster(game_dir, image_path)
                 if project is None:
@@ -209,6 +224,67 @@ def import_from_raster(source_dir: Path, image_path: Path) -> dict | None:
             )
 
     return {"image_size": [target_w, target_h], "regions": regions}
+
+
+def load_or_build_coastline(image_path: Path, cache_path: Path) -> dict:
+    """Return {"lines": [[[x,y],...], ...]} tracing the land/sea boundary
+    of image_path, in that image's full-resolution pixel space. Cached to
+    disk keyed on the source image's mtime so repeat loads are instant."""
+    mtime = image_path.stat().st_mtime
+    if cache_path.is_file():
+        cached = json.loads(cache_path.read_text())
+        if cached.get("source_mtime") == mtime:
+            return {"lines": cached["lines"]}
+
+    result = {"lines": classify_coastline(image_path), "source_mtime": mtime}
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(result))
+    return {"lines": result["lines"]}
+
+
+def classify_coastline(image_path: Path) -> list:
+    """Classify land vs. sea in image_path and trace the boundary between
+    them, for use as a snapping aid when drawing region borders.
+
+    Painted terrain art like ours renders water in cool navy/teal tones
+    and land in warm tan/green/brown. We classify per-pixel on
+    blue-vs-red bias rather than region-growing from a "known sea" seed.
+    The art's texture noise and its haze over distant land make
+    flood-fill unreliable here.
+
+    This is a coarse heuristic, not per-pixel-exact. It gives border
+    snapping something to pull towards, not a precise terrain mask."""
+    full = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    full_h, full_w = full.shape[:2]
+
+    scale = min(1.0, COASTLINE_WORK_WIDTH / full_w)
+    work_w, work_h = max(1, round(full_w * scale)), max(1, round(full_h * scale))
+    work = cv2.resize(full, (work_w, work_h), interpolation=cv2.INTER_AREA)
+    work = cv2.medianBlur(work, 5)
+
+    blue = work[:, :, 0].astype(np.int16)
+    red = work[:, :, 2].astype(np.int16)
+    sea_mask = ((blue - red) > COASTLINE_BLUE_BIAS).astype(np.uint8) * 255
+
+    kernel = np.ones((COASTLINE_MORPH_KERNEL, COASTLINE_MORPH_KERNEL), np.uint8)
+    sea_mask = cv2.morphologyEx(sea_mask, cv2.MORPH_OPEN, kernel)
+    sea_mask = cv2.morphologyEx(sea_mask, cv2.MORPH_CLOSE, kernel)
+
+    contours, _ = cv2.findContours(sea_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    scale_x, scale_y = full_w / work_w, full_h / work_h
+    lines = []
+    for contour in contours:
+        if cv2.contourArea(contour) < COASTLINE_MIN_CONTOUR_AREA:
+            continue
+        simplified = cv2.approxPolyDP(contour, COASTLINE_SIMPLIFY_EPSILON, True)
+        pts = [
+            [round(float(pt[0][0]) * scale_x, 1), round(float(pt[0][1]) * scale_y, 1)]
+            for pt in simplified
+        ]
+        if len(pts) >= 2:
+            lines.append(pts)
+
+    return lines
 
 
 def export_project(project: dict, image_path: Path, out_dir: Path) -> dict:

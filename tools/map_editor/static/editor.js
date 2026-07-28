@@ -14,6 +14,7 @@ const state = {
   editMode: false,
   selectedVertex: null, // {ri, pi, vi}
   dragging: null,       // {ri, pi, vi, moved}
+  coastlineEdges: [],   // [[a, b], ...] static land/sea boundary segments to snap onto
 };
 
 const els = {
@@ -258,6 +259,14 @@ function render() {
   const svg = els.overlay;
   svg.innerHTML = '';
 
+  state.coastlineEdges.forEach(([a, b]) => {
+    const el = svgNS('line');
+    el.setAttribute('x1', a[0]); el.setAttribute('y1', a[1]);
+    el.setAttribute('x2', b[0]); el.setAttribute('y2', b[1]);
+    el.setAttribute('class', 'coastline');
+    svg.appendChild(el);
+  });
+
   state.regions.forEach((region, ri) => {
     const isActive = ri === state.activeRegionIndex;
     region.polygons.forEach((poly) => {
@@ -351,6 +360,7 @@ function collectSnapCandidates({ excludeRi, excludePi, excludeVi } = {}) {
     state.drawing.forEach((p) => points.push(p));
     for (let i = 0; i < state.drawing.length - 1; i++) edges.push([state.drawing[i], state.drawing[i + 1]]);
   }
+  edges.push(...state.coastlineEdges);
   return { points, edges };
 }
 
@@ -520,6 +530,21 @@ els.saveBtn.onclick = saveDraft;
 els.exportBtn.onclick = exportProject;
 els.reloadBtn.onclick = reloadFromGame;
 
+async function loadCoastline() {
+  try {
+    const data = await (await fetch('/api/coastline')).json();
+    const edges = [];
+    for (const line of data.lines || []) {
+      for (let i = 0; i < line.length - 1; i++) edges.push([line[i], line[i + 1]]);
+      if (line.length > 2) edges.push([line[line.length - 1], line[0]]); // contours are closed
+    }
+    state.coastlineEdges = edges;
+    render();
+  } catch (e) {
+    // Coastline classification is a best-effort aid; drawing works fine without it.
+  }
+}
+
 async function init() {
   const proj = await (await fetch('/api/project')).json();
 
@@ -536,6 +561,7 @@ async function init() {
 
   applyProject(proj);
   setStatus(state.regions.length ? `Loaded ${state.regions.length} regions.` : 'New project. Click "+ New Region" to start tracing.');
+  loadCoastline();
 }
 
 init();
