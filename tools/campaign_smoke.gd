@@ -35,6 +35,57 @@ func _on_game_over(_winner: int) -> void:
 	game_over_fired = true
 
 
+## The map package's faction roster, as factions.json ships it.
+func _sample_factions() -> Array:
+	return [
+		{"key": "red", "name": "Red", "color": "#cd5c5c", "money": 100},
+		{"key": "blue", "name": "Blue", "color": "#6495ed", "money": 100},
+		{"key": "green", "name": "Green", "color": "#3cb371", "money": 100},
+		{"key": "yellow", "name": "Yellow", "color": "#daa520", "money": 100},
+	]
+
+
+## A province table shaped like provinces.table.json: one province per
+## position, owners round-robin across the roster, each bordering the next so
+## the adjacency graph is a connected ring.
+func _sample_provinces(positions: PackedVector2Array) -> Array:
+	var keys := ["red", "blue", "green", "yellow"]
+	var rows: Array = []
+	for i in positions.size():
+		var prev: int = ((i - 1) + positions.size()) % positions.size() + 1
+		var next: int = (i + 1) % positions.size() + 1
+		(
+			rows
+			. append(
+				{
+					"id": i + 1,
+					"key": "province_%d" % (i + 1),
+					"name": "Province %d" % (i + 1),
+					"centroid": [positions[i].x, positions[i].y],
+					"area_px": 1000,
+					"neighbors": [prev, next],
+					"starting_owner": keys[i % keys.size()],
+					"tags": {"terrain": "plains", "resources": ["iron"]},
+				}
+			)
+		)
+	return rows
+
+
+func _start_from_provinces(manager: Object, positions: PackedVector2Array, max_turns: int) -> void:
+	manager.load_factions(_sample_factions())
+	manager.load_provinces(_sample_provinces(positions))
+	manager.start_game_from_provinces(max_turns)
+
+
+## Four corners, one province per faction. Not a const: PackedVector2Array
+## literals aren't constant expressions in GDScript.
+func _default_positions() -> PackedVector2Array:
+	return PackedVector2Array(
+		[Vector2(-200, -200), Vector2(200, -200), Vector2(-200, 200), Vector2(200, 200)]
+	)
+
+
 func _initialize() -> void:
 	var failures: Array[String] = []
 
@@ -53,8 +104,26 @@ func _initialize() -> void:
 	manager.battle_resolved.connect(_on_battle_resolved)
 	manager.game_over.connect(_on_game_over)
 
-	manager.start_default_game()
+	_start_from_provinces(manager, _default_positions(), 10)
 	var state: Dictionary = manager.get_state()
+
+	# The province table has to survive the trip into Rust and back out, or
+	# the map has no way to colour itself.
+	if state["provinces"].size() != 4:
+		failures.append("expected 4 provinces, got %d" % state["provinces"].size())
+	for province in state["provinces"]:
+		if int(province["owner"]) < 0:
+			failures.append("province %d has no starting owner" % int(province["id"]))
+		if String(province["tags"].get("terrain", "")) != "plains":
+			failures.append("province %d lost its terrain tag" % int(province["id"]))
+		if province["tags"].get("resources", []) != ["iron"]:
+			failures.append("province %d lost its resources tag" % int(province["id"]))
+	for faction in state["factions"]:
+		if not String(faction.get("color", "")).begins_with("#"):
+			failures.append(
+				"faction %d has no color for the map to paint with" % int(faction["id"])
+			)
+
 	if state["factions"].size() != 4:
 		failures.append("expected 4 factions, got %d" % state["factions"].size())
 	if state["cities"].size() != 4:
@@ -96,9 +165,9 @@ func _initialize() -> void:
 
 	manager.free()
 
-	# Exercise the world-derived start path with a non-default city count,
-	# since start_default_game() alone would never catch a regression in
-	# start_game_from_positions()'s faction-clamping/round-robin ownership.
+	# Exercise the start path with a non-default province count, since the
+	# 4-province case would never catch a regression in how ownership is
+	# assigned across a larger table.
 	var manager2: Object = ClassDB.instantiate("CampaignManager")
 	if manager2 == null:
 		failures.append("CampaignManager failed to instantiate (second instance)")
@@ -122,19 +191,25 @@ func _initialize() -> void:
 			Vector2(200, 0)
 		]
 	)
-	manager2.start_game_from_positions(positions, 10)
+	_start_from_provinces(manager2, positions, 10)
 	var state2: Dictionary = manager2.get_state()
 	if state2["factions"].size() != 4:
-		failures.append(
-			(
-				"start_game_from_positions: expected 4 factions (clamped), got %d"
-				% state2["factions"].size()
-			)
-		)
+		failures.append("provinces start: expected 4 factions, got %d" % state2["factions"].size())
 	if state2["cities"].size() != 6:
+		failures.append("provinces start: expected 6 cities, got %d" % state2["cities"].size())
+	if state2["provinces"].size() != 6:
 		failures.append(
-			"start_game_from_positions: expected 6 cities, got %d" % state2["cities"].size()
+			"provinces start: expected 6 provinces, got %d" % state2["provinces"].size()
 		)
+	for city in state2["cities"]:
+		if int(city.get("province", -1)) < 0:
+			failures.append("city %d is not tied to a province" % int(city["id"]))
+
+	# Conquest has to move province ownership, not just city ownership -
+	# otherwise the map keeps painting the old owner's colour.
+	var owners_before: Dictionary = {}
+	for province in state2["provinces"]:
+		owners_before[int(province["id"])] = int(province["owner"])
 
 	iterations = 0
 	while not manager2.is_game_over() and iterations < 500:
@@ -150,20 +225,26 @@ func _initialize() -> void:
 		manager2.end_turn()
 		iterations += 1
 
+	var owners_changed := false
+	for province in manager2.get_state()["provinces"]:
+		if int(province["owner"]) != owners_before[int(province["id"])]:
+			owners_changed = true
+			break
+	if not owners_changed:
+		failures.append("no province changed hands over a whole campaign")
+
 	if not manager2.is_game_over():
-		failures.append(
-			"start_game_from_positions: game did not end within %d iterations" % iterations
-		)
+		failures.append("provinces start: game did not end within %d iterations" % iterations)
 	if turn_started_count == 0:
-		failures.append("start_game_from_positions: turn_started never fired")
+		failures.append("provinces start: turn_started never fired")
 	if battle_count == 0:
-		failures.append("start_game_from_positions: battle_resolved never fired")
+		failures.append("provinces start: battle_resolved never fired")
 	if not game_over_fired:
-		failures.append("start_game_from_positions: game_over never fired")
+		failures.append("provinces start: game_over never fired")
 
 	print(
 		(
-			"campaign smoke (world-derived): turns=%d battles=%d winner=%d"
+			"campaign smoke (provinces): turns=%d battles=%d winner=%d"
 			% [turn_started_count, battle_count, manager2.winner_id()]
 		)
 	)
@@ -191,7 +272,7 @@ func _check_armies() -> Array[String]:
 	manager.army_battle.connect(_on_army_battle)
 
 	manager.set_map_extent(2048.0)
-	manager.start_default_game()
+	_start_from_provinces(manager, _default_positions(), 10)
 
 	var state: Dictionary = manager.get_state()
 	if state["armies"].size() != 4:

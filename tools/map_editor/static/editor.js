@@ -1,567 +1,1222 @@
-'use strict';
+// The map editor UI.
+//
+// Nothing here names a layer. The sidebar, the tools, the snap targets
+// and the export are all built from /api/manifest, so adding a layer to
+// map.json makes it appear with its own row, its own legend and its own
+// editing gesture without a line changing in this file.
+//
+// Three gestures, chosen per layer by its `input`:
+//   polygon  trace rings with snapping and magnetic trace (coastline, provinces)
+//   brush    paint a raster (terrain, resources)
+//   assign   click a province to give it a key (ownership)
 
-const PALETTE = [
-  '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4',
-  '#46f0f0', '#bfef45', '#fabed4', '#469990', '#dcbeff', '#9a6324',
-  '#808000', '#ffd8b1', '#c65102', '#aaffc3', '#800000', '#000075',
-];
+const SNAP_SCREEN_PX = 14; // snap radius in screen px, so it feels the same at any zoom
+const SNAP_CELL_PX = 32; // spatial hash cell for snap candidates
+const TRACE_EPSILON_SCREEN = 0.75; // Douglas-Peucker tolerance, in screen px
+const MAX_TRACE_VERTICES = 600;
+const PAN_SPEED = 1000; // px/s
+const ZOOM_SPEED = 1.2; // e-folds/s
+const AUTOSAVE_MS = 1500;
 
 const state = {
-  imageSize: [0, 0],
-  regions: [],          // [{name, color, polygons: [[[x,y],...], ...]}]
-  activeRegionIndex: -1,
-  drawing: null,        // [[x,y], ...] while placing a new shape's points
+  manifest: null,
+  project: null,
+  activeLayer: null,
+  visible: {},
+  magnet: {},
+  selected: {}, // layer -> feature index (identity) or legend key (others)
+  drawing: null, // points of the ring being placed
   editMode: false,
-  selectedVertex: null, // {ri, pi, vi}
-  dragging: null,       // {ri, pi, vi, moved}
-  coastlineEdges: [],   // [[a, b], ...] static land/sea boundary segments to snap onto
+  tool: "draw", // draw | trace | brush | bucket | eraser
+  traceAnchor: null,
+  tracePreview: null,
+  brushSize: 24,
+  zoom: 1,
+  snapIndex: null,
+  painting: false,
+  dirtyRasters: new Set(),
 };
 
-const els = {
-  bgImage: document.getElementById('bgImage'),
-  overlay: document.getElementById('overlay'),
-  stage: document.getElementById('stage'),
-  viewport: document.getElementById('viewport'),
-  regionList: document.getElementById('regionList'),
-  newRegionBtn: document.getElementById('newRegionBtn'),
-  newShapeBtn: document.getElementById('newShapeBtn'),
-  editVerticesBtn: document.getElementById('editVerticesBtn'),
-  saveBtn: document.getElementById('saveBtn'),
-  exportBtn: document.getElementById('exportBtn'),
-  reloadBtn: document.getElementById('reloadBtn'),
-  status: document.getElementById('status'),
-};
+const el = {};
+const canvases = {}; // layer name -> <canvas> for brush layers
 
-let zoom = 1;
-let autosaveTimer = null;
+// ---------------------------------------------------------------------------
+// small helpers
+// ---------------------------------------------------------------------------
 
-// In-page replacements for window.prompt/confirm: native dialogs are
-// blocking and don't reliably surface in every embedding, which read as
-// "the button does nothing". These render inside the page instead.
-function showModal({ title, withInput, defaultValue, confirmLabel }) {
-  return new Promise((resolve) => {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-
-    const box = document.createElement('div');
-    box.className = 'modal-box';
-
-    const h = document.createElement('div');
-    h.className = 'modal-title';
-    h.textContent = title;
-    box.appendChild(h);
-
-    let input = null;
-    if (withInput) {
-      input = document.createElement('input');
-      input.type = 'text';
-      input.value = defaultValue || '';
-      input.className = 'modal-input';
-      box.appendChild(input);
-    }
-
-    const row = document.createElement('div');
-    row.className = 'modal-actions';
-    const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
-    const okBtn = document.createElement('button');
-    okBtn.textContent = confirmLabel || 'OK';
-    okBtn.className = 'primary';
-    row.append(cancelBtn, okBtn);
-    box.appendChild(row);
-
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-
-    const finish = (value) => { document.body.removeChild(overlay); resolve(value); };
-    cancelBtn.onclick = () => finish(withInput ? null : false);
-    okBtn.onclick = () => finish(withInput ? (input ? input.value : true) : true);
-    overlay.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); okBtn.click(); }
-      if (e.key === 'Escape') { e.preventDefault(); cancelBtn.click(); }
-    });
-
-    if (input) { input.focus(); input.select(); }
-    else okBtn.focus();
-  });
+function setStatus(message, isError) {
+  el.status.textContent = message || "";
+  el.status.classList.toggle("error", !!isError);
 }
 
-function showPrompt(title, defaultValue) {
-  return showModal({ title, withInput: true, defaultValue });
+const layerCfg = (name) => state.manifest.layers[name];
+const activeCfg = () => (state.activeLayer ? layerCfg(state.activeLayer) : null);
+
+function features(name) {
+  const layer = state.project.layers[name];
+  if (!layer.features) layer.features = [];
+  return layer.features;
 }
 
-function showConfirm(title, confirmLabel) {
-  return showModal({ title, withInput: false, confirmLabel });
+function assignments(name) {
+  const layer = state.project.layers[name];
+  if (!layer.assignments) layer.assignments = {};
+  return layer.assignments;
 }
 
-function setStatus(msg, isError) {
-  els.status.textContent = msg;
-  els.status.className = isError ? 'error' : '';
+function legendEntries(cfg) {
+  return Object.entries(cfg.legend || {}).map(([color, entry]) => ({
+    color,
+    key: entry.key,
+    name: entry.name || entry.key,
+  }));
 }
 
-function scheduleAutosave() {
-  clearTimeout(autosaveTimer);
-  autosaveTimer = setTimeout(saveDraft, 1500);
+function colorForKey(cfg, key) {
+  const found = legendEntries(cfg).find((entry) => entry.key === key);
+  return found ? found.color : "#808080";
 }
 
-async function saveDraft() {
-  await fetch('/api/project', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_size: state.imageSize, regions: state.regions }),
-  });
-  setStatus('Draft saved.');
-}
-
-async function exportProject() {
-  const res = await fetch('/api/export', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_size: state.imageSize, regions: state.regions }),
-  });
-  const data = await res.json();
-  if (data.ok) {
-    setStatus(`Exported ${data.region_count} regions -> ${data.region_map}. Run "make promote-map" to ship it.`);
-  } else {
-    setStatus('Export failed: ' + data.error, true);
-  }
-}
-
-function applyProject(proj) {
-  state.regions = proj.regions || [];
-  state.activeRegionIndex = -1;
-  state.drawing = null;
-  state.editMode = false;
-  syncButtons();
-  renderRegionList();
-  render();
-}
-
-async function reloadFromGame() {
-  const ok = await showConfirm('Discard current draft and re-trace from the map currently shipped in campaign/map_data?', 'Reload');
-  if (!ok) return;
-  const res = await fetch('/api/reload-from-game');
-  const data = await res.json();
-  if (data.error) {
-    setStatus(data.error, true);
-    return;
-  }
-  applyProject(data);
-  setStatus(`Loaded ${data.regions.length} regions from the live game map.`);
-  scheduleAutosave();
-}
-
-function nextColor() {
-  return PALETTE[state.regions.length % PALETTE.length];
-}
-
-async function newRegion() {
-  const name = await showPrompt('Region name:');
-  if (!name || !name.trim()) return;
-  state.regions.push({ name: name.trim(), color: nextColor(), polygons: [] });
-  state.activeRegionIndex = state.regions.length - 1;
-  state.drawing = [];
-  state.editMode = false;
-  syncButtons();
-  renderRegionList();
-  render();
-}
-
-function newShape() {
-  if (state.activeRegionIndex < 0) return;
-  state.drawing = [];
-  state.editMode = false;
-  syncButtons();
-  render();
-}
-
-function toggleEditVertices() {
-  if (state.activeRegionIndex < 0) return;
-  state.editMode = !state.editMode;
-  state.drawing = null;
-  syncButtons();
-  render();
-}
-
-function syncButtons() {
-  const hasActive = state.activeRegionIndex >= 0;
-  els.newShapeBtn.disabled = !hasActive;
-  els.editVerticesBtn.disabled = !hasActive;
-  els.editVerticesBtn.textContent = 'Edit Vertices: ' + (state.editMode ? 'On' : 'Off');
-  els.editVerticesBtn.classList.toggle('active', state.editMode);
-}
-
-function setActiveRegion(idx) {
-  state.activeRegionIndex = idx;
-  state.drawing = null;
-  state.editMode = false;
-  syncButtons();
-  renderRegionList();
-  render();
-}
-
-async function deleteRegion(idx) {
-  const ok = await showConfirm(`Delete region "${state.regions[idx].name}"?`, 'Delete');
-  if (!ok) return;
-  state.regions.splice(idx, 1);
-  if (state.activeRegionIndex === idx) state.activeRegionIndex = -1;
-  else if (state.activeRegionIndex > idx) state.activeRegionIndex--;
-  syncButtons();
-  renderRegionList();
-  render();
-  scheduleAutosave();
-}
-
-function renderRegionList() {
-  els.regionList.innerHTML = '';
-  state.regions.forEach((region, idx) => {
-    const row = document.createElement('div');
-    row.className = 'region-row' + (idx === state.activeRegionIndex ? ' active' : '');
-
-    const colorInput = document.createElement('input');
-    colorInput.type = 'color';
-    colorInput.value = region.color;
-    colorInput.oninput = (e) => { region.color = e.target.value; render(); scheduleAutosave(); };
-    colorInput.onclick = (e) => e.stopPropagation();
-
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.value = region.name;
-    nameInput.oninput = (e) => { region.name = e.target.value; scheduleAutosave(); };
-    nameInput.onclick = (e) => e.stopPropagation();
-
-    const count = document.createElement('span');
-    count.className = 'shape-count';
-    count.textContent = `${region.polygons.length} shape${region.polygons.length === 1 ? '' : 's'}`;
-
-    const del = document.createElement('button');
-    del.className = 'del';
-    del.textContent = '✕';
-    del.onclick = (e) => { e.stopPropagation(); deleteRegion(idx); };
-
-    row.append(colorInput, nameInput, count, del);
-    row.onclick = () => setActiveRegion(idx);
-    els.regionList.appendChild(row);
-  });
-}
-
-function darken(hex) {
+function darken(hex, amount = 0.45) {
   const n = parseInt(hex.slice(1), 16);
-  const r = Math.max(0, (n >> 16) - 40), g = Math.max(0, ((n >> 8) & 255) - 40), b = Math.max(0, (n & 255) - 40);
+  const r = Math.round(((n >> 16) & 255) * (1 - amount));
+  const g = Math.round(((n >> 8) & 255) * (1 - amount));
+  const b = Math.round((n & 255) * (1 - amount));
   return `rgb(${r},${g},${b})`;
 }
 
-function svgNS(tag) { return document.createElementNS('http://www.w3.org/2000/svg', tag); }
+function slugify(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
 
-function pointsAttr(pts) { return pts.map(p => p[0] + ',' + p[1]).join(' '); }
+const PALETTE = [
+  "#4363d8", "#f58231", "#911eb4", "#46f0f0", "#bfef45", "#fabed4",
+  "#469990", "#dcbeff", "#9a6324", "#808000", "#ffd8b1", "#000075",
+  "#c65102", "#c50202", "#c5ab02", "#3cb44b", "#e6194b", "#42d4f4",
+];
+
+// Native prompt/confirm read as "the button did nothing" when this is
+// embedded in a webview, so dialogs are in-page.
+function showModal(title, inputValue, onOk) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  const hasInput = inputValue !== null && inputValue !== undefined;
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-title">${title}</div>
+      ${hasInput ? '<input class="modal-input" type="text">' : ""}
+      <div class="modal-actions">
+        <button class="cancel">Cancel</button>
+        <button class="ok primary">OK</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const input = overlay.querySelector(".modal-input");
+  if (input) {
+    input.value = inputValue;
+    input.focus();
+    input.select();
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") overlay.querySelector(".ok").click();
+      if (e.key === "Escape") overlay.querySelector(".cancel").click();
+    });
+  }
+  overlay.querySelector(".cancel").onclick = () => overlay.remove();
+  overlay.querySelector(".ok").onclick = () => {
+    overlay.remove();
+    onOk(input ? input.value : true);
+  };
+}
+
+const showPrompt = (title, value, cb) => showModal(title, value ?? "", cb);
+const showConfirm = (title, cb) => showModal(title, null, cb);
+
+// ---------------------------------------------------------------------------
+// loading
+// ---------------------------------------------------------------------------
+
+async function boot() {
+  el.layerList = document.getElementById("layerList");
+  el.featureList = document.getElementById("featureList");
+  el.tools = document.getElementById("tools");
+  el.status = document.getElementById("status");
+  el.stage = document.getElementById("stage");
+  el.backdrop = document.getElementById("bgImage");
+  el.overlay = document.getElementById("overlay");
+  el.hint = document.getElementById("hint");
+  el.viewport = document.getElementById("viewport");
+
+  state.manifest = await (await fetch("/api/manifest")).json();
+  if (state.manifest.error) {
+    setStatus(state.manifest.error, true);
+    return;
+  }
+  state.project = await (await fetch("/api/project")).json();
+
+  const [width, height] = state.manifest.size;
+  el.backdrop.src = "/api/backdrop";
+  el.overlay.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  el.overlay.setAttribute("preserveAspectRatio", "none");
+
+  for (const name of state.manifest.layer_order) {
+    state.visible[name] = true;
+    const cfg = layerCfg(name);
+    if (cfg.input === "brush") await mountBrushCanvas(name);
+    state.selected[name] = cfg.input === "polygon" && cfg.kind === "identity"
+      ? -1
+      : cfg.default_key || (legendEntries(cfg)[0] || {}).key || null;
+  }
+
+  setActiveLayer(state.project.active_layer || state.manifest.layer_order[0]);
+  setZoom(1);
+  bindEvents();
+  render();
+}
+
+async function mountBrushCanvas(name) {
+  const [width, height] = state.manifest.size;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  canvas.className = "layer-canvas";
+  canvas.dataset.layer = name;
+  el.stage.insertBefore(canvas, el.overlay);
+  canvases[name] = canvas;
+
+  const image = new Image();
+  await new Promise((resolve) => {
+    image.onload = resolve;
+    image.onerror = resolve;
+    image.src = `/api/layer/${name}.png?t=${Date.now()}`;
+  });
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(image, 0, 0);
+  makeNodataTransparent(canvas, layerCfg(name).nodata_color);
+}
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+// nodata is the layer's "nothing here" color. On screen that has to be
+// transparent, or every layer above the coastline would hide the ones
+// below it.
+function makeNodataTransparent(canvas, nodataHex) {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const [nr, ng, nb] = hexToRgb(nodataHex);
+  const data = image.data;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i] === nr && data[i + 1] === ng && data[i + 2] === nb) data[i + 3] = 0;
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
+// ---------------------------------------------------------------------------
+// layer + feature lists
+// ---------------------------------------------------------------------------
+
+function setActiveLayer(name) {
+  state.activeLayer = name;
+  state.project.active_layer = name;
+  state.drawing = null;
+  state.editMode = false;
+  state.traceAnchor = null;
+  state.tracePreview = null;
+  state.snapIndex = null;
+
+  // Default the magnets to everything already drawn underneath - which is
+  // the reason manifest order is what it is.
+  const cfg = layerCfg(name);
+  for (const other of state.manifest.layer_order) state.magnet[other] = false;
+  for (const other of cfg.snap_candidates) state.magnet[other] = true;
+
+  state.tool = cfg.input === "brush" ? "brush" : "draw";
+  renderSidebar();
+  render();
+}
+
+function renderSidebar() {
+  renderLayerList();
+  renderTools();
+  renderFeatureList();
+  renderHint();
+}
+
+function renderLayerList() {
+  el.layerList.innerHTML = "";
+  for (const name of state.manifest.layer_order) {
+    const cfg = layerCfg(name);
+    const row = document.createElement("div");
+    row.className = "layer-row" + (name === state.activeLayer ? " active" : "");
+
+    const title = document.createElement("span");
+    title.className = "layer-title";
+    title.textContent = cfg.title;
+    title.onclick = () => setActiveLayer(name);
+
+    const badge = document.createElement("span");
+    badge.className = "layer-badge";
+    badge.textContent = cfg.input;
+
+    const eye = document.createElement("button");
+    eye.className = "icon" + (state.visible[name] ? " on" : "");
+    eye.textContent = state.visible[name] ? "◉" : "○";
+    eye.title = "Show this layer";
+    eye.onclick = (e) => {
+      e.stopPropagation();
+      state.visible[name] = !state.visible[name];
+      renderLayerList();
+      render();
+    };
+
+    const magnet = document.createElement("button");
+    const canSnap = cfg.snap_source && name !== state.activeLayer;
+    magnet.className = "icon" + (state.magnet[name] ? " on" : "");
+    magnet.textContent = "⌁";
+    magnet.title = canSnap ? "Snap to this layer" : "Not a snap source";
+    magnet.disabled = !canSnap;
+    magnet.onclick = (e) => {
+      e.stopPropagation();
+      state.magnet[name] = !state.magnet[name];
+      state.snapIndex = null;
+      renderLayerList();
+      render();
+    };
+
+    row.append(title, badge, eye, magnet);
+    el.layerList.appendChild(row);
+  }
+}
+
+function renderTools() {
+  const cfg = activeCfg();
+  el.tools.innerHTML = "";
+  if (!cfg) return;
+
+  const addButton = (label, onClick, active, disabled) => {
+    const button = document.createElement("button");
+    button.textContent = label;
+    button.className = active ? "active" : "";
+    button.disabled = !!disabled;
+    button.onclick = onClick;
+    el.tools.appendChild(button);
+  };
+
+  if (cfg.input === "polygon") {
+    if (cfg.kind === "identity") addButton("+ New Province", newIdentityFeature);
+    addButton("+ New Shape", newShape);
+    addButton(
+      state.editMode ? "Edit Vertices: On" : "Edit Vertices: Off",
+      () => {
+        state.editMode = !state.editMode;
+        state.drawing = null;
+        renderTools();
+        render();
+      },
+      state.editMode
+    );
+    addButton(
+      state.tool === "trace" ? "Trace: On (T)" : "Trace (T)",
+      toggleTrace,
+      state.tool === "trace"
+    );
+    if (cfg.kind === "mask") addButton("Autotrace from backdrop", runAutotrace);
+    if (cfg.gapfill || cfg.clip_to) addButton("Fill Gaps", runFillGaps);
+  } else if (cfg.input === "brush") {
+    addButton("Brush", () => setTool("brush"), state.tool === "brush");
+    addButton("Bucket", () => setTool("bucket"), state.tool === "bucket");
+    addButton("Eraser", () => setTool("eraser"), state.tool === "eraser");
+
+    const wrap = document.createElement("label");
+    wrap.className = "slider";
+    const label = document.createElement("span");
+    label.textContent = `Size ${state.brushSize}px`;
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = 2;
+    slider.max = 120;
+    slider.value = state.brushSize;
+    slider.oninput = () => {
+      state.brushSize = Number(slider.value);
+      label.textContent = `Size ${state.brushSize}px`;
+    };
+    wrap.append(label, slider);
+    el.tools.appendChild(wrap);
+  }
+}
+
+function setTool(tool) {
+  state.tool = tool;
+  state.traceAnchor = null;
+  state.tracePreview = null;
+  renderTools();
+  render();
+}
+
+function toggleTrace() {
+  setTool(state.tool === "trace" ? "draw" : "trace");
+}
+
+function currentFeature() {
+  const cfg = activeCfg();
+  if (!cfg || cfg.input !== "polygon") return null;
+  if (cfg.kind === "identity") {
+    const index = state.selected[state.activeLayer];
+    const list = features(state.activeLayer);
+    return index >= 0 && index < list.length ? list[index] : null;
+  }
+  // A mask layer has one feature per legend key; drawing adds rings to it.
+  const key = state.selected[state.activeLayer];
+  const list = features(state.activeLayer);
+  let found = list.find((f) => f.key === key);
+  if (!found && key) {
+    found = { key, polygons: [] };
+    list.push(found);
+  }
+  return found || null;
+}
+
+function renderFeatureList() {
+  const cfg = activeCfg();
+  el.featureList.innerHTML = "";
+  if (!cfg) return;
+
+  if (cfg.input === "polygon" && cfg.kind === "identity") {
+    features(state.activeLayer).forEach((feature, index) => {
+      el.featureList.appendChild(identityRow(feature, index));
+    });
+    if (!features(state.activeLayer).length) {
+      const empty = document.createElement("div");
+      empty.className = "hint";
+      empty.textContent = "No provinces yet - add one to start tracing.";
+      el.featureList.appendChild(empty);
+    }
+    return;
+  }
+
+  // Every other layer draws its rows straight from the legend: you paint
+  // or assign into fixed categories rather than inventing them.
+  for (const entry of legendEntries(cfg)) {
+    if (cfg.kind === "mask" && entry.color === cfg.nodata_color) {
+      continue; // that key means "nothing drawn here", not something to draw
+    }
+    el.featureList.appendChild(legendRow(cfg, entry));
+  }
+}
+
+function identityRow(feature, index) {
+  const row = document.createElement("div");
+  const isActive = index === state.selected[state.activeLayer];
+  row.className = "feature-row" + (isActive ? " active" : "");
+  row.onclick = () => {
+    state.selected[state.activeLayer] = index;
+    state.drawing = null;
+    renderFeatureList();
+    render();
+  };
+
+  const swatch = document.createElement("input");
+  swatch.type = "color";
+  swatch.value = feature.color || "#808080";
+  swatch.onclick = (e) => e.stopPropagation();
+  swatch.oninput = () => {
+    feature.color = swatch.value;
+    scheduleAutosave();
+    render();
+  };
+
+  const name = document.createElement("input");
+  name.type = "text";
+  name.value = feature.name || "";
+  name.onclick = (e) => e.stopPropagation();
+  name.onchange = () => {
+    feature.name = name.value;
+    feature.key = slugify(name.value);
+    scheduleAutosave();
+  };
+
+  const count = document.createElement("span");
+  count.className = "shape-count";
+  count.textContent = `${(feature.polygons || []).length}▲`;
+
+  const remove = document.createElement("button");
+  remove.className = "del";
+  remove.textContent = "✕";
+  remove.onclick = (e) => {
+    e.stopPropagation();
+    showConfirm(`Delete "${feature.name}"?`, () => {
+      features(state.activeLayer).splice(index, 1);
+      state.selected[state.activeLayer] = -1;
+      state.snapIndex = null;
+      scheduleAutosave();
+      renderSidebar();
+      render();
+    });
+  };
+
+  row.append(swatch, name, count, remove);
+  return row;
+}
+
+function legendRow(cfg, entry) {
+  const row = document.createElement("div");
+  const isActive = state.selected[state.activeLayer] === entry.key;
+  row.className = "feature-row" + (isActive ? " active" : "");
+  row.onclick = () => {
+    state.selected[state.activeLayer] = entry.key;
+    renderFeatureList();
+    render();
+  };
+
+  const swatch = document.createElement("span");
+  swatch.className = "swatch";
+  swatch.style.background = entry.color;
+
+  const name = document.createElement("span");
+  name.className = "legend-name";
+  name.textContent = entry.name;
+
+  row.append(swatch, name);
+
+  if (cfg.input === "assign") {
+    const count = document.createElement("span");
+    count.className = "shape-count";
+    count.textContent = String(
+      Object.values(assignments(state.activeLayer)).filter((k) => k === entry.key).length
+    );
+    row.appendChild(count);
+  }
+  return row;
+}
+
+function renderHint() {
+  const cfg = activeCfg();
+  if (!cfg) return;
+  const camera = "<b>WASD</b> pan, <b>Z/X</b> zoom, Ctrl/Cmd+wheel zooms.";
+  if (cfg.input === "polygon") {
+    el.hint.innerHTML =
+      "Click to place points. <b>Enter</b>/dbl-click closes a shape, " +
+      "<b>Backspace</b> undoes a point, <b>Esc</b> cancels. " +
+      "<b>T</b> traces along a snapped boundary: click once to lock on, " +
+      "again to take the stretch (hold <b>Alt</b> for the long way round). " +
+      camera;
+  } else if (cfg.input === "brush") {
+    el.hint.innerHTML =
+      `Paint into the selected category. Strokes are clipped to ` +
+      `<b>${cfg.clip_to || "the map"}</b> on export. ` +
+      camera;
+  } else {
+    el.hint.innerHTML =
+      "Pick a category, then click a province to assign it. This is the " +
+      "map's <i>starting</i> state - the game owns it from turn one. " +
+      camera;
+  }
+}
+
+function newIdentityFeature() {
+  const list = features(state.activeLayer);
+  const nextId = list.reduce((max, f) => Math.max(max, f.id || 0), 0) + 1;
+  showPrompt("Province name", `Province ${nextId}`, (name) => {
+    if (!name.trim()) return;
+    list.push({
+      id: nextId,
+      key: slugify(name),
+      name: name.trim(),
+      color: PALETTE[(list.length) % PALETTE.length],
+      polygons: [],
+    });
+    state.selected[state.activeLayer] = list.length - 1;
+    state.drawing = [];
+    scheduleAutosave();
+    renderSidebar();
+    render();
+  });
+}
+
+function newShape() {
+  if (!currentFeature()) {
+    setStatus("Select or create something to draw into first", true);
+    return;
+  }
+  state.drawing = [];
+  state.editMode = false;
+  renderSidebar();
+  render();
+}
+
+// ---------------------------------------------------------------------------
+// snapping
+// ---------------------------------------------------------------------------
+
+// Rebuilt whenever geometry or the magnet set changes. A flat scan over
+// every edge was fine with one layer of regions; with a coastline plus
+// provinces plus an in-progress ring it isn't, so segments go into a
+// uniform grid and a lookup only touches nearby cells.
+function buildSnapIndex() {
+  const polylines = [];
+  const cells = new Map();
+
+  const addPolyline = (points, closed) => {
+    if (points.length < 2) return;
+    const index = polylines.length;
+    polylines.push(Trace.buildPolyline(points, closed));
+    const segments = closed ? points.length : points.length - 1;
+    for (let i = 0; i < segments; i++) {
+      const a = points[i];
+      const b = points[(i + 1) % points.length];
+      for (const cell of cellsForSegment(a, b)) {
+        if (!cells.has(cell)) cells.set(cell, []);
+        cells.get(cell).push({ line: index, seg: i });
+      }
+    }
+  };
+
+  for (const name of state.manifest.layer_order) {
+    if (!state.magnet[name] || layerCfg(name).input !== "polygon") continue;
+    for (const feature of features(name)) {
+      for (const polygon of feature.polygons || []) addPolyline(polygon, true);
+    }
+  }
+  // The ring being drawn is its own snap target, so a border can close
+  // cleanly back onto its own start.
+  if (state.drawing && state.drawing.length >= 2) addPolyline(state.drawing, false);
+
+  state.snapIndex = { polylines, cells };
+}
+
+const cellKey = (cx, cy) => cx + "," + cy;
+
+function cellsForSegment(a, b) {
+  const out = [];
+  const minX = Math.floor(Math.min(a[0], b[0]) / SNAP_CELL_PX);
+  const maxX = Math.floor(Math.max(a[0], b[0]) / SNAP_CELL_PX);
+  const minY = Math.floor(Math.min(a[1], b[1]) / SNAP_CELL_PX);
+  const maxY = Math.floor(Math.max(a[1], b[1]) / SNAP_CELL_PX);
+  for (let cx = minX; cx <= maxX; cx++) {
+    for (let cy = minY; cy <= maxY; cy++) out.push(cellKey(cx, cy));
+  }
+  return out;
+}
+
+function snapPoint(x, y) {
+  if (!state.snapIndex) buildSnapIndex();
+  const radius = SNAP_SCREEN_PX / state.zoom;
+  const { polylines, cells } = state.snapIndex;
+
+  const reach = Math.ceil(radius / SNAP_CELL_PX);
+  const cx = Math.floor(x / SNAP_CELL_PX);
+  const cy = Math.floor(y / SNAP_CELL_PX);
+
+  let best = null;
+  let bestDist = radius;
+  const seen = new Set();
+
+  for (let ix = cx - reach; ix <= cx + reach; ix++) {
+    for (let iy = cy - reach; iy <= cy + reach; iy++) {
+      for (const ref of cells.get(cellKey(ix, iy)) || []) {
+        const id = ref.line + ":" + ref.seg;
+        if (seen.has(id)) continue;
+        seen.add(id);
+
+        const polyline = polylines[ref.line];
+        const a = polyline.points[ref.seg];
+        const b = polyline.points[(ref.seg + 1) % polyline.points.length];
+
+        // Vertices are checked first and win ties, because landing exactly
+        // on a neighbour's corner is nearly always what was meant.
+        for (const vertex of [a, b]) {
+          const d = Math.hypot(x - vertex[0], y - vertex[1]);
+          if (d < bestDist) {
+            bestDist = d;
+            best = [vertex[0], vertex[1]];
+          }
+        }
+        const hit = Trace.closestPointOnSegment(x, y, a, b);
+        const d = Math.hypot(x - hit.point[0], y - hit.point[1]);
+        if (d < bestDist) {
+          bestDist = d;
+          best = hit.point;
+        }
+      }
+    }
+  }
+  return best || [x, y];
+}
+
+// ---------------------------------------------------------------------------
+// rendering
+// ---------------------------------------------------------------------------
 
 function render() {
-  const svg = els.overlay;
-  svg.innerHTML = '';
+  const svg = el.overlay;
+  svg.innerHTML = "";
 
-  state.coastlineEdges.forEach(([a, b]) => {
-    const el = svgNS('line');
-    el.setAttribute('x1', a[0]); el.setAttribute('y1', a[1]);
-    el.setAttribute('x2', b[0]); el.setAttribute('y2', b[1]);
-    el.setAttribute('class', 'coastline');
-    svg.appendChild(el);
-  });
-
-  state.regions.forEach((region, ri) => {
-    const isActive = ri === state.activeRegionIndex;
-    region.polygons.forEach((poly) => {
-      const el = svgNS('polygon');
-      el.setAttribute('points', pointsAttr(poly));
-      el.setAttribute('class', 'poly-fill' + (isActive ? ' selected' : ''));
-      el.setAttribute('fill', region.color);
-      el.setAttribute('stroke', isActive ? '#ffffff' : darken(region.color));
-      svg.appendChild(el);
-    });
-  });
-
-  // in-progress shape
-  if (state.drawing) {
-    const el = svgNS('polyline');
-    el.setAttribute('points', pointsAttr(state.drawing));
-    el.setAttribute('class', 'poly-fill pending');
-    svg.appendChild(el);
-    state.drawing.forEach((p) => {
-      const c = svgNS('circle');
-      c.setAttribute('cx', p[0]); c.setAttribute('cy', p[1]);
-      c.setAttribute('class', 'vertex');
-      svg.appendChild(c);
-    });
-  }
-
-  // editable vertices for the active region
-  if (state.editMode && state.activeRegionIndex >= 0) {
-    const region = state.regions[state.activeRegionIndex];
-    region.polygons.forEach((poly, pi) => {
-      poly.forEach((p, vi) => {
-        const c = svgNS('circle');
-        c.setAttribute('cx', p[0]); c.setAttribute('cy', p[1]);
-        c.setAttribute('class', 'vertex');
-        c.dataset.ri = state.activeRegionIndex; c.dataset.pi = pi; c.dataset.vi = vi;
-        c.addEventListener('pointerdown', onVertexPointerDown);
-        svg.appendChild(c);
-
-        // midpoint marker to insert a new vertex on this edge
-        const q = poly[(vi + 1) % poly.length];
-        const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-        const m = svgNS('circle');
-        m.setAttribute('cx', mid[0]); m.setAttribute('cy', mid[1]);
-        m.setAttribute('class', 'vertex mid');
-        m.addEventListener('click', (e) => {
-          e.stopPropagation();
-          poly.splice(vi + 1, 0, mid);
-          render();
-          scheduleAutosave();
-        });
-        svg.appendChild(m);
-      });
-    });
-  }
-}
-
-// Snapping: while placing/dragging a point, pull it onto any nearby
-// existing vertex or edge (from any region, including the drawing in
-// progress) so adjacent territories share an exact border instead of
-// leaving slivers/gaps. Radius is defined in screen px so it feels
-// consistent at any zoom level.
-const SNAP_SCREEN_PX = 14;
-
-function closestPointOnSegment(px, py, a, b) {
-  const dx = b[0] - a[0], dy = b[1] - a[1];
-  const len2 = dx * dx + dy * dy;
-  if (len2 === 0) return [a[0], a[1]];
-  let t = ((px - a[0]) * dx + (py - a[1]) * dy) / len2;
-  t = Math.max(0, Math.min(1, t));
-  return [a[0] + t * dx, a[1] + t * dy];
-}
-
-function collectSnapCandidates({ excludeRi, excludePi, excludeVi } = {}) {
-  const points = [];
-  const edges = [];
-  state.regions.forEach((region, ri) => {
-    region.polygons.forEach((poly, pi) => {
-      poly.forEach((p, vi) => {
-        if (ri === excludeRi && pi === excludePi && vi === excludeVi) return;
-        points.push(p);
-      });
-      const n = poly.length;
-      for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n;
-        if (ri === excludeRi && pi === excludePi && (i === excludeVi || j === excludeVi)) continue;
-        edges.push([poly[i], poly[j]]);
-      }
-    });
-  });
-  if (state.drawing) {
-    state.drawing.forEach((p) => points.push(p));
-    for (let i = 0; i < state.drawing.length - 1; i++) edges.push([state.drawing[i], state.drawing[i + 1]]);
-  }
-  edges.push(...state.coastlineEdges);
-  return { points, edges };
-}
-
-function snapPoint(x, y, exclude) {
-  const radius = SNAP_SCREEN_PX / zoom;
-  const { points, edges } = collectSnapCandidates(exclude || {});
-  let best = null, bestDist = radius;
-  for (const p of points) {
-    const d = Math.hypot(p[0] - x, p[1] - y);
-    if (d < bestDist) { bestDist = d; best = [p[0], p[1]]; }
-  }
-  for (const [a, b] of edges) {
-    const proj = closestPointOnSegment(x, y, a, b);
-    const d = Math.hypot(proj[0] - x, proj[1] - y);
-    if (d < bestDist) { bestDist = d; best = proj; }
-  }
-  return best;
-}
-
-function svgPoint(evt) {
-  const pt = els.overlay.createSVGPoint();
-  pt.x = evt.clientX; pt.y = evt.clientY;
-  const ctm = els.overlay.getScreenCTM().inverse();
-  const p = pt.matrixTransform(ctm);
-  return [Math.round(p.x), Math.round(p.y)];
-}
-
-function onVertexPointerDown(e) {
-  e.stopPropagation();
-  const ri = +e.target.dataset.ri, pi = +e.target.dataset.pi, vi = +e.target.dataset.vi;
-  state.dragging = { ri, pi, vi, moved: false, startX: e.clientX, startY: e.clientY };
-  e.target.setPointerCapture(e.pointerId);
-}
-
-els.overlay.addEventListener('pointermove', (e) => {
-  if (!state.dragging) return;
-  const d = state.dragging;
-  if (Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) > 3) d.moved = true;
-  if (!d.moved) return;
-  let [x, y] = svgPoint(e);
-  const snapped = snapPoint(x, y, { excludeRi: d.ri, excludePi: d.pi, excludeVi: d.vi });
-  if (snapped) [x, y] = snapped;
-  state.regions[d.ri].polygons[d.pi][d.vi] = [x, y];
-  render();
-});
-
-els.overlay.addEventListener('pointerup', (e) => {
-  if (!state.dragging) return;
-  const d = state.dragging;
-  if (!d.moved) {
-    // treat as click-to-delete
-    const poly = state.regions[d.ri].polygons[d.pi];
-    if (poly.length <= 3) {
-      state.regions[d.ri].polygons.splice(d.pi, 1);
-    } else {
-      poly.splice(d.vi, 1);
+  for (const name of state.manifest.layer_order) {
+    const cfg = layerCfg(name);
+    if (canvases[name]) {
+      canvases[name].style.display = state.visible[name] ? "block" : "none";
+      canvases[name].style.opacity = name === state.activeLayer ? 1 : 0.5;
     }
-    render();
+    if (!state.visible[name] || cfg.input !== "polygon") continue;
+    renderPolygonLayer(svg, name, cfg);
   }
-  state.dragging = null;
+
+  renderAssignOverlay(svg);
+  if (state.editMode) renderVertexHandles(svg);
+  renderDrawing(svg);
+  renderTracePreview(svg);
+}
+
+function renderPolygonLayer(svg, name, cfg) {
+  const isActive = name === state.activeLayer;
+
+  features(name).forEach((feature, index) => {
+    const fill =
+      cfg.kind === "identity" ? feature.color || "#808080" : colorForKey(cfg, feature.key);
+    const selected = isActive && isSelectedFeature(cfg, feature, index);
+
+    for (const polygon of feature.polygons || []) {
+      if (polygon.length < 3) continue;
+      const node = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      node.setAttribute("points", polygon.map((p) => p.join(",")).join(" "));
+      node.setAttribute("fill", fill);
+      node.setAttribute("stroke", selected ? "#fff" : darken(fill));
+      node.setAttribute(
+        "class",
+        "poly-fill" +
+          (selected ? " selected" : "") +
+          (isActive ? "" : " dim") +
+          (state.magnet[name] ? " magnet" : "")
+      );
+      if (isAssignTarget(name)) {
+        node.classList.add("clickable");
+        node.onclick = (e) => {
+          e.stopPropagation();
+          assignProvince(feature);
+        };
+      }
+      svg.appendChild(node);
+    }
+  });
+}
+
+function isSelectedFeature(cfg, feature, index) {
+  return cfg.kind === "identity"
+    ? index === state.selected[state.activeLayer]
+    : feature.key === state.selected[state.activeLayer];
+}
+
+function isAssignTarget(name) {
+  const cfg = activeCfg();
+  return !!cfg && cfg.input === "assign" && name === state.manifest.province_layer;
+}
+
+function renderAssignOverlay(svg) {
+  const cfg = activeCfg();
+  if (!cfg || cfg.input !== "assign") return;
+  const map = assignments(state.activeLayer);
+
+  for (const feature of features(state.manifest.province_layer)) {
+    const key = map[String(feature.id)];
+    if (!key) continue;
+    for (const polygon of feature.polygons || []) {
+      if (polygon.length < 3) continue;
+      const node = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      node.setAttribute("points", polygon.map((p) => p.join(",")).join(" "));
+      node.setAttribute("fill", colorForKey(cfg, key));
+      node.setAttribute("class", "poly-fill assign");
+      svg.appendChild(node);
+    }
+  }
+}
+
+function assignProvince(feature) {
+  const key = state.selected[state.activeLayer];
+  if (!key) {
+    setStatus("Pick a category on the left first", true);
+    return;
+  }
+  const map = assignments(state.activeLayer);
+  // Clicking the same category again clears it, so a mis-assignment is
+  // one click to undo rather than needing a separate eraser.
+  if (map[String(feature.id)] === key) delete map[String(feature.id)];
+  else map[String(feature.id)] = key;
   scheduleAutosave();
-});
-
-els.overlay.addEventListener('click', (e) => {
-  if (state.dragging) return;
-  if (state.drawing === null) return;
-  let [x, y] = svgPoint(e);
-  const snapped = snapPoint(x, y);
-  if (snapped) [x, y] = snapped;
-  state.drawing.push([x, y]);
+  renderFeatureList();
   render();
-});
+}
 
-els.overlay.addEventListener('dblclick', (e) => {
-  e.preventDefault();
-  finishShape();
-});
+function renderVertexHandles(svg) {
+  const feature = currentFeature();
+  if (!feature) return;
+
+  (feature.polygons || []).forEach((polygon, polyIndex) => {
+    polygon.forEach((point, vertexIndex) => {
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", point[0]);
+      dot.setAttribute("cy", point[1]);
+      dot.setAttribute("class", "vertex");
+      dot.onpointerdown = (e) => beginVertexDrag(e, feature, polygon, vertexIndex, polyIndex);
+      svg.appendChild(dot);
+
+      // A midpoint handle inserts a vertex on that edge - the usual way to
+      // add detail to a border that's already roughly right.
+      const next = polygon[(vertexIndex + 1) % polygon.length];
+      const mid = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      mid.setAttribute("cx", (point[0] + next[0]) / 2);
+      mid.setAttribute("cy", (point[1] + next[1]) / 2);
+      mid.setAttribute("class", "vertex mid");
+      mid.onpointerdown = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        polygon.splice(vertexIndex + 1, 0, [
+          (point[0] + next[0]) / 2,
+          (point[1] + next[1]) / 2,
+        ]);
+        state.snapIndex = null;
+        scheduleAutosave();
+        render();
+      };
+      svg.appendChild(mid);
+    });
+  });
+}
+
+function beginVertexDrag(event, feature, polygon, vertexIndex, polyIndex) {
+  event.stopPropagation();
+  event.preventDefault();
+  const start = svgPoint(event);
+  let moved = false;
+
+  const onMove = (e) => {
+    const at = svgPoint(e);
+    if (!moved && Math.hypot(at[0] - start[0], at[1] - start[1]) < 3 / state.zoom) return;
+    moved = true;
+    polygon[vertexIndex] = snapPoint(at[0], at[1]);
+    render();
+  };
+
+  const onUp = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    if (!moved) {
+      // A click without a drag deletes the vertex - and a ring under three
+      // points isn't a shape any more, so it goes with it.
+      polygon.splice(vertexIndex, 1);
+      if (polygon.length < 3) feature.polygons.splice(polyIndex, 1);
+    }
+    state.snapIndex = null;
+    scheduleAutosave();
+    render();
+  };
+
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+}
+
+function renderDrawing(svg) {
+  if (!state.drawing || !state.drawing.length) return;
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  line.setAttribute("points", state.drawing.map((p) => p.join(",")).join(" "));
+  line.setAttribute("class", "poly-fill pending");
+  svg.appendChild(line);
+
+  for (const point of state.drawing) {
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", point[0]);
+    dot.setAttribute("cy", point[1]);
+    dot.setAttribute("class", "vertex");
+    svg.appendChild(dot);
+  }
+}
+
+function renderTracePreview(svg) {
+  if (state.traceAnchor && state.snapIndex) {
+    const polyline = state.snapIndex.polylines[state.traceAnchor.lineIndex];
+    if (polyline) {
+      const rail = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      rail.setAttribute("points", polyline.points.map((p) => p.join(",")).join(" "));
+      rail.setAttribute("class", "trace-rail");
+      svg.appendChild(rail);
+    }
+  }
+  if (state.tracePreview && state.tracePreview.length > 1) {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    line.setAttribute("points", state.tracePreview.map((p) => p.join(",")).join(" "));
+    line.setAttribute("class", "trace-preview");
+    svg.appendChild(line);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// pointer input
+// ---------------------------------------------------------------------------
+
+function svgPoint(event) {
+  const rect = el.overlay.getBoundingClientRect();
+  const [width, height] = state.manifest.size;
+  return [
+    ((event.clientX - rect.left) / rect.width) * width,
+    ((event.clientY - rect.top) / rect.height) * height,
+  ];
+}
+
+function onCanvasClick(event) {
+  const cfg = activeCfg();
+  if (!cfg || cfg.input !== "polygon") return;
+  const at = svgPoint(event);
+
+  if (state.tool === "trace") return onTraceClick(at, event.altKey);
+  if (state.editMode) return;
+
+  if (!currentFeature()) {
+    setStatus("Select or create something to draw into first", true);
+    return;
+  }
+  if (!state.drawing) state.drawing = [];
+  state.drawing.push(snapPoint(at[0], at[1]));
+  state.snapIndex = null;
+  render();
+}
+
+function onTraceClick(at, longWay) {
+  buildSnapIndex();
+  const hit = Trace.nearestOnPolylines(state.snapIndex.polylines, at[0], at[1]);
+  if (!hit || hit.dist > SNAP_SCREEN_PX / state.zoom) {
+    setStatus("Move closer to a snapped boundary to trace along it", true);
+    return;
+  }
+
+  if (!state.traceAnchor) {
+    state.traceAnchor = hit;
+    state.tracePreview = null;
+    setStatus("Locked on - click again to take the stretch (Alt = long way)");
+    render();
+    return;
+  }
+
+  if (hit.lineIndex !== state.traceAnchor.lineIndex) {
+    // Re-anchoring beats erroring out: a continent then an island is two
+    // traces, and this is what the second one starts with.
+    state.traceAnchor = hit;
+    state.tracePreview = null;
+    setStatus("Both points must sit on the same boundary - re-anchored here", true);
+    render();
+    return;
+  }
+
+  const polyline = state.snapIndex.polylines[state.traceAnchor.lineIndex];
+  const points = Trace.traceBetween(polyline, state.traceAnchor, hit, {
+    longWay,
+    epsilon: TRACE_EPSILON_SCREEN / state.zoom,
+    maxVertices: MAX_TRACE_VERTICES,
+  });
+
+  if (!state.drawing) state.drawing = [];
+  const last = state.drawing[state.drawing.length - 1];
+  const skip = last && last[0] === points[0][0] && last[1] === points[0][1] ? 1 : 0;
+  state.drawing.push(...points.slice(skip));
+
+  // Re-anchor at the end so consecutive traces chain along a coast without
+  // re-clicking the start each time.
+  state.traceAnchor = hit;
+  state.tracePreview = null;
+  setStatus(`Traced ${points.length} points - click again to continue`);
+  render();
+}
+
+function onCanvasMove(event) {
+  const cfg = activeCfg();
+  if (!cfg || cfg.input !== "polygon") return;
+  if (state.tool !== "trace" || !state.traceAnchor || !state.snapIndex) return;
+
+  const at = svgPoint(event);
+  const polyline = state.snapIndex.polylines[state.traceAnchor.lineIndex];
+  const hit = Trace.nearestOnPolyline(polyline, at[0], at[1]);
+  state.tracePreview = Trace.traceBetween(polyline, state.traceAnchor, hit, {
+    longWay: event.altKey,
+    epsilon: TRACE_EPSILON_SCREEN / state.zoom,
+    maxVertices: MAX_TRACE_VERTICES,
+  });
+  render();
+}
 
 function finishShape() {
   if (!state.drawing || state.drawing.length < 3) {
-    if (state.drawing) setStatus('Need at least 3 points to close a shape.', true);
+    setStatus("A shape needs at least 3 points", true);
     return;
   }
-  state.regions[state.activeRegionIndex].polygons.push(state.drawing);
+  const feature = currentFeature();
+  if (!feature) return;
+  if (!feature.polygons) feature.polygons = [];
+  feature.polygons.push(state.drawing);
   state.drawing = null;
-  renderRegionList();
+  state.traceAnchor = null;
+  state.tracePreview = null;
+  state.snapIndex = null;
+  scheduleAutosave();
+  renderSidebar();
   render();
+}
+
+// ---------------------------------------------------------------------------
+// brush painting
+// ---------------------------------------------------------------------------
+
+function brushColor() {
+  return colorForKey(activeCfg(), state.selected[state.activeLayer]);
+}
+
+function paintAt(at, erase) {
+  const canvas = canvases[state.activeLayer];
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.globalCompositeOperation = erase ? "destination-out" : "source-over";
+  ctx.fillStyle = erase ? "#000" : brushColor();
+  ctx.beginPath();
+  ctx.arc(at[0], at[1], state.brushSize / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+  state.dirtyRasters.add(state.activeLayer);
+}
+
+function bucketFill() {
+  const canvas = canvases[state.activeLayer];
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = brushColor();
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  state.dirtyRasters.add(state.activeLayer);
   scheduleAutosave();
 }
 
-document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') return;
-  if (e.key === 'Enter') { finishShape(); }
-  else if (e.key === 'Escape') { state.drawing = null; render(); }
-  else if (e.key === 'Backspace' || e.key === 'Delete') {
-    e.preventDefault();
-    if (state.drawing && state.drawing.length) { state.drawing.pop(); render(); }
-  }
-});
-
-// Zooms so the given viewport-local point (or the viewport center, if
-// omitted) stays under the cursor/screen-center as the scale changes.
-// Resizes the image + svg overlay directly (rather than a CSS transform)
-// so #viewport's scrollable area actually grows with zoom.
-function setZoom(newZoom, anchorX, anchorY) {
-  newZoom = Math.min(6, Math.max(0.2, newZoom));
-  const rect = els.viewport.getBoundingClientRect();
-  if (anchorX === undefined) { anchorX = rect.width / 2; anchorY = rect.height / 2; }
-  const contentX = (els.viewport.scrollLeft + anchorX) / zoom;
-  const contentY = (els.viewport.scrollTop + anchorY) / zoom;
-  zoom = newZoom;
-  const w = state.imageSize[0] * zoom, h = state.imageSize[1] * zoom;
-  els.bgImage.style.width = w + 'px';
-  els.bgImage.style.height = h + 'px';
-  els.overlay.style.width = w + 'px';
-  els.overlay.style.height = h + 'px';
-  els.viewport.scrollLeft = contentX * zoom - anchorX;
-  els.viewport.scrollTop = contentY * zoom - anchorY;
+function onBrushDown(event) {
+  const cfg = activeCfg();
+  if (!cfg || cfg.input !== "brush") return;
+  event.preventDefault();
+  if (state.tool === "bucket") return bucketFill();
+  state.painting = true;
+  paintAt(svgPoint(event), state.tool === "eraser");
 }
 
-els.viewport.addEventListener('wheel', (e) => {
-  if (!e.ctrlKey && !e.metaKey) return; // allow normal two-finger pan scroll otherwise
-  e.preventDefault();
-  const rect = els.viewport.getBoundingClientRect();
-  setZoom(zoom * Math.exp(-e.deltaY * 0.001), e.clientX - rect.left, e.clientY - rect.top);
-}, { passive: false });
+function onBrushMove(event) {
+  if (!state.painting) return;
+  paintAt(svgPoint(event), state.tool === "eraser");
+}
 
-// WASD pan / Z,X zoom, held-key continuous movement (like a game camera).
-const PAN_KEYS = new Set(['w', 'a', 's', 'd', 'z', 'x']);
-const heldKeys = new Set();
-const PAN_SPEED = 1000; // viewport px/sec
-const ZOOM_SPEED = 1.2; // e-folds/sec
+function onBrushUp() {
+  if (!state.painting) return;
+  state.painting = false;
+  scheduleAutosave();
+}
 
-document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') return;
-  const key = e.key.toLowerCase();
-  if (PAN_KEYS.has(key)) heldKeys.add(key);
-});
-document.addEventListener('keyup', (e) => {
-  heldKeys.delete(e.key.toLowerCase());
-});
-window.addEventListener('blur', () => heldKeys.clear());
-
-let lastFrameTime = null;
-function panZoomTick(now) {
-  if (lastFrameTime === null) lastFrameTime = now;
-  const dt = Math.min(0.1, (now - lastFrameTime) / 1000);
-  lastFrameTime = now;
-
-  if (heldKeys.size) {
-    const dist = PAN_SPEED * dt;
-    if (heldKeys.has('w')) els.viewport.scrollTop -= dist;
-    if (heldKeys.has('s')) els.viewport.scrollTop += dist;
-    if (heldKeys.has('a')) els.viewport.scrollLeft -= dist;
-    if (heldKeys.has('d')) els.viewport.scrollLeft += dist;
-    if (heldKeys.has('z')) setZoom(zoom * Math.exp(-ZOOM_SPEED * dt));
-    if (heldKeys.has('x')) setZoom(zoom * Math.exp(ZOOM_SPEED * dt));
+// A brush layer's raster is its source of truth, so it goes back to disk
+// rather than living in project.json.
+async function flushRasters() {
+  for (const name of Array.from(state.dirtyRasters)) {
+    const canvas = canvases[name];
+    if (!canvas) continue;
+    const blob = await new Promise((resolve) => {
+      // Re-flatten transparency onto the layer's nodata color, since that
+      // is what "nothing painted here" means on disk.
+      const flat = document.createElement("canvas");
+      flat.width = canvas.width;
+      flat.height = canvas.height;
+      const ctx = flat.getContext("2d");
+      ctx.fillStyle = layerCfg(name).nodata_color;
+      ctx.fillRect(0, 0, flat.width, flat.height);
+      ctx.drawImage(canvas, 0, 0);
+      flat.toBlob(resolve, "image/png");
+    });
+    await fetch(`/api/layer/${name}.png`, { method: "POST", body: blob });
+    state.dirtyRasters.delete(name);
   }
+}
+
+// ---------------------------------------------------------------------------
+// server actions
+// ---------------------------------------------------------------------------
+
+let autosaveTimer = null;
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(saveDraft, AUTOSAVE_MS);
+}
+
+async function saveDraft() {
+  await flushRasters();
+  await fetch("/api/project", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(state.project),
+  });
+  setStatus("Saved");
+}
+
+async function runFillGaps() {
+  const layer = state.activeLayer;
+  setStatus("Filling gaps...");
+  await flushRasters();
+  const response = await fetch("/api/fillgaps", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ layer, project: state.project }),
+  });
+  const result = await response.json();
+  if (!result.ok) return setStatus(result.error, true);
+
+  state.project.layers[layer].features = result.features;
+  state.snapIndex = null;
+  scheduleAutosave();
+  renderSidebar();
+  render();
+
+  const residual = result.residual_px
+    ? ` ${result.residual_px}px still unclaimed - wider than the ` +
+      `${result.max_gap_px}px fill limit, so draw those in.`
+    : "";
+  setStatus(`Filled ${result.changed_px}px.${residual}`, !!result.residual_px);
+}
+
+async function runAutotrace() {
+  showConfirm("Replace this layer's shapes with a fresh autotrace?", async () => {
+    const response = await fetch(`/api/autotrace/${state.activeLayer}`, {
+      method: "POST",
+    });
+    const result = await response.json();
+    if (!result.ok) return setStatus(result.error, true);
+    state.project.layers[state.activeLayer].features = result.features;
+    state.snapIndex = null;
+    scheduleAutosave();
+    renderSidebar();
+    render();
+    setStatus(`Autotraced ${result.features.length} shape(s)`);
+  });
+}
+
+async function runExport() {
+  setStatus("Exporting...");
+  await flushRasters();
+  const response = await fetch("/api/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project: state.project }),
+  });
+  const result = await response.json();
+  if (!result.ok) return setStatus(result.error, true);
+  setStatus(
+    `Exported ${result.province_count} provinces. Run make promote-map to ship it.`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// camera
+// ---------------------------------------------------------------------------
+
+function setZoom(zoom, anchor) {
+  const [width, height] = state.manifest.size;
+  const previous = state.zoom;
+  state.zoom = Math.max(0.2, Math.min(6, zoom));
+
+  // Resize in real pixels rather than with a CSS transform, so the
+  // scrollable area actually grows and panning stays useful when zoomed in.
+  const displayWidth = width * state.zoom;
+  const displayHeight = height * state.zoom;
+  for (const node of [el.backdrop, el.overlay, ...Object.values(canvases)]) {
+    node.style.width = displayWidth + "px";
+    node.style.height = displayHeight + "px";
+  }
+
+  if (anchor) {
+    const scale = state.zoom / previous;
+    el.viewport.scrollLeft = (el.viewport.scrollLeft + anchor.x) * scale - anchor.x;
+    el.viewport.scrollTop = (el.viewport.scrollTop + anchor.y) * scale - anchor.y;
+  }
+}
+
+const held = new Set();
+function panZoomTick(now) {
+  if (!panZoomTick.last) panZoomTick.last = now;
+  const dt = Math.min(0.05, (now - panZoomTick.last) / 1000);
+  panZoomTick.last = now;
+
+  const step = PAN_SPEED * dt;
+  if (held.has("a")) el.viewport.scrollLeft -= step;
+  if (held.has("d")) el.viewport.scrollLeft += step;
+  if (held.has("w")) el.viewport.scrollTop -= step;
+  if (held.has("s")) el.viewport.scrollTop += step;
+  if (held.has("z")) setZoom(state.zoom * Math.exp(-ZOOM_SPEED * dt));
+  if (held.has("x")) setZoom(state.zoom * Math.exp(ZOOM_SPEED * dt));
+
   requestAnimationFrame(panZoomTick);
 }
-requestAnimationFrame(panZoomTick);
 
-els.newRegionBtn.onclick = newRegion;
-els.newShapeBtn.onclick = newShape;
-els.editVerticesBtn.onclick = toggleEditVertices;
-els.saveBtn.onclick = saveDraft;
-els.exportBtn.onclick = exportProject;
-els.reloadBtn.onclick = reloadFromGame;
+// ---------------------------------------------------------------------------
+// events
+// ---------------------------------------------------------------------------
 
-async function loadCoastline() {
-  try {
-    const data = await (await fetch('/api/coastline')).json();
-    const edges = [];
-    for (const line of data.lines || []) {
-      for (let i = 0; i < line.length - 1; i++) edges.push([line[i], line[i + 1]]);
-      if (line.length > 2) edges.push([line[line.length - 1], line[0]]); // contours are closed
+function bindEvents() {
+  el.overlay.addEventListener("click", onCanvasClick);
+  el.overlay.addEventListener("pointermove", onCanvasMove);
+  el.overlay.addEventListener("dblclick", (e) => {
+    e.preventDefault();
+    finishShape();
+  });
+
+  el.overlay.addEventListener("pointerdown", onBrushDown);
+  window.addEventListener("pointermove", onBrushMove);
+  window.addEventListener("pointerup", onBrushUp);
+
+  document.getElementById("saveBtn").onclick = saveDraft;
+  document.getElementById("exportBtn").onclick = runExport;
+
+  el.viewport.addEventListener(
+    "wheel",
+    (event) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const rect = el.viewport.getBoundingClientRect();
+      setZoom(state.zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1), {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+    },
+    { passive: false }
+  );
+
+  window.addEventListener("keydown", (event) => {
+    if (event.target.tagName === "INPUT") return;
+    const key = event.key.toLowerCase();
+
+    if (key === "enter") return finishShape();
+    if (key === "escape") {
+      state.drawing = null;
+      state.traceAnchor = null;
+      state.tracePreview = null;
+      return render();
     }
-    state.coastlineEdges = edges;
-    render();
-  } catch (e) {
-    // Coastline classification is a best-effort aid; drawing works fine without it.
-  }
+    if (key === "backspace" || key === "delete") {
+      if (state.drawing && state.drawing.length) {
+        event.preventDefault();
+        state.drawing.pop();
+        state.snapIndex = null;
+        render();
+      }
+      return;
+    }
+    if (key === "t" && activeCfg() && activeCfg().input === "polygon") {
+      return toggleTrace();
+    }
+    if ("wasdzx".includes(key)) held.add(key);
+  });
+
+  window.addEventListener("keyup", (event) => held.delete(event.key.toLowerCase()));
+  window.addEventListener("blur", () => held.clear());
+  requestAnimationFrame(panZoomTick);
 }
 
-async function init() {
-  const proj = await (await fetch('/api/project')).json();
-
-  els.bgImage.src = '/api/image?' + Date.now();
-  await new Promise((resolve) => { els.bgImage.onload = resolve; });
-
-  const w = els.bgImage.naturalWidth, h = els.bgImage.naturalHeight;
-  state.imageSize = [w, h];
-  els.overlay.setAttribute('width', w);
-  els.overlay.setAttribute('height', h);
-  els.overlay.setAttribute('viewBox', `0 0 ${w} ${h}`);
-  els.bgImage.style.width = w + 'px';
-  els.bgImage.style.height = h + 'px';
-
-  applyProject(proj);
-  setStatus(state.regions.length ? `Loaded ${state.regions.length} regions.` : 'New project. Click "+ New Region" to start tracing.');
-  loadCoastline();
-}
-
-init();
+boot();

@@ -1,25 +1,27 @@
-"""Reconciles an exported region_map.png raster against the land/sea
-classification in server.build_land_mask, in both directions.
+"""Closes small unclaimed strips left inside a layer's own mask.
 
-fill_land_gaps() closes small background strips left on land, from a
-polygon edge not quite reaching the true shore. clip_sea_overflow()
-reverts region color that spilled onto water, from a polygon traced
-too loosely over the shoreline. Both keep colors exact, never blended.
-regions.txt only recognizes exact hex matches. A blended color would
-just render as invisible background in-game (see province_map.gd,
-which silently skips unlisted colors).
+A polygon edge can stop just short of the shore. Two borders traced
+separately can leave a seam between them. Either way, background pixels
+survive on land. fill_land_gaps() hands each one to its nearest
+neighbor.
 
-fill_land_gaps() only bridges gaps up to MAX_GAP_PX. An untraced
-country can be an arbitrarily large patch of background. Flooding a
-neighboring region's color across all of it would silently annex land
-nobody drew.
+Colors stay exact, never blended. Every consumer of these rasters
+matches colors exactly - a province id, a legend entry. A blended pixel
+is not a compromise between two regions; it means nothing at all.
+
+Only gaps up to max_gap_px get bridged. An untraced province can be an
+arbitrarily large patch of background. Flooding a neighbor's color
+across all of it would silently annex land nobody drew.
+
+Clipping a layer to its mask is the opposite direction. That lives in
+export.py, where the authored coastline makes it exact rather than a
+heuristic.
 """
 
 import cv2
 import numpy as np
 
 MAX_GAP_PX = 12  # widest untraced strip a gap-fill will bridge
-MIN_OVERFLOW_AREA_PX = 3000  # smallest contiguous sea-overflow blob to clip
 
 
 def fill_land_gaps(
@@ -60,40 +62,3 @@ def fill_land_gaps(
     filled = canvas_rgb.copy()
     filled[gap_mask] = lut[labels[gap_mask]]
     return filled
-
-
-def clip_sea_overflow(
-    canvas_rgb: np.ndarray,
-    land_mask: np.ndarray,
-    background_rgb: tuple[int, int, int] = (255, 255, 255),
-    min_area_px: int = MIN_OVERFLOW_AREA_PX,
-) -> np.ndarray:
-    """Return a copy of canvas_rgb with region-colored pixels that fall
-    off land_mask (i.e. classified as sea) reverted to background_rgb.
-    Unlike fill_land_gaps, this has no distance cap. A polygon traced
-    over open water, however far, gets clipped back to the shoreline.
-
-    Only contiguous overflow blobs of at least min_area_px get clipped.
-    land_mask is a coarse heuristic, not per-pixel-exact. Scattered
-    single-pixel "sea" misclassifications inside a region (river
-    glare, shadow, texture noise) stay put instead of punching
-    holes."""
-    background = np.array(background_rgb, dtype=np.uint8)
-    region_mask = ~np.all(canvas_rgb == background, axis=-1)
-    overflow_mask = region_mask & ~land_mask
-    if not overflow_mask.any():
-        return canvas_rgb.copy()
-
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
-        overflow_mask.astype(np.uint8), connectivity=8
-    )
-    large_overflow = np.zeros_like(overflow_mask)
-    for label in range(1, num_labels):
-        if stats[label, cv2.CC_STAT_AREA] >= min_area_px:
-            large_overflow |= labels == label
-    if not large_overflow.any():
-        return canvas_rgb.copy()
-
-    clipped = canvas_rgb.copy()
-    clipped[large_overflow] = background
-    return clipped

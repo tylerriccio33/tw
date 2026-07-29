@@ -1,129 +1,134 @@
 #!/usr/bin/env python3
-"""Render the current dev_map_data/project.json as a single reviewable
-PNG, without going through the browser.
+"""Render a map package as one reviewable PNG, without a browser.
 
-Runs the same validate_project + export_project path the editor's
-Export button uses. What you see here is what a real export produces.
-Region colors overlay the terrain backdrop, not a flat white canvas,
-so coastline misalignment is visible at a glance. Bad polygons get
-outlined in red on the image, not just named in text.
+Composites the layer stack in manifest order over the real backdrop. A
+border that misses the shore is then obvious at a glance. It also runs
+the same validate_package the Export button runs. Offending polygons
+turn up in red on the image, not just as a name in text.
+
+The province layer uses each province's editor swatch, not its id color.
+provinces.png is machine-readable by design and shows up as near-black.
+This is the human-readable view of it.
 
 Usage:
     uv run preview.py
-    uv run preview.py --project dev_map_data/project.json --out /tmp/preview.png
+    uv run preview.py --package-dir dev_map_data --out /tmp/preview.png
 """
 
+from __future__ import annotations
+
 import argparse
-import json
 from pathlib import Path
 
-import server as srv
+import export
+import mapfmt
+import numpy as np
 from PIL import Image, ImageDraw
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 DEV_DIR_DEFAULT = Path(__file__).resolve().parent / "dev_map_data"
-GAME_DIR_DEFAULT = REPO_ROOT / "campaign" / "map_data"
 
-REGION_ALPHA = 170  # 0-255, how opaque region fills are over the backdrop
+# Per-layer opacity over the backdrop. Anything not listed composites at
+# DEFAULT_ALPHA, so a newly added layer shows up instead of being invisible.
+LAYER_ALPHA = {
+    "coastline": 90,
+    "provinces": 130,
+    "terrain": 110,
+    "resources": 200,
+    "ownership": 150,
+}
+DEFAULT_ALPHA = 120
 
 
-def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
-    hex_color = hex_color.strip().lstrip("#")
-    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
-
-
-def _problem_polygons(
-    project: dict, size: tuple[int, int]
-) -> list[list[tuple[float, float]]]:
-    """Re-run validate_project's per-polygon checks, but return the
-    offending point lists instead of message strings, so we can draw them."""
-    width, height = size
-    flagged = []
-    for region in project.get("regions", []):
-        name = region.get("name", "").strip()
-        if not name:
-            continue
-        for polygon in region.get("polygons", []):
-            if len(polygon) < 3:
-                continue
-            pts = [(float(x), float(y)) for x, y in polygon]
-            out_of_bounds = any(
-                not (0 <= x <= width and 0 <= y <= height) for x, y in pts
+def _swatches(
+    project: dict, package: mapfmt.Package
+) -> dict[int, tuple[int, int, int]]:
+    swatches = {}
+    for feature in mapfmt.project_features(project, package.province_layer.name):
+        if "id" in feature:
+            swatches[int(feature["id"])] = mapfmt.hex_to_rgb(
+                feature.get("color", "#808080")
             )
-            duplicate_point = len(set(pts)) < len(pts)
-            crosses = duplicate_point or srv.polygon_self_intersects(pts)
-            if out_of_bounds or crosses:
-                flagged.append(pts)
-    return flagged
+    return swatches
 
 
-def render_preview(project: dict, image_path: Path) -> tuple[Image.Image, list[str]]:
-    with Image.open(image_path) as src:
-        backdrop = src.convert("RGB")
-    size = backdrop.size
+def _layer_overlay(
+    raster: np.ndarray,
+    cfg: mapfmt.LayerConfig,
+    alpha: int,
+    swatches: dict[int, tuple[int, int, int]],
+) -> Image.Image:
+    height, width = raster.shape[:2]
+    rgba = np.zeros((height, width, 4), dtype=np.uint8)
 
-    problems = srv.validate_project(project, size)
+    if cfg.kind == "identity":
+        ids = export.id_buffer(raster)
+        for province_id, rgb in swatches.items():
+            mask = ids == province_id
+            rgba[mask, :3] = rgb
+            rgba[mask, 3] = alpha
+    else:
+        nodata = np.array(cfg.nodata_rgb, dtype=np.uint8)
+        painted = ~np.all(raster == nodata, axis=-1)
+        rgba[painted, :3] = raster[painted]
+        rgba[painted, 3] = alpha
 
-    overlay = Image.new("RGBA", size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    for region in project.get("regions", []):
-        name = region.get("name", "").strip()
-        if not name:
-            continue
-        rgb = _hex_to_rgb(region.get("color", "#808080"))
-        for polygon in region.get("polygons", []):
-            if len(polygon) < 3:
-                continue
-            pts = [(float(x), float(y)) for x, y in polygon]
-            draw.polygon(pts, fill=(*rgb, REGION_ALPHA))
+    return Image.fromarray(rgba, mode="RGBA")
 
-    composite = Image.alpha_composite(backdrop.convert("RGBA"), overlay).convert("RGB")
 
-    if problems:
-        outline_draw = ImageDraw.Draw(composite)
-        for pts in _problem_polygons(project, size):
-            outline_draw.polygon(pts, outline=(255, 0, 0), width=3)
+def render_preview(
+    project: dict, package: mapfmt.Package
+) -> tuple[Image.Image, list[str]]:
+    with Image.open(package.backdrop_path) as src:
+        composite = src.convert("RGBA")
+
+    problems = export.validate_package(project, package)
+    swatches = _swatches(project, package)
+
+    for name in package.layer_order:
+        path = package.raster_path(name)
+        if not path.is_file():
+            continue  # not exported yet
+        with Image.open(path) as im:
+            raster = np.array(im.convert("RGB"))
+        overlay = _layer_overlay(
+            raster, package.layers[name], LAYER_ALPHA.get(name, DEFAULT_ALPHA), swatches
+        )
+        composite = Image.alpha_composite(composite, overlay)
+
+    composite = composite.convert("RGB")
+
+    flagged = export.problem_polygons(project, package)
+    if flagged:
+        draw = ImageDraw.Draw(composite)
+        for pts in flagged:
+            draw.polygon(pts, outline=(255, 0, 0), width=3)
             for x, y in pts:
-                r = 4
-                outline_draw.ellipse(
-                    [x - r, y - r, x + r, y + r], outline=(255, 0, 0), width=2
-                )
+                draw.ellipse([x - 4, y - 4, x + 4, y + 4], outline=(255, 0, 0), width=2)
 
     return composite, problems
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--project",
-        default=str(DEV_DIR_DEFAULT / "project.json"),
-        help="Project file to render.",
-    )
-    parser.add_argument(
-        "--image",
-        default=str(GAME_DIR_DEFAULT / "backdrop.png"),
-        help="Terrain backdrop to overlay regions on.",
-    )
-    parser.add_argument(
-        "--out",
-        default=str(DEV_DIR_DEFAULT / "preview.png"),
-        help="Where to write the rendered preview PNG.",
-    )
+    parser.add_argument("--package-dir", default=str(DEV_DIR_DEFAULT))
+    parser.add_argument("--out", default=None, help="Defaults to <package>/preview.png")
     args = parser.parse_args()
 
-    srv.assert_clean_coastline_source(Path(args.image))
-    project = json.loads(Path(args.project).read_text())
-    composite, problems = render_preview(project, Path(args.image))
+    package_dir = Path(args.package_dir)
+    package = mapfmt.load_package(package_dir)
+    project = mapfmt.load_project(package_dir, package)
 
-    out_path = Path(args.out)
+    composite, problems = render_preview(project, package)
+
+    out_path = Path(args.out) if args.out else package_dir / "preview.png"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     composite.save(out_path)
 
     print(f"wrote {out_path}")
     if problems:
         print(f"\n{len(problems)} problem(s) found (outlined in red on the preview):")
-        for p in problems:
-            print(f"  - {p}")
+        for problem in problems:
+            print(f"  - {problem}")
         raise SystemExit(1)
     print("no validation problems")
 

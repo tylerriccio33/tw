@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://h46v065gqdgn"
-path="res://.godot/imported/backdrop_terrain_legacy.png-b7b235700a80ad67acb316fca074648a.ctex"
+uid="uid://djj75g35lvdli"
+path="res://.godot/imported/resources.png-7c77b1ca351e6de1c7e0b3c40e08717e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://campaign/map_data/backdrop_terrain_legacy.png"
-dest_files=["res://.godot/imported/backdrop_terrain_legacy.png-b7b235700a80ad67acb316fca074648a.ctex"]
+source_file="res://campaign/map_data/layers/resources.png"
+dest_files=["res://.godot/imported/resources.png-7c77b1ca351e6de1c7e0b3c40e08717e.ctex"]
 
 [params]
 

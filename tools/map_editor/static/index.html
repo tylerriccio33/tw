@@ -8,34 +8,35 @@
 <body>
   <div id="sidebar">
     <h1>Map Editor</h1>
-    <div class="hint">
-      Click to place points. <b>Enter</b>/dbl-click closes a shape.
-      <b>Backspace</b> undo point. <b>Esc</b> cancel shape.
-      <b>WASD</b> to pan, <b>Z/X</b> to zoom out/in. Ctrl/Cmd+wheel also zooms.
-    </div>
 
-    <button id="newRegionBtn">+ New Region</button>
-    <button id="newShapeBtn" disabled>+ New Shape (island/exclave)</button>
-    <button id="editVerticesBtn" disabled>Edit Vertices: Off</button>
+    <div class="section-label">Layers</div>
+    <div id="layerList"></div>
 
-    <div id="regionList"></div>
+    <div id="tools"></div>
+
+    <div class="section-label" id="featureLabel">Contents</div>
+    <div id="featureList"></div>
 
     <div class="footer-actions">
-      <button id="reloadBtn">Reload From Live Game</button>
       <button id="saveBtn">Save Draft</button>
-      <button id="exportBtn" class="primary">Export to Dev</button>
+      <button id="exportBtn" class="primary">Export Package</button>
     </div>
-    <div class="hint">Export writes to tools/map_editor/dev_map_data/. Run <b>make promote-map</b> to copy that into campaign/map_data/ for the game to use.</div>
+    <div class="hint" id="hint"></div>
+    <div class="hint">
+      Export writes the package to tools/map_editor/dev_map_data/.
+      Run <b>make promote-map</b> to ship it to the game.
+    </div>
     <div id="status"></div>
   </div>
 
   <div id="viewport">
     <div id="stage">
       <img id="bgImage">
-      <svg id="overlay"></svg>
+      <svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
   </div>
 
+  <script src="/static/trace.js"></script>
   <script src="/static/editor.js"></script>
 </body>
 </html>

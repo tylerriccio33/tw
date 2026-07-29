@@ -1,0 +1,46 @@
+{
+ "name": "terrain",
+ "title": "Terrain",
+ "input": "brush",
+ "kind": "class",
+ "raster": "terrain.png",
+ "nodata_color": "#000000",
+ "default_key": "plains",
+ "snap_source": false,
+ "clip_to": "coastline:land",
+ "gapfill": {
+  "max_gap_px": 12,
+  "within": "coastline:land"
+ },
+ "legend": {
+  "#7d9a4e": {
+   "key": "plains",
+   "name": "Plains",
+   "move_cost": 1.0
+  },
+  "#8a7a5a": {
+   "key": "hills",
+   "name": "Hills",
+   "move_cost": 1.5
+  },
+  "#6b6b6b": {
+   "key": "mountains",
+   "name": "Mountains",
+   "move_cost": 2.5
+  },
+  "#2f6d3d": {
+   "key": "forest",
+   "name": "Forest",
+   "move_cost": 1.8
+  },
+  "#c9b688": {
+   "key": "desert",
+   "name": "Desert",
+   "move_cost": 1.4
+  }
+ },
+ "reduce": {
+  "into": "terrain",
+  "mode": "majority"
+ }
+}

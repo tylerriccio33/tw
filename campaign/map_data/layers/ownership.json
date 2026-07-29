@@ -1,0 +1,31 @@
+{
+ "name": "ownership",
+ "title": "Starting owners",
+ "input": "assign",
+ "kind": "class",
+ "raster": "ownership.png",
+ "nodata_color": "#000000",
+ "snap_source": false,
+ "legend": {
+  "#cd5c5c": {
+   "key": "red",
+   "name": "Red"
+  },
+  "#6495ed": {
+   "key": "blue",
+   "name": "Blue"
+  },
+  "#3cb371": {
+   "key": "green",
+   "name": "Green"
+  },
+  "#daa520": {
+   "key": "yellow",
+   "name": "Yellow"
+  }
+ },
+ "reduce": {
+  "into": "starting_owner",
+  "mode": "majority"
+ }
+}

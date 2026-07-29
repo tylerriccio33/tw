@@ -1,96 +1,269 @@
 #!/usr/bin/env python3
 """Local map editor server.
 
-Serves a browser-based tool for tracing faction/territory borders on top
-of a clean line-art coastline map. Land is white fill, sea is a dark
-outline stroke; see assert_clean_coastline_source. Everything the editor
-writes goes to a *dev* location:
-tools/map_editor/dev_map_data/. That's never the live game data, so you
-can iterate freely. Run `make promote-map` from the repo root once a
-trace is ready. That copies it into campaign/map_data/, the directory
-campaign/province_map.gd actually loads at runtime.
+Serves a browser tool for authoring a layered map package. Everything it
+reads and writes lives in one package directory, by default
+tools/map_editor/dev_map_data/. That is never the live game data, so you
+can iterate freely. Run `make promote-map` once you're happy with an
+export.
 
-The dev and game directories use the same two-file format
-province_map.gd expects. region_map.png is a flat-colored bitmap, one
-solid color per territory. regions.txt maps each hex color to a
-territory name, e.g. "#hexcolor": "Territory_Name". See
-campaign/province_map.gd for how those become polygons.
-
-On startup the editor loads, in priority order:
-  1. dev_map_data/project.json   - a previous editing session (full point
-     precision, the real source of truth once you've started editing).
-  2. dev_map_data/region_map.png + regions.txt - a previously exported dev
-     map, re-traced from its raster via contour detection.
-  3. campaign/map_data/region_map.png + regions.txt - the map currently
-     shipped in the game, same re-trace fallback. This is how you bootstrap
-     an editing session from what's live today.
-  4. an empty project, if none of the above exist.
+The server is deliberately thin. It knows how to read and write a
+package, rasterize a layer, and run the gap-fill. It has no idea what any
+particular layer *means*. The browser builds its entire UI from
+/api/manifest. Add a layer to map.json and it appears, with no change
+here or in the JavaScript.
 
 Usage:
     cd tools/map_editor
     uv run server.py
 
-Then open http://localhost:8765 and start tracing.
+Then open http://localhost:8765.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
 import mimetypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 from pathlib import Path
 
+import coastline as coast
 import cv2
+import export
+import init_package
+import mapfmt
 import numpy as np
-from gapfill import clip_sea_overflow, fill_land_gaps
-from PIL import Image, ImageDraw
+from gapfill import fill_land_gaps
+from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DEV_DIR_DEFAULT = Path(__file__).resolve().parent / "dev_map_data"
-GAME_DIR_DEFAULT = REPO_ROOT / "campaign" / "map_data"
 
-MIN_CONTOUR_AREA = 12  # px^2, drops single-pixel noise contours on import
-SIMPLIFY_EPSILON = 1.2  # px, cv2.approxPolyDP tolerance on import
-
-COASTLINE_WORK_WIDTH = 900  # px, classification runs on a downscaled copy for speed
-COASTLINE_LAND_MIN_GRAY = 245  # min grayscale value for a pixel to count as land fill
-# A source flattened from real transparency (e.g. a cached copy of a PNG
-# viewed outside its original app) often bakes the checkerboard in as
-# actual alternating-color pixels. A *median* blur is a no-op on a
-# perfectly regular checkerboard at any kernel size - each cell is
-# outvoted by its opposite-color neighbors, so the pattern survives
-# untouched. A *box* blur averages instead of voting, so it collapses the
-# checker into a uniform mid-gray that reads correctly as sea, while
-# solid land fill (already uniform white) stays unaffected. Must exceed
-# the checker's cell period (empirically ~15px here) to fully collapse it.
-COASTLINE_DENOISE_KERNEL = 31  # px, box-blur size for collapsing checkerboard noise
-COASTLINE_MORPH_KERNEL = 7  # px, smooths the sea mask and drops speckle before tracing
-COASTLINE_MIN_CONTOUR_AREA = 120  # px^2 at working resolution, drops speckle contours
-COASTLINE_SIMPLIFY_EPSILON = 2.0  # px at working resolution
-
-# assert_clean_coastline_source: a real painted-terrain photo/render has a
-# continuous spread of midtone pixels (mountains, shading, texture). Clean
-# line art has almost none - just white fill, a dark outline stroke, and
-# whatever color the sea uses. If more than this fraction of pixels land
-# in the mid-gray band, the source probably shows painted terrain again,
-# not the flat outline map this classifier expects.
-COASTLINE_MIDTONE_MIN_GRAY = 60
-COASTLINE_MIDTONE_MAX_GRAY = 200
-COASTLINE_MAX_MIDTONE_FRACTION = 0.05
+REVECTORIZE_MIN_AREA = 12  # px^2, drops single-pixel noise contours
+REVECTORIZE_EPSILON = 1.0  # px, cv2.approxPolyDP tolerance
 
 
-def make_handler(args: argparse.Namespace):
-    image_path = Path(args.image).resolve()
-    assert_clean_coastline_source(image_path)
-    dev_dir = Path(args.dev_dir).resolve()
-    game_dir = Path(args.game_dir).resolve()
-    project_path = dev_dir / "project.json"
-    coastline_cache_path = dev_dir / "coastline.json"
-    coastline_cache: dict = {}
+class ApiError(Exception):
+    """Something the user did wrong, reported to the UI as a sentence
+    rather than a stack trace."""
+
+
+# --------------------------------------------------------------------------
+# operations the routes delegate to
+# --------------------------------------------------------------------------
+
+
+def manifest_payload(package: mapfmt.Package) -> dict:
+    """Everything the browser needs to build its UI. One request, because
+    the UI can't render anything meaningful until it has all of it."""
+    return {
+        "size": list(package.size),
+        "layer_order": package.layer_order,
+        "province_layer": package.manifest["province_layer"],
+        "factions": package.factions,
+        "layers": {
+            name: {
+                "name": cfg.name,
+                "title": cfg.title,
+                "input": cfg.input,
+                "kind": cfg.kind,
+                "raster": cfg.raster,
+                "legend": cfg.legend,
+                "nodata_color": cfg.nodata_color,
+                "default_key": cfg.default_key,
+                "snap_source": cfg.snap_source,
+                "clip_to": cfg.clip_to,
+                "gapfill": cfg.gapfill,
+                # Which layers this one may snap to: everything drawn
+                # before it, since that's what already exists when you
+                # start drawing on this one.
+                "snap_candidates": [
+                    other
+                    for other in package.layers_before(name)
+                    if package.layers[other].snap_source
+                ],
+            }
+            for name, cfg in package.layers.items()
+        },
+    }
+
+
+def quantize_to_legend(raster: np.ndarray, cfg: mapfmt.LayerConfig) -> np.ndarray:
+    """Snap every pixel to an exact legend color.
+
+    The browser paints with an antialiased canvas. A brush stroke comes
+    back with a fringe of blended colors around its edge. No legend holds
+    those, so they would reduce to nothing and render as noise. They also
+    break the format's one hard rule: a pixel's color *is* its meaning,
+    matched exactly. Snapping to the nearest legend entry keeps the
+    stroke's shape and throws away the fringe.
+    """
+    palette_hex = [cfg.nodata_color] + list(cfg.legend.keys())
+    # int32, not int16: a squared channel difference reaches 195075 across
+    # three channels, which silently wraps in int16 and sends every pixel
+    # to an arbitrary palette entry.
+    palette = np.array([mapfmt.hex_to_rgb(h) for h in palette_hex], dtype=np.int32)
+
+    flat = raster.reshape(-1, 3).astype(np.int32)
+    # (pixels, palette, channels) -> nearest palette entry per pixel
+    distances = ((flat[:, None, :] - palette[None, :, :]) ** 2).sum(axis=2)
+    nearest = distances.argmin(axis=1)
+    return palette[nearest].astype(np.uint8).reshape(raster.shape)
+
+
+def revectorize(
+    raster: np.ndarray, cfg: mapfmt.LayerConfig, project: dict
+) -> list[dict]:
+    """Turn a layer raster back into editable polygons.
+
+    RETR_CCOMP, not RETR_EXTERNAL, so an enclave stays an enclave rather
+    than vanishing into whatever surrounds it.
+    """
+    if cfg.kind == "identity":
+        ids = export.id_buffer(raster)
+        existing = {
+            int(f["id"]): f
+            for f in mapfmt.project_features(project, cfg.name)
+            if "id" in f
+        }
+        groups = [
+            (int(pid), ids == int(pid)) for pid in np.unique(ids) if int(pid) != 0
+        ]
+    else:
+        existing = {f.get("key"): f for f in mapfmt.project_features(project, cfg.name)}
+        groups = []
+        for hex_color, entry in cfg.legend.items():
+            if hex_color == cfg.nodata_color:
+                continue
+            rgb = np.array(mapfmt.hex_to_rgb(hex_color), dtype=np.uint8)
+            groups.append((entry["key"], np.all(raster == rgb, axis=-1)))
+
+    features = []
+    for identity, mask in groups:
+        contours, _ = cv2.findContours(
+            mask.astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
+        )
+        polygons = []
+        for contour in contours:
+            if cv2.contourArea(contour) < REVECTORIZE_MIN_AREA:
+                continue
+            simplified = cv2.approxPolyDP(contour, REVECTORIZE_EPSILON, True)
+            pts = [
+                [round(float(p[0][0]), 1), round(float(p[0][1]), 1)] for p in simplified
+            ]
+            if len(pts) >= 3:
+                polygons.append(pts)
+        if not polygons:
+            continue
+
+        prior = existing.get(identity, {})
+        feature = dict(prior)
+        feature["polygons"] = polygons
+        if cfg.kind == "identity":
+            feature["id"] = identity
+            feature.setdefault("name", f"Province {identity}")
+            feature.setdefault("key", mapfmt.slugify(feature["name"]))
+        else:
+            feature["key"] = identity
+        features.append(feature)
+
+    return features
+
+
+def fill_gaps(project: dict, package: mapfmt.Package, layer_name: str) -> dict:
+    """Run the export-time clip and gap-fill for one layer, and hand back
+    the result as editable geometry.
+
+    The point is that you see the fix as polygons you can keep editing.
+    You throw it away by not saving. The alternative is a silent fix at
+    export time that surprises you in the game.
+    """
+    cfg = package.layers.get(layer_name)
+    if cfg is None:
+        raise ApiError(f"no layer named '{layer_name}'")
+    if cfg.input != "polygon":
+        raise ApiError(
+            f"'{layer_name}' is a {cfg.input} layer - gap-filling returns "
+            "polygons, so it only applies to traced layers"
+        )
+
+    size = package.size
+    masks: dict[str, np.ndarray] = {}
+    for name in package.layer_order:
+        other = package.layers[name]
+        if other.kind != "mask":
+            continue
+        raster = export.rasterize_layer(project, package, other, size, None)
+        for hex_color, entry in other.legend.items():
+            rgb = np.array(mapfmt.hex_to_rgb(hex_color), dtype=np.uint8)
+            masks[f"{name}:{entry['key']}"] = np.all(raster == rgb, axis=-1)
+        if name == layer_name:
+            break
+
+    raster = export.rasterize_layer(project, package, cfg, size, None)
+    before = raster.copy()
+
+    if cfg.clip_to:
+        raster = raster.copy()
+        raster[~masks[cfg.clip_to]] = np.array(cfg.nodata_rgb, dtype=np.uint8)
+    if cfg.gapfill:
+        raster = fill_land_gaps(
+            raster,
+            masks[cfg.gapfill["within"]],
+            cfg.nodata_rgb,
+            cfg.gapfill.get("max_gap_px", 12),
+        )
+
+    nodata = np.array(cfg.nodata_rgb, dtype=np.uint8)
+    changed = int(np.any(before != raster, axis=-1).sum())
+
+    # What's still unclaimed inside the mask is a gap too wide for the
+    # fill to bridge - i.e. land nobody has drawn yet. That's the half
+    # worth telling the user about, since it needs a real decision.
+    residual = 0
+    if cfg.gapfill:
+        within = masks[cfg.gapfill["within"]]
+        residual = int((np.all(raster == nodata, axis=-1) & within).sum())
+
+    return {
+        "features": revectorize(raster, cfg, project),
+        "changed_px": changed,
+        "residual_px": residual,
+        "max_gap_px": (cfg.gapfill or {}).get("max_gap_px"),
+    }
+
+
+def autotrace(package: mapfmt.Package, layer_name: str) -> list[dict]:
+    cfg = package.layers.get(layer_name)
+    if cfg is None or cfg.kind != "mask":
+        raise ApiError("autotrace only applies to a mask layer like the coastline")
+    land_mask = coast.build_land_mask(package.backdrop_path)
+    return init_package.trace_land_features(land_mask)
+
+
+# --------------------------------------------------------------------------
+# HTTP
+# --------------------------------------------------------------------------
+
+
+def make_handler(package_dir: Path):
+    package_dir = Path(package_dir).resolve()
+
+    def load():
+        """Reload from disk per request. The package is small, and a hand-
+        edited layer config then shows up on refresh, with no server
+        restart."""
+        package = mapfmt.load_package(package_dir)
+        return package, mapfmt.load_project(package_dir, package)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *a):
             pass  # keep stdout quiet
+
+        # -- plumbing ---------------------------------------------------
 
         def _send_json(self, obj, status=200):
             body = json.dumps(obj).encode("utf-8")
@@ -100,431 +273,154 @@ def make_handler(args: argparse.Namespace):
             self.end_headers()
             self.wfile.write(body)
 
+        def _send_bytes(self, data: bytes, content_type: str):
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+
         def _send_file(self, path: Path, content_type: str | None = None):
             if not path.is_file():
                 self.send_error(404, "Not found")
                 return
-            data = path.read_bytes()
             ctype = (
                 content_type
                 or mimetypes.guess_type(str(path))[0]
                 or "application/octet-stream"
             )
-            self.send_response(200)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            self._send_bytes(path.read_bytes(), ctype)
+
+        def _body(self) -> bytes:
+            length = int(self.headers.get("Content-Length", 0))
+            return self.rfile.read(length) if length else b""
+
+        def _json_body(self) -> dict:
+            raw = self._body()
+            if not raw:
+                return {}
+            return json.loads(raw.decode("utf-8"))
+
+        # -- routes -----------------------------------------------------
 
         def do_GET(self):
             path = self.path.split("?", 1)[0]
-            if path == "/" or path == "/index.html":
-                self._send_file(STATIC_DIR / "index.html", "text/html")
-            elif path.startswith("/static/"):
-                rel = path[len("/static/") :]
-                self._send_file(STATIC_DIR / rel)
-            elif path == "/api/image":
-                self._send_file(image_path)
-            elif path == "/api/project":
-                self._send_json(
-                    load_project(project_path, dev_dir, game_dir, image_path)
-                )
-            elif path == "/api/coastline":
-                nonlocal coastline_cache
-                if not coastline_cache:
-                    coastline_cache = load_or_build_coastline(
-                        image_path, coastline_cache_path
-                    )
-                self._send_json(coastline_cache)
-            elif path == "/api/reload-from-game":
-                project = import_from_raster(game_dir, image_path)
-                if project is None:
-                    self._send_json(
-                        {"error": "no map in campaign/map_data to import"}, 404
-                    )
-                else:
+            try:
+                if path in ("/", "/index.html"):
+                    self._send_file(STATIC_DIR / "index.html", "text/html")
+                elif path.startswith("/static/"):
+                    self._send_file(STATIC_DIR / path[len("/static/") :])
+                elif path == "/api/manifest":
+                    package, _ = load()
+                    self._send_json(manifest_payload(package))
+                elif path == "/api/project":
+                    _, project = load()
                     self._send_json(project)
-            else:
-                self.send_error(404, "Not found")
+                elif path == "/api/backdrop":
+                    package, _ = load()
+                    self._send_file(package.backdrop_path)
+                elif path.startswith("/api/layer/"):
+                    package, _ = load()
+                    name = path[len("/api/layer/") :].removesuffix(".png")
+                    if name not in package.layers:
+                        self.send_error(404, "no such layer")
+                        return
+                    raster = package.raster_path(name)
+                    if not raster.is_file():
+                        width, height = package.size
+                        blank = np.zeros((height, width, 3), dtype=np.uint8)
+                        blank[:] = np.array(
+                            package.layers[name].nodata_rgb, dtype=np.uint8
+                        )
+                        buffer = BytesIO()
+                        Image.fromarray(blank).save(buffer, format="PNG")
+                        self._send_bytes(buffer.getvalue(), "image/png")
+                    else:
+                        self._send_file(raster, "image/png")
+                else:
+                    self.send_error(404, "Not found")
+            except mapfmt.PackageError as exc:
+                self._send_json({"error": str(exc)}, 500)
 
         def do_POST(self):
-            length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length) if length else b"{}"
+            path = self.path.split("?", 1)[0]
             try:
-                payload = json.loads(body.decode("utf-8"))
-            except json.JSONDecodeError:
-                self._send_json({"error": "bad json"}, 400)
-                return
+                if path == "/api/project":
+                    mapfmt.save_project(package_dir, self._json_body())
+                    self._send_json({"ok": True})
 
-            if self.path == "/api/project":
-                dev_dir.mkdir(parents=True, exist_ok=True)
-                project_path.write_text(json.dumps(payload, indent=2))
-                self._send_json({"ok": True})
-            elif self.path == "/api/export":
-                try:
-                    result = export_project(payload, image_path, dev_dir)
+                elif path.startswith("/api/layer/"):
+                    package, _ = load()
+                    name = path[len("/api/layer/") :].removesuffix(".png")
+                    if name not in package.layers:
+                        raise ApiError(f"no layer named '{name}'")
+                    raster_path = package.raster_path(name)
+                    raster_path.parent.mkdir(parents=True, exist_ok=True)
+                    with Image.open(BytesIO(self._body())) as im:
+                        raster = np.array(im.convert("RGB"))
+                    raster = quantize_to_legend(raster, package.layers[name])
+                    Image.fromarray(raster).save(raster_path)
+                    self._send_json({"ok": True})
+
+                elif path.startswith("/api/autotrace/"):
+                    package, _ = load()
+                    features = autotrace(package, path[len("/api/autotrace/") :])
+                    self._send_json({"ok": True, "features": features})
+
+                elif path == "/api/fillgaps":
+                    package, project = load()
+                    payload = self._json_body()
+                    # Use the project the browser has in hand, not the last
+                    # autosave - otherwise the fill runs against stale
+                    # geometry and silently undoes recent edits.
+                    result = fill_gaps(
+                        payload.get("project") or project,
+                        package,
+                        payload.get("layer", ""),
+                    )
                     self._send_json({"ok": True, **result})
-                except (ValueError, OSError) as exc:  # surface errors to the UI
-                    self._send_json({"ok": False, "error": str(exc)}, 500)
-            else:
-                self.send_error(404, "Not found")
+
+                elif path == "/api/export":
+                    package, project = load()
+                    payload = self._json_body()
+                    project = payload.get("project") or project
+                    mapfmt.save_project(package_dir, project)
+                    result = export.export_package(project, package)
+                    self._send_json({"ok": True, **result})
+
+                else:
+                    self.send_error(404, "Not found")
+
+            except (ApiError, export.ExportBlocked, mapfmt.PackageError) as exc:
+                self._send_json({"ok": False, "error": str(exc)}, 400)
+            except (ValueError, OSError) as exc:
+                self._send_json({"ok": False, "error": str(exc)}, 500)
 
     return Handler
-
-
-def load_project(
-    project_path: Path, dev_dir: Path, game_dir: Path, image_path: Path
-) -> dict:
-    if project_path.is_file():
-        return json.loads(project_path.read_text())
-
-    project = import_from_raster(dev_dir, image_path)
-    if project is not None:
-        return project
-
-    project = import_from_raster(game_dir, image_path)
-    if project is not None:
-        return project
-
-    with Image.open(image_path) as im:
-        size = im.size
-    return {"image_size": list(size), "regions": []}
-
-
-def import_from_raster(source_dir: Path, image_path: Path) -> dict | None:
-    """Re-trace an existing region_map.png/regions.txt pair into editable
-    polygons via contour detection, rescaled into image_path's pixel space."""
-    region_map_path = source_dir / "region_map.png"
-    regions_txt_path = source_dir / "regions.txt"
-    if not region_map_path.is_file() or not regions_txt_path.is_file():
-        return None
-
-    names_by_color = json.loads(regions_txt_path.read_text())
-
-    with Image.open(region_map_path) as im:
-        raster = np.array(im.convert("RGB"))
-    raster_h, raster_w = raster.shape[:2]
-
-    with Image.open(image_path) as target_im:
-        target_w, target_h = target_im.size
-    scale_x = target_w / raster_w
-    scale_y = target_h / raster_h
-
-    regions = []
-    for hex_color, raw_name in names_by_color.items():
-        rgb = tuple(int(hex_color[i : i + 2], 16) for i in (1, 3, 5))
-        mask = (
-            np.all(raster == np.array(rgb, dtype=np.uint8), axis=-1).astype(np.uint8)
-            * 255
-        )
-        if not mask.any():
-            continue
-
-        contours, _hierarchy = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        polygons = []
-        for contour in contours:
-            if cv2.contourArea(contour) < MIN_CONTOUR_AREA:
-                continue
-            simplified = cv2.approxPolyDP(contour, SIMPLIFY_EPSILON, True)
-            pts = [
-                [
-                    round(float(pt[0][0]) * scale_x, 1),
-                    round(float(pt[0][1]) * scale_y, 1),
-                ]
-                for pt in simplified
-            ]
-            if len(pts) >= 3:
-                polygons.append(pts)
-
-        if polygons:
-            regions.append(
-                {
-                    "name": raw_name.replace("_", " "),
-                    "color": hex_color,
-                    "polygons": polygons,
-                }
-            )
-
-    return {"image_size": [target_w, target_h], "regions": regions}
-
-
-def load_or_build_coastline(image_path: Path, cache_path: Path) -> dict:
-    """Return {"lines": [[[x,y],...], ...]} tracing the land/sea boundary
-    of image_path, in that image's full-resolution pixel space. Cached to
-    disk keyed on the source image's mtime so repeat loads are instant."""
-    mtime = image_path.stat().st_mtime
-    if cache_path.is_file():
-        cached = json.loads(cache_path.read_text())
-        if cached.get("source_mtime") == mtime:
-            return {"lines": cached["lines"]}
-
-    result = {"lines": classify_coastline(image_path), "source_mtime": mtime}
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(json.dumps(result))
-    return {"lines": result["lines"]}
-
-
-def assert_clean_coastline_source(image_path: Path) -> None:
-    """Enforce the backdrop is clean line-art: white land fill, a dark
-    outline stroke, sea in any other color. Never a painted/photographic
-    terrain render.
-
-    No per-pixel rule can classify a painted terrain image reliably.
-    Git history shows this used to be a blue-vs-red channel bias, then a
-    hue band. Both mis-read real land as sea.
-
-    A clean outline map sidesteps that entirely. Land is just "is this
-    pixel white," which only holds if the source looks like line art.
-    So this raises loudly instead of silently producing a bad mask.
-    Called once at server/preview startup, not per-classification.
-    """
-    full = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-    if full is None:
-        raise ValueError(f"Could not read image at {image_path}")
-    gray = cv2.cvtColor(full, cv2.COLOR_BGR2GRAY)
-    midtone = (gray >= COASTLINE_MIDTONE_MIN_GRAY) & (
-        gray <= COASTLINE_MIDTONE_MAX_GRAY
-    )
-    midtone_fraction = float(midtone.mean())
-    if midtone_fraction > COASTLINE_MAX_MIDTONE_FRACTION:
-        raise ValueError(
-            f"{image_path} doesn't look like a clean line-art coastline map: "
-            f"{midtone_fraction:.0%} of pixels are mid-gray (expected white "
-            f"land fill + a dark outline stroke, under "
-            f"{COASTLINE_MAX_MIDTONE_FRACTION:.0%} midtone). Painted/textured "
-            "terrain art can't be classified reliably here - trace over a "
-            "flat white-fill/black-outline coastline drawing instead."
-        )
-
-
-def _classify_sea_mask(image_path: Path):
-    """Shared land/sea heuristic: classify per-pixel on brightness at a
-    downscaled working resolution, then denoise with morphology. Returns
-    (sea_mask_work, full_w, full_h, work_w, work_h).
-
-    The backdrop is clean line-art (see assert_clean_coastline_source):
-    white land, a dark outline stroke, sea in any other color.
-    Classification is just "is this pixel white" - no color-space
-    heuristics needed.
-
-    This is a coarse heuristic, not per-pixel-exact."""
-    full = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-    full_h, full_w = full.shape[:2]
-
-    # Denoise at full resolution, before downscaling - see
-    # COASTLINE_DENOISE_KERNEL for why this has to be a box blur.
-    denoised = cv2.blur(full, (COASTLINE_DENOISE_KERNEL, COASTLINE_DENOISE_KERNEL))
-
-    scale = min(1.0, COASTLINE_WORK_WIDTH / full_w)
-    work_w, work_h = max(1, round(full_w * scale)), max(1, round(full_h * scale))
-    work = cv2.resize(denoised, (work_w, work_h), interpolation=cv2.INTER_AREA)
-
-    gray = cv2.cvtColor(work, cv2.COLOR_BGR2GRAY).astype(np.int16)
-    sea_mask = (gray < COASTLINE_LAND_MIN_GRAY).astype(np.uint8) * 255
-
-    kernel = np.ones((COASTLINE_MORPH_KERNEL, COASTLINE_MORPH_KERNEL), np.uint8)
-    sea_mask = cv2.morphologyEx(sea_mask, cv2.MORPH_OPEN, kernel)
-    sea_mask = cv2.morphologyEx(sea_mask, cv2.MORPH_CLOSE, kernel)
-
-    return sea_mask, full_w, full_h, work_w, work_h
-
-
-def build_land_mask(image_path: Path) -> np.ndarray:
-    """Full-resolution boolean mask, True where image_path counts as land.
-    Used by gapfill.fill_land_gaps to fill coastline gaps in the exported
-    region raster. Same coarse heuristic as classify_coastline, just
-    returned as a mask instead of traced into boundary lines."""
-    sea_mask, full_w, full_h, _work_w, _work_h = _classify_sea_mask(image_path)
-    sea_mask_full = cv2.resize(
-        sea_mask, (full_w, full_h), interpolation=cv2.INTER_NEAREST
-    )
-    return sea_mask_full == 0
-
-
-def classify_coastline(image_path: Path) -> list:
-    """Classify land vs. sea in image_path and trace the boundary between
-    them, for use as a snapping aid when drawing region borders.
-
-    This is a coarse heuristic, not per-pixel-exact. It gives border
-    snapping something to pull towards, not a precise terrain mask."""
-    sea_mask, full_w, full_h, work_w, work_h = _classify_sea_mask(image_path)
-
-    contours, _ = cv2.findContours(sea_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    scale_x, scale_y = full_w / work_w, full_h / work_h
-    lines = []
-    for contour in contours:
-        if cv2.contourArea(contour) < COASTLINE_MIN_CONTOUR_AREA:
-            continue
-        simplified = cv2.approxPolyDP(contour, COASTLINE_SIMPLIFY_EPSILON, True)
-        pts = [
-            [round(float(pt[0][0]) * scale_x, 1), round(float(pt[0][1]) * scale_y, 1)]
-            for pt in simplified
-        ]
-        if len(pts) >= 2:
-            lines.append(pts)
-
-    return lines
-
-
-def _segments_properly_intersect(p1, p2, p3, p4) -> bool:
-    def orientation(a, b, c):
-        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-
-    d1 = orientation(p3, p4, p1)
-    d2 = orientation(p3, p4, p2)
-    d3 = orientation(p1, p2, p3)
-    d4 = orientation(p1, p2, p4)
-    return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0)) and d1 != 0 and d2 != 0
-
-
-def polygon_self_intersects(points: list[tuple[float, float]]) -> bool:
-    """True if any two non-adjacent edges of the closed polygon cross.
-    A self-crossing polygon fills unpredictably: PIL's scanline fill
-    doesn't follow a torn/bowtie shape the way a human eye would. This
-    is how a mistraced faction border ends up rendering as a
-    disconnected fragment instead of the intended landmass."""
-    n = len(points)
-    edges = [(points[i], points[(i + 1) % n]) for i in range(n)]
-    for i in range(n):
-        for j in range(i + 1, n):
-            if j == i + 1 or (i == 0 and j == n - 1):
-                continue  # adjacent edges share a vertex, not a crossing
-            if _segments_properly_intersect(*edges[i], *edges[j]):
-                return True
-    return False
-
-
-def validate_project(project: dict, size: tuple[int, int]) -> list[str]:
-    """Invariants a region_map.png/regions.txt export depends on. A
-    violation means the export misrepresents what was drawn: a dropped
-    faction, a torn shape, or an off-map border. export_project
-    refuses to write anything until these are clean."""
-    width, height = size
-    problems = []
-    name_by_color: dict[str, str] = {}
-
-    for region in project.get("regions", []):
-        name = region.get("name", "").strip()
-        if not name:
-            continue
-        color = region.get("color", "#808080").strip().lower()
-
-        prior_name = name_by_color.get(color)
-        if prior_name is not None and prior_name != name:
-            problems.append(
-                f"'{name}' and '{prior_name}' both use color {color} - "
-                "regions.txt maps one name per color, so one of them "
-                "will be silently dropped from the exported map"
-            )
-        else:
-            name_by_color[color] = name
-
-        for poly_idx, polygon in enumerate(region.get("polygons", [])):
-            if len(polygon) < 3:
-                continue
-            pts = [(float(x), float(y)) for x, y in polygon]
-
-            out_of_bounds = [
-                (x, y) for x, y in pts if not (0 <= x <= width and 0 <= y <= height)
-            ]
-            if out_of_bounds:
-                x, y = out_of_bounds[0]
-                problems.append(
-                    f"'{name}' polygon {poly_idx} has a point "
-                    f"({x:.1f}, {y:.1f}) outside the {width}x{height} map"
-                )
-
-            if len(set(pts)) < len(pts):
-                problems.append(
-                    f"'{name}' polygon {poly_idx} revisits the same point "
-                    "twice - that pinches the shape into a self-touching "
-                    "loop instead of the intended territory"
-                )
-            elif polygon_self_intersects(pts):
-                problems.append(
-                    f"'{name}' polygon {poly_idx} crosses itself - it will "
-                    "render as a torn or disconnected shape instead of the "
-                    "intended territory"
-                )
-
-    return problems
-
-
-def export_project(project: dict, image_path: Path, out_dir: Path) -> dict:
-    with Image.open(image_path) as src:
-        size = src.size
-
-    problems = validate_project(project, size)
-    if problems:
-        raise ValueError(
-            "Export blocked, the map data doesn't make sense:\n"
-            + "\n".join(f"- {p}" for p in problems)
-        )
-
-    canvas = Image.new("RGB", size, "white")
-    draw = ImageDraw.Draw(canvas)
-
-    regions_by_color = {}
-    for region in project.get("regions", []):
-        name = region.get("name", "").strip()
-        color = region.get("color", "#808080")
-        if not name:
-            continue
-        for polygon in region.get("polygons", []):
-            if len(polygon) < 3:
-                continue
-            pts = [(float(x), float(y)) for x, y in polygon]
-            draw.polygon(pts, fill=color)
-        regions_by_color[color] = name.replace(" ", "_")
-
-    land_mask = build_land_mask(image_path)
-    clipped = clip_sea_overflow(np.array(canvas), land_mask)
-    filled = fill_land_gaps(clipped, land_mask)
-    canvas = Image.fromarray(filled)
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    region_map_path = out_dir / "region_map.png"
-    regions_txt_path = out_dir / "regions.txt"
-
-    canvas.save(region_map_path)
-    regions_txt_path.write_text(
-        json.dumps(regions_by_color, indent=1, ensure_ascii=False)
-    )
-
-    return {
-        "region_map": str(region_map_path),
-        "regions_txt": str(regions_txt_path),
-        "region_count": len(regions_by_color),
-    }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--image",
-        default=str(GAME_DIR_DEFAULT / "backdrop.png"),
-        help="Terrain image to trace borders on top of.",
-    )
-    parser.add_argument(
-        "--dev-dir",
+        "--package-dir",
         default=str(DEV_DIR_DEFAULT),
-        help="Dev output directory: draft project.json + exported region_map.png/regions.txt.",
-    )
-    parser.add_argument(
-        "--game-dir",
-        default=str(GAME_DIR_DEFAULT),
-        help="Live game map_data directory, used only as a bootstrap-import fallback (never written).",
+        help="Map package to edit. Created with `make map-package-init`.",
     )
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
 
-    handler = make_handler(args)
+    package_dir = Path(args.package_dir)
+    try:
+        package = mapfmt.load_package(package_dir)
+    except mapfmt.PackageError as exc:
+        raise SystemExit(f"{exc}\n\nCreate one first:  make map-package-init SEED=12")
+
+    handler = make_handler(package_dir)
     server = ThreadingHTTPServer(("localhost", args.port), handler)
     print(f"Map editor running at http://localhost:{args.port}")
-    print(f"  tracing over: {args.image}")
-    print(f"  dev output:   {args.dev_dir}")
+    print(f"  package: {package_dir}")
+    print(f"  layers:  {', '.join(package.layer_order)}")
     print("  promote with: make promote-map (from repo root)")
     try:
         server.serve_forever()

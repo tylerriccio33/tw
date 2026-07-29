@@ -1,10 +1,12 @@
 //! Pure game logic for the campaign map, independent of Godot.
 
 use rand::Rng;
+use std::collections::HashMap;
 
 pub type FactionId = u32;
 pub type CityId = u32;
 pub type ArmyId = u32;
+pub type ProvinceId = u32;
 
 /// Move points an army gets back at the start of each of its owner's turns.
 /// Move points are spent 1:1 in world units of straight-line distance - there
@@ -32,6 +34,73 @@ pub struct City {
     pub income: i32,
     pub position: (f32, f32),
     pub owner: FactionId,
+    /// The province this city sits in, when the campaign was built from a map
+    /// package. Taking the city takes the province with it.
+    pub province: Option<ProvinceId>,
+}
+
+/// A value read off a map layer, whatever that layer happens to describe.
+///
+/// Deliberately untyped: the map format lets anyone add a layer (roads,
+/// climate, culture) by dropping in a PNG and a JSON legend, and the whole
+/// point is that doing so needs no change here. Naming the tags in the type
+/// system would put that promise back in Rust's hands.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TagValue {
+    Str(String),
+    Num(f64),
+    List(Vec<String>),
+}
+
+impl TagValue {
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            TagValue::Str(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_num(&self) -> Option<f64> {
+        match self {
+            TagValue::Num(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn as_list(&self) -> Option<&[String]> {
+        match self {
+            TagValue::List(items) => Some(items),
+            _ => None,
+        }
+    }
+}
+
+/// One province: the atomic unit of territory.
+///
+/// Geometry lives in the map package and never crosses into Rust - a province
+/// here is an id, who holds it, what it borders, and whatever its layers said
+/// about it.
+#[derive(Debug, Clone)]
+pub struct Province {
+    pub id: ProvinceId,
+    pub key: String,
+    pub name: String,
+    pub centroid: (f32, f32),
+    pub neighbors: Vec<ProvinceId>,
+    pub tags: HashMap<String, TagValue>,
+    /// Seeded from the map's `starting_owner`, then owned by the simulation.
+    /// `None` means nobody holds it.
+    pub owner: Option<FactionId>,
+}
+
+impl Province {
+    pub fn tag(&self, name: &str) -> Option<&TagValue> {
+        self.tags.get(name)
+    }
+
+    pub fn borders(&self, other: ProvinceId) -> bool {
+        self.neighbors.contains(&other)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +177,10 @@ pub struct Campaign {
     pub factions: Vec<Faction>,
     pub cities: Vec<City>,
     pub armies: Vec<Army>,
+    /// Territory, when the campaign was built from a map package. Empty for a
+    /// campaign made from bare positions.
+    pub provinces: Vec<Province>,
+    province_index: HashMap<ProvinceId, usize>,
     /// Half-width of the playable square; army positions are clamped to it so
     /// a random AI walk can't wander off to infinity.
     pub map_extent: f32,
@@ -128,6 +201,8 @@ impl Campaign {
             factions,
             cities,
             armies: Vec::new(),
+            provinces: Vec::new(),
+            province_index: HashMap::new(),
             map_extent: 2048.0,
             next_army_id: 0,
             turn: 1,
@@ -145,6 +220,78 @@ impl Campaign {
     pub fn with_map_extent(mut self, map_extent: f32) -> Self {
         self.map_extent = map_extent;
         self
+    }
+
+    /// Attaches the territory read from a map package.
+    pub fn with_provinces(mut self, provinces: Vec<Province>) -> Self {
+        self.province_index = provinces
+            .iter()
+            .enumerate()
+            .map(|(index, province)| (province.id, index))
+            .collect();
+        self.provinces = provinces;
+        self
+    }
+
+    pub fn province(&self, id: ProvinceId) -> Option<&Province> {
+        self.province_index
+            .get(&id)
+            .and_then(|index| self.provinces.get(*index))
+    }
+
+    fn province_mut(&mut self, id: ProvinceId) -> Option<&mut Province> {
+        let index = *self.province_index.get(&id)?;
+        self.provinces.get_mut(index)
+    }
+
+    pub fn provinces_owned_by(&self, faction_id: FactionId) -> Vec<&Province> {
+        self.provinces
+            .iter()
+            .filter(|p| p.owner == Some(faction_id))
+            .collect()
+    }
+
+    pub fn set_province_owner(&mut self, id: ProvinceId, owner: FactionId) {
+        if let Some(province) = self.province_mut(id) {
+            province.owner = Some(owner);
+        }
+    }
+
+    pub fn neighbors_of(&self, id: ProvinceId) -> Vec<&Province> {
+        match self.province(id) {
+            Some(province) => province
+                .neighbors
+                .iter()
+                .filter_map(|neighbor| self.province(*neighbor))
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    pub fn province_tag(&self, id: ProvinceId, name: &str) -> Option<&TagValue> {
+        self.province(id).and_then(|p| p.tag(name))
+    }
+
+    pub fn province_nearest_to(&self, position: (f32, f32)) -> Option<&Province> {
+        self.provinces.iter().min_by(|a, b| {
+            distance(a.centroid, position)
+                .partial_cmp(&distance(b.centroid, position))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    }
+
+    /// Whichever province a city stands in changes hands with it. Called from
+    /// every path that transfers a city, so the political map and the province
+    /// table can't drift apart.
+    fn capture_province_of(&mut self, city_id: CityId, owner: FactionId) {
+        let province = self
+            .cities
+            .iter()
+            .find(|c| c.id == city_id)
+            .and_then(|c| c.province);
+        if let Some(province_id) = province {
+            self.set_province_owner(province_id, owner);
+        }
     }
 
     pub fn current_faction_id(&self) -> FactionId {
@@ -220,6 +367,7 @@ impl Campaign {
             if let Some(city) = self.city_mut(target_city_id) {
                 city.owner = attacker_id;
             }
+            self.capture_province_of(target_city_id, attacker_id);
             if self.cities_owned_by(defender_id).is_empty() {
                 if let Some(f) = self.faction_mut(defender_id) {
                     f.alive = false;
@@ -486,6 +634,7 @@ impl Campaign {
             if let Some(city) = self.city_mut(city_id) {
                 city.owner = attacker_faction;
             }
+            self.capture_province_of(city_id, attacker_faction);
             if self.cities_owned_by(defender_faction).is_empty() {
                 if let Some(f) = self.faction_mut(defender_faction) {
                     f.alive = false;
@@ -662,6 +811,7 @@ mod tests {
                 income: 10,
                 position: (0.0, 0.0),
                 owner: 0,
+                province: None,
             },
             City {
                 id: 1,
@@ -669,6 +819,7 @@ mod tests {
                 income: 10,
                 position: (1.0, 0.0),
                 owner: 1,
+                province: None,
             },
         ];
         Campaign::new(factions, cities, 10)
@@ -763,6 +914,7 @@ mod tests {
                 income: 5,
                 position: (0.0, 0.0),
                 owner: 0,
+                province: None,
             },
             City {
                 id: 1,
@@ -770,6 +922,7 @@ mod tests {
                 income: 5,
                 position: (1.0, 0.0),
                 owner: 0,
+                province: None,
             },
             City {
                 id: 2,
@@ -777,6 +930,7 @@ mod tests {
                 income: 5,
                 position: (2.0, 0.0),
                 owner: 1,
+                province: None,
             },
         ];
         let mut c = Campaign::new(factions, cities, 1);
@@ -816,6 +970,7 @@ mod tests {
                 income: 10,
                 position: a,
                 owner: 0,
+                province: None,
             },
             City {
                 id: 1,
@@ -823,6 +978,7 @@ mod tests {
                 income: 10,
                 position: b,
                 owner: 1,
+                province: None,
             },
         ];
         Campaign::new(factions, cities, 100).with_map_extent(4000.0)
@@ -1031,5 +1187,200 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(2);
         let outcome = c.attack(0, 1, &mut rng);
         assert!(outcome.is_ok());
+    }
+
+    // ----------------------------------------------------------------
+    // provinces
+    // ----------------------------------------------------------------
+
+    /// Battles are a coin flip, so retry seeds until the attacker wins - the
+    /// same idiom the city-capture tests use.
+    fn attack_until_won(campaign: &mut Campaign) {
+        for seed in 0..100u64 {
+            let mut rng = SmallRng::seed_from_u64(seed);
+            let mut trial = province_campaign();
+            if trial.attack(0, 1, &mut rng).unwrap().attacker_won {
+                *campaign = trial;
+                return;
+            }
+        }
+        panic!("no attacker win observed in 100 seeds");
+    }
+
+    fn province(id: ProvinceId, owner: Option<FactionId>, neighbors: Vec<ProvinceId>) -> Province {
+        Province {
+            id,
+            key: format!("p{id}"),
+            name: format!("Province {id}"),
+            centroid: (id as f32 * 100.0, 0.0),
+            neighbors,
+            tags: HashMap::new(),
+            owner,
+        }
+    }
+
+    /// Two provinces, each with the city that stands in it, one per faction.
+    fn province_campaign() -> Campaign {
+        let factions = vec![
+            Faction {
+                id: 0,
+                name: "Red".into(),
+                money: 0,
+                alive: true,
+            },
+            Faction {
+                id: 1,
+                name: "Blue".into(),
+                money: 0,
+                alive: true,
+            },
+        ];
+        let cities = vec![
+            City {
+                id: 0,
+                name: "Redhold".into(),
+                income: 10,
+                position: (0.0, 0.0),
+                owner: 0,
+                province: Some(1),
+            },
+            City {
+                id: 1,
+                name: "Bluehold".into(),
+                income: 10,
+                position: (100.0, 0.0),
+                owner: 1,
+                province: Some(2),
+            },
+        ];
+        Campaign::new(factions, cities, 10).with_provinces(vec![
+            province(1, Some(0), vec![2]),
+            province(2, Some(1), vec![1]),
+        ])
+    }
+
+    #[test]
+    fn provinces_are_looked_up_by_id_not_position() {
+        let c = province_campaign();
+        assert_eq!(c.province(2).unwrap().key, "p2");
+        assert!(c.province(99).is_none());
+    }
+
+    #[test]
+    fn taking_a_city_takes_its_province_with_it() {
+        // The whole point of ownership being simulation state: a province
+        // changes hands mid-game, with no file on disk changing.
+        let mut c = province_campaign();
+        assert_eq!(c.province(2).unwrap().owner, Some(1));
+
+        attack_until_won(&mut c);
+
+        assert_eq!(c.cities[1].owner, 0);
+        assert_eq!(
+            c.province(2).unwrap().owner,
+            Some(0),
+            "province ownership must follow its city, or the map and the \
+             table disagree about who holds what"
+        );
+    }
+
+    #[test]
+    fn a_failed_attack_leaves_the_province_alone() {
+        let mut seed = 0u64;
+        loop {
+            let mut rng = SmallRng::seed_from_u64(seed);
+            let mut trial = province_campaign();
+            if !trial.attack(0, 1, &mut rng).unwrap().attacker_won {
+                assert_eq!(trial.province(2).unwrap().owner, Some(1));
+                assert_eq!(trial.cities[1].owner, 1);
+                break;
+            }
+            seed += 1;
+            assert!(seed < 100, "no attacker loss observed in 100 seeds");
+        }
+    }
+
+    #[test]
+    fn provinces_owned_by_tracks_conquest() {
+        let mut c = province_campaign();
+        assert_eq!(c.provinces_owned_by(0).len(), 1);
+
+        attack_until_won(&mut c);
+
+        assert_eq!(c.provinces_owned_by(0).len(), 2);
+        assert!(c.provinces_owned_by(1).is_empty());
+    }
+
+    #[test]
+    fn neighbors_resolve_to_real_provinces() {
+        let c = province_campaign();
+        let neighbors = c.neighbors_of(1);
+        assert_eq!(neighbors.len(), 1);
+        assert_eq!(neighbors[0].id, 2);
+        assert!(c.province(1).unwrap().borders(2));
+        assert!(!c.province(1).unwrap().borders(99));
+    }
+
+    #[test]
+    fn tags_carry_whatever_a_layer_reduced_to() {
+        // Rust never enumerates tag names - that is what lets a new map layer
+        // land without touching this crate.
+        let mut tags = HashMap::new();
+        tags.insert("terrain".to_string(), TagValue::Str("mountains".into()));
+        tags.insert(
+            "resources".to_string(),
+            TagValue::List(vec!["iron".into(), "wine".into()]),
+        );
+        tags.insert("supply".to_string(), TagValue::Num(2.5));
+
+        let mut p = province(1, Some(0), vec![]);
+        p.tags = tags;
+        let c = Campaign::new(
+            vec![Faction {
+                id: 0,
+                name: "Red".into(),
+                money: 0,
+                alive: true,
+            }],
+            vec![City {
+                id: 0,
+                name: "Redhold".into(),
+                income: 10,
+                position: (0.0, 0.0),
+                owner: 0,
+                province: Some(1),
+            }],
+            10,
+        )
+        .with_provinces(vec![p]);
+
+        assert_eq!(
+            c.province_tag(1, "terrain").and_then(|t| t.as_str()),
+            Some("mountains")
+        );
+        assert_eq!(
+            c.province_tag(1, "resources").and_then(|t| t.as_list()),
+            Some(["iron".to_string(), "wine".to_string()].as_slice())
+        );
+        assert_eq!(
+            c.province_tag(1, "supply").and_then(|t| t.as_num()),
+            Some(2.5)
+        );
+        assert!(c.province_tag(1, "roads").is_none());
+    }
+
+    #[test]
+    fn province_nearest_to_picks_by_centroid() {
+        let c = province_campaign();
+        assert_eq!(c.province_nearest_to((5.0, 0.0)).unwrap().id, 1);
+        assert_eq!(c.province_nearest_to((180.0, 0.0)).unwrap().id, 2);
+    }
+
+    #[test]
+    fn a_campaign_without_a_map_package_has_no_provinces() {
+        let c = sample_campaign();
+        assert!(c.provinces.is_empty());
+        assert!(c.province(1).is_none());
+        assert!(c.provinces_owned_by(0).is_empty());
     }
 }

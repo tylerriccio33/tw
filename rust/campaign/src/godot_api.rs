@@ -5,14 +5,98 @@ use godot::classes::{INode, Node};
 use godot::prelude::*;
 use rand::thread_rng;
 
+use std::collections::HashMap;
+
 use crate::model::{
-    ArmyId, BattleKind, BattleReport, Campaign, City, Faction, MoveReport, DEFAULT_MOVE_POINTS,
+    ArmyId, BattleKind, BattleReport, Campaign, City, CityId, Faction, FactionId, MoveReport,
+    Province, ProvinceId, TagValue, DEFAULT_MOVE_POINTS,
 };
 
 struct CampaignExtension;
 
 #[gdextension]
 unsafe impl ExtensionLibrary for CampaignExtension {}
+
+/// A faction as the map package describes it, before a campaign exists.
+/// `key` is what the ownership layer refers to; `color` is what the UI paints
+/// a province with once the simulation owns ownership.
+#[derive(Debug, Clone)]
+struct FactionDef {
+    id: FactionId,
+    key: String,
+    name: String,
+    color: String,
+    money: i32,
+}
+
+/// A row of `provinces.table.json`, held between `load_provinces` and
+/// `start_game_from_provinces`.
+#[derive(Debug, Clone)]
+struct ProvinceDef {
+    id: ProvinceId,
+    key: String,
+    name: String,
+    centroid: (f32, f32),
+    neighbors: Vec<ProvinceId>,
+    tags: HashMap<String, TagValue>,
+    starting_owner: Option<String>,
+}
+
+fn dict_string(dict: &VarDictionary, key: &str) -> Option<String> {
+    dict.get(key)
+        .and_then(|v| v.try_to::<GString>().ok())
+        .map(|s| s.to_string())
+}
+
+/// Godot's JSON parser has no integer type - every number in
+/// provinces.table.json arrives as a float, so `"id": 1` comes back as `1.0`.
+/// Accepting only i64 here silently drops every province in the table.
+fn variant_to_i64(value: &Variant) -> Option<i64> {
+    value
+        .try_to::<i64>()
+        .ok()
+        .or_else(|| value.try_to::<f64>().ok().map(|n| n as i64))
+}
+
+fn dict_int(dict: &VarDictionary, key: &str) -> Option<i64> {
+    dict.get(key).as_ref().and_then(variant_to_i64)
+}
+
+/// Reads one tag value without caring what layer produced it - a majority
+/// reduce gives a string, an `any` reduce gives an array, and a numeric legend
+/// field gives a number.
+fn variant_to_tag(value: &Variant) -> Option<TagValue> {
+    if let Ok(s) = value.try_to::<GString>() {
+        return Some(TagValue::Str(s.to_string()));
+    }
+    if let Ok(array) = value.try_to::<VarArray>() {
+        return Some(TagValue::List(
+            array
+                .iter_shared()
+                .filter_map(|item| item.try_to::<GString>().ok())
+                .map(|s| s.to_string())
+                .collect(),
+        ));
+    }
+    if let Ok(n) = value.try_to::<f64>() {
+        return Some(TagValue::Num(n));
+    }
+    None
+}
+
+fn tag_to_variant(tag: &TagValue) -> Variant {
+    match tag {
+        TagValue::Str(s) => s.to_variant(),
+        TagValue::Num(n) => n.to_variant(),
+        TagValue::List(items) => {
+            let mut array = VarArray::new();
+            for item in items {
+                array.push(&item.to_variant());
+            }
+            array.to_variant()
+        }
+    }
+}
 
 #[derive(GodotClass)]
 #[class(base=Node)]
@@ -21,6 +105,8 @@ struct CampaignManager {
     campaign: Option<Campaign>,
     /// Applied to the campaign at start; see `set_map_extent`.
     map_extent: f32,
+    faction_defs: Vec<FactionDef>,
+    province_defs: Vec<ProvinceDef>,
 }
 
 #[godot_api]
@@ -30,6 +116,8 @@ impl INode for CampaignManager {
             base,
             campaign: None,
             map_extent: 2048.0,
+            faction_defs: Vec::new(),
+            province_defs: Vec::new(),
         }
     }
 }
@@ -84,175 +172,154 @@ impl CampaignManager {
         self.map_extent = map_extent;
     }
 
-    /// Sets up a fixed 4-faction, 4-city scenario and starts the game. Call once before
-    /// any other method.
+    /// Loads the faction roster from the map package's `factions.json`, as an
+    /// array of `{key, name, color, money}` dicts. Colors are carried through
+    /// to `get_state` so the UI never hardcodes a palette.
+    ///
+    /// Call before `start_game_from_provinces`.
     #[func]
-    fn start_default_game(&mut self) {
-        let factions = vec![
-            Faction {
-                id: 0,
-                name: "Red".into(),
-                money: 100,
-                alive: true,
-            },
-            Faction {
-                id: 1,
-                name: "Blue".into(),
-                money: 100,
-                alive: true,
-            },
-            Faction {
-                id: 2,
-                name: "Green".into(),
-                money: 100,
-                alive: true,
-            },
-            Faction {
-                id: 3,
-                name: "Yellow".into(),
-                money: 100,
-                alive: true,
-            },
-        ];
-        let cities = vec![
-            City {
-                id: 0,
-                name: "Redhold".into(),
-                income: 20,
-                position: (-200.0, -200.0),
-                owner: 0,
-            },
-            City {
-                id: 1,
-                name: "Bluehold".into(),
-                income: 20,
-                position: (200.0, -200.0),
-                owner: 1,
-            },
-            City {
-                id: 2,
-                name: "Greenhold".into(),
-                income: 20,
-                position: (-200.0, 200.0),
-                owner: 2,
-            },
-            City {
-                id: 3,
-                name: "Yellowhold".into(),
-                income: 20,
-                position: (200.0, 200.0),
-                owner: 3,
-            },
-        ];
-        let mut campaign = Campaign::new(factions, cities, 10).with_map_extent(self.map_extent);
-        Self::spawn_starting_armies(&mut campaign);
-        self.campaign = Some(campaign);
-
-        let (faction_id, turn) = {
-            let c = self.campaign.as_ref().unwrap();
-            (c.current_faction_id() as i64, c.turn as i64)
-        };
-        self.signals().turn_started().emit(faction_id, turn);
+    fn load_factions(&mut self, factions: VarArray) {
+        self.faction_defs = factions
+            .iter_shared()
+            .filter_map(|entry| entry.try_to::<VarDictionary>().ok())
+            .enumerate()
+            .map(|(index, dict)| FactionDef {
+                id: index as u32,
+                key: dict_string(&dict, "key").unwrap_or_else(|| format!("faction_{index}")),
+                name: dict_string(&dict, "name").unwrap_or_else(|| format!("Faction {index}")),
+                color: dict_string(&dict, "color").unwrap_or_else(|| "#ffffff".into()),
+                money: dict_int(&dict, "money").unwrap_or(100) as i32,
+            })
+            .collect();
     }
 
-    /// Sets up the campaign from real world-derived city positions: `num_factions =
-    /// city_positions.len().clamp(1, 4)` factions from the fixed Red/Blue/Green/Yellow
-    /// roster, cities named "City N" with flat income 20, ownership assigned round-robin
-    /// (`owner = index % num_factions`) so every faction starts with at least one city.
-    /// City id == index into `city_positions`, so callers can map ids back to world
-    /// positions directly. Call once before any other method.
+    /// Loads territory from the map package's `provinces.table.json`. GDScript
+    /// hands the parsed rows straight through, so the only thing that knows the
+    /// table's shape is this function.
+    ///
+    /// `tags` is read as an open map - a string, a number, or an array of
+    /// strings, whatever the layer that produced it reduced to. Adding a layer
+    /// to the map means new tags appear here with no change to this code.
     #[func]
-    fn start_game_from_positions(&mut self, city_positions: PackedVector2Array, max_turns: i64) {
-        const ROSTER: [&str; 4] = ["Red", "Blue", "Green", "Yellow"];
+    fn load_provinces(&mut self, provinces: VarArray) {
+        self.province_defs = provinces
+            .iter_shared()
+            .filter_map(|entry| entry.try_to::<VarDictionary>().ok())
+            .filter_map(|dict| {
+                let id = dict_int(&dict, "id")? as ProvinceId;
+                let centroid = dict
+                    .get("centroid")
+                    .and_then(|v| v.try_to::<VarArray>().ok())
+                    .map(|a| {
+                        let x = a.at(0).try_to::<f64>().unwrap_or(0.0) as f32;
+                        let y = a.at(1).try_to::<f64>().unwrap_or(0.0) as f32;
+                        (x, y)
+                    })
+                    .unwrap_or((0.0, 0.0));
 
-        let num_cities = city_positions.len();
-        if num_cities == 0 {
+                let neighbors = dict
+                    .get("neighbors")
+                    .and_then(|v| v.try_to::<VarArray>().ok())
+                    .map(|a| {
+                        a.iter_shared()
+                            .filter_map(|n| variant_to_i64(&n))
+                            .map(|n| n as ProvinceId)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let tags = dict
+                    .get("tags")
+                    .and_then(|v| v.try_to::<VarDictionary>().ok())
+                    .map(|t| {
+                        t.iter_shared()
+                            .filter_map(|(key, value)| {
+                                let name = key.try_to::<GString>().ok()?.to_string();
+                                Some((name, variant_to_tag(&value)?))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                Some(ProvinceDef {
+                    id,
+                    key: dict_string(&dict, "key").unwrap_or_else(|| format!("province_{id}")),
+                    name: dict_string(&dict, "name").unwrap_or_else(|| format!("Province {id}")),
+                    centroid,
+                    neighbors,
+                    tags,
+                    starting_owner: dict_string(&dict, "starting_owner"),
+                })
+            })
+            .collect();
+    }
+
+    /// Starts a campaign on the loaded province table: one city per province,
+    /// sited at its area centroid, owned by whoever the map's ownership layer
+    /// assigned it to.
+    ///
+    /// A province whose `starting_owner` names no loaded faction is left
+    /// unowned and gets no city - an unclaimed province is a legitimate thing
+    /// for a map to describe.
+    #[func]
+    fn start_game_from_provinces(&mut self, max_turns: i64) {
+        if self.province_defs.is_empty() || self.faction_defs.is_empty() {
             self.campaign = None;
             return;
         }
-        let num_factions = num_cities.clamp(1, 4);
 
-        let factions: Vec<Faction> = (0..num_factions)
-            .map(|i| Faction {
-                id: i as u32,
-                name: ROSTER[i].into(),
-                money: 100,
+        let factions: Vec<Faction> = self
+            .faction_defs
+            .iter()
+            .map(|def| Faction {
+                id: def.id,
+                name: def.name.clone(),
+                money: def.money,
                 alive: true,
             })
             .collect();
 
-        let cities: Vec<City> = city_positions
-            .as_slice()
-            .iter()
-            .enumerate()
-            .map(|(i, v)| City {
-                id: i as u32,
-                name: format!("City {}", i + 1),
-                income: 20,
-                position: (v.x, v.y),
-                owner: (i % num_factions) as u32,
-            })
-            .collect();
-
-        let mut campaign =
-            Campaign::new(factions, cities, max_turns as u32).with_map_extent(self.map_extent);
-        Self::spawn_starting_armies(&mut campaign);
-        self.campaign = Some(campaign);
-
-        let (faction_id, turn) = {
-            let c = self.campaign.as_ref().unwrap();
-            (c.current_faction_id() as i64, c.turn as i64)
+        let owner_of = |key: &Option<String>| -> Option<FactionId> {
+            let key = key.as_ref()?;
+            self.faction_defs
+                .iter()
+                .find(|def| &def.key == key)
+                .map(|def| def.id)
         };
-        self.signals().turn_started().emit(faction_id, turn);
-    }
 
-    /// Same as `start_game_from_positions`, but takes a real name per city
-    /// (`names[i]` for `city_positions[i]`) instead of the generic "City N" -
-    /// used for the curated Europe province layout, where each point is a
-    /// named country rather than a random scatter. `names` and
-    /// `city_positions` must be the same length; ownership is still assigned
-    /// round-robin (`owner = index % num_factions`) across up to 4 factions.
-    #[func]
-    fn start_game_from_named_positions(
-        &mut self,
-        names: PackedStringArray,
-        city_positions: PackedVector2Array,
-        max_turns: i64,
-    ) {
-        const ROSTER: [&str; 4] = ["Red", "Blue", "Green", "Yellow"];
+        let mut provinces = Vec::with_capacity(self.province_defs.len());
+        let mut cities = Vec::new();
+        for def in &self.province_defs {
+            let owner = owner_of(&def.starting_owner);
+            if let Some(owner_id) = owner {
+                cities.push(City {
+                    id: cities.len() as CityId,
+                    name: def.name.clone(),
+                    income: 20,
+                    position: def.centroid,
+                    owner: owner_id,
+                    province: Some(def.id),
+                });
+            }
+            provinces.push(Province {
+                id: def.id,
+                key: def.key.clone(),
+                name: def.name.clone(),
+                centroid: def.centroid,
+                neighbors: def.neighbors.clone(),
+                tags: def.tags.clone(),
+                owner,
+            });
+        }
 
-        let num_cities = city_positions.len();
-        if num_cities == 0 || names.len() != num_cities {
+        if cities.is_empty() {
             self.campaign = None;
             return;
         }
-        let num_factions = num_cities.clamp(1, 4);
 
-        let factions: Vec<Faction> = (0..num_factions)
-            .map(|i| Faction {
-                id: i as u32,
-                name: ROSTER[i].into(),
-                money: 100,
-                alive: true,
-            })
-            .collect();
-
-        let cities: Vec<City> = city_positions
-            .as_slice()
-            .iter()
-            .zip(names.as_slice().iter())
-            .enumerate()
-            .map(|(i, (v, name))| City {
-                id: i as u32,
-                name: name.to_string(),
-                income: 20,
-                position: (v.x, v.y),
-                owner: (i % num_factions) as u32,
-            })
-            .collect();
-
-        let mut campaign =
-            Campaign::new(factions, cities, max_turns as u32).with_map_extent(self.map_extent);
+        let mut campaign = Campaign::new(factions, cities, max_turns as u32)
+            .with_map_extent(self.map_extent)
+            .with_provinces(provinces);
         Self::spawn_starting_armies(&mut campaign);
         self.campaign = Some(campaign);
 
@@ -312,7 +379,35 @@ impl CampaignManager {
             fd.set("money", f.money as i64);
             fd.set("alive", f.alive);
             fd.set("cities", c.cities_owned_by(f.id).len() as i64);
+            fd.set("provinces", c.provinces_owned_by(f.id).len() as i64);
+            // The color the map package declared. This is the whole reason a
+            // province can change hands and change color without any file on
+            // disk changing.
+            fd.set(
+                "color",
+                self.faction_defs
+                    .iter()
+                    .find(|def| def.id == f.id)
+                    .map_or_else(|| "#ffffff".to_string(), |def| def.color.clone()),
+            );
             factions.push(&fd.to_variant());
+        }
+
+        let mut provinces = VarArray::new();
+        for province in &c.provinces {
+            let mut pd = VarDictionary::new();
+            pd.set("id", province.id as i64);
+            pd.set("key", province.key.clone());
+            pd.set("name", province.name.clone());
+            pd.set("owner", province.owner.map_or(-1, |o| o as i64));
+            pd.set("x", province.centroid.0 as f64);
+            pd.set("y", province.centroid.1 as f64);
+            let mut tags = VarDictionary::new();
+            for (name, value) in &province.tags {
+                tags.set(name.clone(), &tag_to_variant(value));
+            }
+            pd.set("tags", &tags.to_variant());
+            provinces.push(&pd.to_variant());
         }
 
         let mut cities = VarArray::new();
@@ -322,6 +417,7 @@ impl CampaignManager {
             cd.set("name", city.name.clone());
             cd.set("income", city.income as i64);
             cd.set("owner", city.owner as i64);
+            cd.set("province", city.province.map_or(-1, |p| p as i64));
             cd.set("x", city.position.0 as f64);
             cd.set("y", city.position.1 as f64);
             cd.set(
@@ -353,6 +449,7 @@ impl CampaignManager {
         state.set("game_over", c.game_over);
         state.set("winner", c.winner.map_or(-1, |w| w as i64));
         state.set("factions", &factions.to_variant());
+        state.set("provinces", &provinces.to_variant());
         state.set("cities", &cities.to_variant());
         state
     }

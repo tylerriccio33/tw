@@ -28,7 +28,10 @@ const ZOOM_KEY_SPEED := 1.2  # zoom units/sec while Z/X is held
 const MIN_ZOOM := 0.6
 const MAX_ZOOM := 2.2
 
-const FACTION_COLORS: Array[Color] = [
+# Faction colors are declared by the map package (factions.json) and read in
+# _ready(), so the palette lives with the scenario rather than in this script.
+# Fallback only, if a package ships no roster.
+const DEFAULT_FACTION_COLORS: Array[Color] = [
 	Color.INDIAN_RED, Color.CORNFLOWER_BLUE, Color.MEDIUM_SEA_GREEN, Color.GOLDENROD
 ]
 
@@ -66,7 +69,9 @@ var city_markers: Dictionary = {}
 
 var _province_map: Node2D
 var _city_positions: PackedVector2Array = []
-var _city_names: PackedStringArray = []
+## Province ids, parallel to _city_positions.
+var _province_ids: Array = []
+var _faction_colors: Array[Color] = DEFAULT_FACTION_COLORS.duplicate()
 var _marker_positions: Dictionary = {}
 var _map_extent: float = 0.0
 var _cam_focus := Vector2.ZERO
@@ -127,33 +132,41 @@ func _ready() -> void:
 	_province_map = ProvinceMap.new()
 	_province_map.name = "ProvinceMap"
 	world_layer.add_child(_province_map)
-	_province_map.setup()
+	if not _province_map.setup():
+		_fail_to_start("could not load the map package in campaign/map_data")
+		return
 	_province_map.region_clicked.connect(_on_region_clicked)
 
-	# Centre the source bitmap's top-left-origin pixel space on the world
-	# origin and blow it up by MAP_SCALE, so the rest of this script's
-	# pan/zoom/army-clamping math (which all assumes a map centred on
-	# [-_map_extent, _map_extent]) doesn't have to know the map is a bitmap.
+	# The faction roster and its colors come from the map package now, so a
+	# scenario can add or recolor factions without touching this script.
+	_faction_colors = _province_map.package.faction_colors()
+
+	# Centre the package's top-left-origin pixel space on the world origin and
+	# blow it up by MAP_SCALE, so the rest of this script's pan/zoom/army-
+	# clamping math (which all assumes a map centred on
+	# [-_map_extent, _map_extent]) doesn't have to know about map pixels.
 	var half_size: Vector2 = _province_map.map_size * MAP_SCALE / 2.0
 	_map_extent = maxf(half_size.x, half_size.y)
 	_province_map.position = -half_size
 	_province_map.scale = Vector2.ONE * MAP_SCALE
 	_base_ppu = 800.0 / (2.0 * _map_extent)
 
-	_city_names = PackedStringArray()
+	# Province centroids are in map pixels; the simulation works in world
+	# units, so convert once here and hand the table over in world space.
+	_province_ids = []
 	_city_positions = PackedVector2Array()
-	for region_name in _province_map.region_centers:
-		_city_names.append(region_name)
-		var local_pos: Vector2 = _province_map.region_centers[region_name]
+	for province_id in _province_map.province_centers:
+		_province_ids.append(province_id)
+		var local_pos: Vector2 = _province_map.province_centers[province_id]
 		_city_positions.append(local_pos * MAP_SCALE - half_size)
 	if _city_positions.is_empty():
-		_fail_to_start("could not lay out any cities - nothing to play")
+		_fail_to_start("the map package has no provinces - nothing to play")
 		return
 
 	_army_layer = ArmyLayer.new()
 	_army_layer.name = "ArmyMarkers"
 	add_child(_army_layer)
-	_army_layer.setup(manager, _world_to_screen, _screen_to_world, FACTION_COLORS)
+	_army_layer.setup(manager, _world_to_screen, _screen_to_world, _faction_colors)
 	_army_layer.log_message.connect(_append_log)
 	_army_layer.state_changed.connect(_refresh)
 
@@ -180,11 +193,13 @@ func _ready() -> void:
 	# off the edge of the world. Must be set before the game starts.
 	manager.set_map_extent(_map_extent)
 
-	# start_game_from_named_positions() emits turn_started synchronously, so
+	# start_game_from_provinces() emits turn_started synchronously, so
 	# _refresh() can run before this function returns - city markers must
 	# already exist by then. _ensure_city_marker() below makes marker
 	# creation lazy so there is no ordering requirement between the two.
-	manager.start_game_from_named_positions(_city_names, _city_positions, MAX_TURNS)
+	manager.load_factions(_province_map.package.factions)
+	manager.load_provinces(_world_space_province_table(half_size))
+	manager.start_game_from_provinces(MAX_TURNS)
 	_project_markers()
 	_refresh()
 	get_viewport().size_changed.connect(_on_viewport_resized)
@@ -345,13 +360,13 @@ func _on_city_marker_input(event: InputEvent, city_id: int) -> void:
 	_refresh_bottom_banner(manager.get_state())
 
 
-## Clicking a province polygon on the map mirrors _on_city_marker_input:
-## selects the same-named city so the bottom banner and attack dropdown show
-## it, exactly as clicking that city's marker would.
-func _on_region_clicked(region_name: String) -> void:
+## Clicking a province polygon mirrors _on_city_marker_input: selects the city
+## standing in that province, exactly as clicking its marker would. Matched by
+## province id rather than by name, so two places can share a name.
+func _on_region_clicked(province_id: int) -> void:
 	var state: Dictionary = manager.get_state()
 	for city in state["cities"]:
-		if String(city["name"]) == region_name:
+		if int(city.get("province", -1)) == province_id:
 			_selected_city_id = int(city["id"])
 			for i in target_option.item_count:
 				if target_option.get_item_id(i) == _selected_city_id:
@@ -361,12 +376,27 @@ func _on_region_clicked(region_name: String) -> void:
 			return
 
 
+## The province table as the simulation wants it: same rows the map package
+## shipped, but with centroids converted from map pixels into world units so
+## Rust never has to know what a pixel is.
+func _world_space_province_table(half_size: Vector2) -> Array:
+	var rows: Array = []
+	for province in _province_map.package.provinces:
+		var row: Dictionary = province.duplicate(true)
+		var centroid: Array = province.get("centroid", [0, 0])
+		var world := Vector2(centroid[0], centroid[1]) * MAP_SCALE - half_size
+		row["centroid"] = [world.x, world.y]
+		rows.append(row)
+	return rows
+
+
 func _refresh() -> void:
 	var state: Dictionary = manager.get_state()
+	_apply_province_ownership(state)
 
 	for city in state["cities"]:
 		var marker: ColorRect = _ensure_city_marker(city)
-		marker.color = FACTION_COLORS[int(city["owner"]) % FACTION_COLORS.size()]
+		marker.color = _faction_colors[int(city["owner"]) % _faction_colors.size()]
 
 	var lines: Array[String] = []
 	lines.append("Turn %d / %d" % [state["turn"], state["max_turns"]])
@@ -433,6 +463,16 @@ func _on_end_turn_pressed() -> void:
 	_army_layer.select(-1)
 	manager.end_turn()
 	_run_ai_factions()
+
+
+## Repaints the map from the simulation's current ownership. Nothing on disk
+## changes when a province is conquered - this is where it changes color.
+func _apply_province_ownership(state: Dictionary) -> void:
+	var owner_by_province: Dictionary = {}
+	for province in state.get("provinces", []):
+		owner_by_province[int(province["id"])] = int(province["owner"])
+	if not owner_by_province.is_empty():
+		_province_map.apply_ownership(owner_by_province, _faction_colors)
 
 
 func _on_turn_started(faction_id: int, turn: int) -> void:
@@ -827,7 +867,7 @@ func _refresh_bottom_banner(state: Dictionary) -> void:
 		return
 
 	_city_panel_name_label.text = shown_city["name"]
-	_city_panel_owner_tab.color = FACTION_COLORS[int(shown_city["owner"]) % FACTION_COLORS.size()]
+	_city_panel_owner_tab.color = _faction_colors[int(shown_city["owner"]) % _faction_colors.size()]
 
 	var income: int = int(shown_city["income"])
 	for row_def in STAT_ROWS:

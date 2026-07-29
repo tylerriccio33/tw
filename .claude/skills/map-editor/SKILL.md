@@ -1,83 +1,101 @@
 ---
 name: map-editor
-description: How the campaign's territory-border map editor works (tools/map_editor) — tracing/editing faction region polygons, exporting, validating, previewing, and promoting to the live game. Use whenever asked to add/change/fix a faction's territory borders, region colors, or region_map.png/regions.txt, or to debug why the in-game province map looks wrong.
+description: How the campaign's layered map package and its editor work (tools/map_editor) — tracing coastline/province polygons, painting terrain and resources, assigning starting owners, exporting, validating, previewing, and promoting to the live game. Use whenever asked to add/change/fix provinces, terrain, resources, faction ownership, the map format itself, or to debug why the in-game map looks wrong.
 ---
 
-Reference for `tools/map_editor` — a browser-based tool for tracing faction territory borders on top of a clean line-art coastline map. It is not part of the Godot game itself; it's an offline editing step that produces the two files `campaign/province_map.gd` actually loads at runtime.
+Reference for `tools/map_editor` — a browser-based tool for authoring the **map package** the campaign loads. It is not part of the Godot game; it's an offline editing step that produces everything in `campaign/map_data/`.
 
 ## Mental model
 
-- **Source of truth while editing:** `tools/map_editor/dev_map_data/project.json` — full-precision polygon points per region, in image pixel coordinates. This is what the editor UI reads and writes; treat it as the real editable data, not `region_map.png`.
-- **Dev export:** `dev_map_data/region_map.png` (flat-colored raster, one solid color per territory) + `dev_map_data/regions.txt` (JSON map of `"#hexcolor": "Region_Name"`). Produced from `project.json` by the Export button. Never touches the live game.
-- **Live game data:** `campaign/map_data/region_map.png` + `regions.txt` — same two-file format, loaded by `campaign/province_map.gd`. Only `make promote-map` copies the dev export here.
-- **Backdrop:** `campaign/map_data/backdrop.png` — a clean line-art coastline map (white land fill, dark outline stroke, sea rendered as anything else) everything is traced on top of, used for both the editor's background image and the land/sea classification. `server.assert_clean_coastline_source` enforces this convention at startup — painted/photographic terrain art is rejected, not silently misclassified. The previous painted-terrain backdrop is kept at `campaign/map_data/backdrop_terrain_legacy.png` for reference.
+A map is a **package of layers**. A layer is a raster plus a JSON legend saying what its colors mean. That's the entire format.
 
-Data flow: `project.json` (browser, full precision) --Export button--> `dev_map_data/{region_map.png,regions.txt}` --`make promote-map`--> `campaign/map_data/{region_map.png,regions.txt}` --Godot reimport--> live game.
+```
+campaign/map_data/
+  map.json                  manifest: size, layer order, backdrop, province_layer
+  factions.json             faction roster + colors
+  backdrop.png              the line art everything is traced over
+  layers/<name>.png         one raster per layer
+  layers/<name>.json        that layer's legend and behaviour
+  provinces.table.json      DERIVED - the simulation's input
+  provinces.geo.json        DERIVED - Godot's polygon rings
+```
+
+`map.json`'s `layers` array is load-bearing in three ways at once: it is the **draw order**, the **export order**, and the **default snap order** (a layer may snap to any layer before it). Reordering it changes all three deliberately.
+
+**Nothing in the pipeline knows a layer by name.** Adding roads/climate/culture is a PNG, a JSON legend, and one manifest entry — no code changes in Python, JS, GDScript or Rust. `tests/test_extensibility.py` enforces this; if you find yourself special-casing a layer name anywhere, that's the bug.
+
+### The three authoring modes
+
+A layer's `input` field picks its editing gesture:
+
+| `input` | Layers | Source of truth | How you edit it |
+|---|---|---|---|
+| `polygon` | coastline, provinces | vector rings in `project.json` | trace with snapping + magnetic trace |
+| `brush` | terrain, resources | **the layer PNG itself** | raster brush / bucket / eraser |
+| `assign` | ownership | `assignments` map in `project.json` | click a province, pick a key |
+
+`kind` says what the colors *mean*: `mask` (coastline — defines land vs sea), `identity` (provinces — each color is a province id), `class` (everything else — many pixels per key).
+
+### Two ideas that are easy to get wrong
+
+**Province colors are not political.** `layers/provinces.png` encodes province *ids* (`rgb24`: province 1 is `#000001`). It is machine-readable and looks black. A province's color in-game is whoever owns it **this turn**, pushed in by `province_map.apply_ownership()` from simulation state. Ownership changing hands changes no file on disk. `make map-editor-preview` renders the human-legible view.
+
+**The coastline is authored data, not a heuristic.** `coastline.py`'s brightness classifier runs only to *seed* the coastline layer (`init_package.py`, or the editor's "Autotrace from backdrop"). After that the coastline layer is what every other layer clips and snaps to. Nothing re-guesses land from pixels at export.
+
+### `reduce`: painted layers become province tags
+
+The step that reconciles "layers of images" with "the sim wants per-region tags". A layer config's `reduce` is either:
+- `{"into": "terrain", "mode": "majority"}` → the key covering the most pixels, falling back to the layer's `default_key` if nothing was painted
+- `{"into": "resources", "mode": "any"}` → every key covering ≥2% of the province, as a sorted list
+
+Results land in `provinces.table.json` under `tags`. Rust reads them as an untyped `HashMap<String, TagValue>` and never enumerates tag names.
 
 ## Running it
 
-```
-make map-editor        # launches http://localhost:8765
-```
+- `make map-package-init SEED=12` — create a fresh package from `backdrop.png`: manifest, layer configs, factions, a coastline traced from the line art, terrain seeded to plains. `SEED=N` also chops the land into N placeholder provinces so the game runs before anything is traced by hand. `FORCE=1` to overwrite configs.
+- `make map-editor` — the editor at http://localhost:8765.
+- `make map-editor-preview` — composite every layer over the backdrop → `dev_map_data/preview.png`. **Use this after every edit** instead of re-opening the browser. Runs the same validation as export; offending polygons get outlined in red on the image and listed on stdout with a non-zero exit.
+- `make map-package-check` — validate without exporting. CI-able.
+- `make promote-map` — copy the dev package into `campaign/map_data/` and force a Godot reimport. Godot caches each layer PNG as a `.ctex` keyed by content hash and `make play` never reimports on its own, so skipping this leaves the game rendering stale textures.
 
-Or directly: `cd tools/map_editor && uv run server.py`. Flags: `--image` (backdrop to trace on, default `campaign/map_data/backdrop.png`), `--dev-dir`, `--game-dir`, `--port`.
+Data flow: `project.json` + brush rasters --Export--> `dev_map_data/` package --`make promote-map`--> `campaign/map_data/` --Godot reimport--> game.
 
-On startup it loads, in priority order: existing `project.json` → re-traced from `dev_map_data`'s exported raster → re-traced from `campaign/map_data`'s live raster → an empty project. This is how you bootstrap an editing session from whatever's currently live.
+## The editor UI
 
-## Using the editor UI
+Sidebar is built entirely from `/api/manifest`. Layer list (radio = active, eye = visible, **⌁ = snap source**), then tools for the active layer's `input`, then its contents (provinces for `identity`, legend rows for everything else).
 
-- Click to place polygon vertices; **Enter** or double-click closes the shape; **Backspace** undoes the last point; **Esc** cancels the in-progress shape.
-- **WASD** pans, **Z/X** zoom out/in, Ctrl/Cmd+wheel also zooms.
-- **+ New Region** creates a region (name + color), then starts its first polygon.
-- **+ New Shape (island/exclave)** adds an additional disconnected polygon to the *currently selected* region (e.g. islands belonging to the same faction) — a region's `polygons` list in `project.json` can have more than one entry.
-- **Edit Vertices** toggles drag-to-adjust mode on existing points instead of drawing new shapes.
-- Points snap to nearby existing vertices/edges (other regions' borders) and to the traced coastline overlay (`/api/coastline`, cached in `dev_map_data/coastline.json`) — use this to get borders to actually meet the coastline instead of eyeballing it.
-- **Reload From Live Game** re-imports from `campaign/map_data`'s current raster (discards the in-progress draft).
-- **Save Draft** persists `project.json` without exporting rasters.
-- **Export to Dev** runs the full export pipeline (see below) and writes `dev_map_data/{region_map.png,regions.txt}`.
+**Magnetic trace (`T`) is the ergonomic centerpiece.** Click once to lock onto a snapped boundary, move to see the stretch highlighted, click again to take it. It takes the *shorter* way round a closed ring; hold **Alt** for the long way. It re-anchors at the endpoint so traces chain along a coast. Implemented in `static/trace.js` — pure, no DOM, tested under node by `tests/test_trace.py`.
 
-## What Export actually does (`server.py:export_project`)
+Other bindings: click places points, `Enter`/dbl-click closes a shape, `Backspace` undoes a point, `Esc` cancels, `WASD` pans, `Z/X` and Ctrl/Cmd+wheel zoom. In Edit Vertices, drag a handle to move it, click it to delete it, click a yellow midpoint to insert one.
 
-1. **`validate_project`** checks the whole project first and refuses to write anything if it finds: two different region names sharing the same hex color (regions.txt can only map one name per color — the other silently vanishes in-game), a polygon that revisits an exact point (pinches into a self-touching loop), a self-intersecting polygon (renders as a torn/disconnected fragment), or a point outside the image bounds. Errors are shown in the editor UI and block export entirely — see `tools/map_editor/gapfill.py`'s module docstring and `server.py`'s `validate_project`/`polygon_self_intersects` for the exact rules.
-2. Each region's polygons are rasterized as flat, exact colors onto a white canvas.
-3. **`gapfill.clip_sea_overflow`** then **`gapfill.fill_land_gaps`** reconcile the raster against `build_land_mask`'s land/sea classification of the backdrop: overshoot onto open water gets clipped back, and small gaps left by a border not quite reaching the coast get bridged (up to `MAX_GAP_PX`, currently 12px — tuned to the map's real tracing precision, not arbitrary). Both are conservative by design: an untraced country-sized patch of background is deliberately left alone rather than annexed into a neighboring region's color.
-4. Writes `region_map.png` + `regions.txt`.
+**Fill Gaps** runs the export-time clip + gap-fill for one polygon layer and hands back *editable geometry*, so you can keep working on it and discard it by not saving. It also reports land too wide to bridge (> `max_gap_px`), which is the half that needs a real decision. Export runs clip + gap-fill unconditionally regardless.
 
-Colors must match exactly for `regions.txt` to recognize them — no blending/anti-aliasing; `province_map.gd` silently skips any raster color it doesn't have a name for.
+## What Export does (`export.py:export_package`)
 
-## Fast iteration loop (no browser needed)
+One loop over `manifest["layers"]`:
 
-```
-make map-editor-preview
-```
+1. **`validate_package` first**, refusing to write anything if it finds: a self-intersecting or point-revisiting polygon, an off-map point, a duplicate province id/key, a feature naming a key outside its legend, two provinces overlapping by more than a 1px seam (full containment is allowed — that's an enclave), or an assignment referencing an unknown province/faction. A half-written package is worse than no export.
+2. Rasterize the layer per its `input`.
+3. `clip_to` — erase anything outside the named mask. Exact, because the mask is authored.
+4. `gapfill` — hand unclaimed pixels inside the mask to their nearest neighbour, up to `max_gap_px`. Colors stay exact, never blended (`gapfill.py`).
+5. Write `layers/<name>.png`. If `kind == mask`, publish its masks for later layers.
+6. Then `build_province_table`: pixel-area centroids, adjacency (4-connected, ≥8 shared border px so corner-touching isn't a border), `reduce` tags, `starting_owner`.
+7. Write `provinces.table.json` + `provinces.geo.json`.
 
-Renders the current `dev_map_data/project.json` straight to `dev_map_data/preview.png`: region colors alpha-blended over the real backdrop (so misalignment with the actual coastline is obvious), running the same `validate_project` as a real export. If validation fails, the offending polygon(s) are outlined in red directly on the image and listed on stdout, with a non-zero exit code. Use this after every edit instead of re-opening the browser or promoting — read the PNG to review.
+Geometry is traced from the **final** raster (`RETR_CCOMP`, so enclaves stay holes), not copied from the authored polygons — gap-fill and clipping move borders, and shipping geometry that disagreed with the shipped raster is the exact class of bug this pipeline exists to remove.
 
-Direct form: `cd tools/map_editor && uv run preview.py [--project PATH] [--image PATH] [--out PATH]`.
+Brush rasters posted from the browser are **quantized to exact legend colors** server-side (`server.py:quantize_to_legend`) — the canvas antialiases every stroke, and an off-legend pixel means nothing to any consumer.
 
-## Promoting to the live game
+## The game side
 
-```
-make promote-map
-```
-
-Copies `dev_map_data/{region_map.png,regions.txt}` into `campaign/map_data/` and forces a Godot reimport (`godot --headless --import`) — Godot caches the raster as a `.ctex` keyed by content hash, and `make play` never triggers a reimport on its own, so skipping this step leaves the game rendering a stale texture even though the source PNG changed. Then `make play` / `make play-shot` to see it in the actual game.
-
-## Editing project.json directly
-
-For programmatic/scripted edits (vs. clicking in the browser), `project.json` is:
-
-```json
-{
-  "image_size": [1300, 647],
-  "regions": [
-    {"name": "Iberia", "color": "#ffe119", "polygons": [[[x, y], [x, y], ...], ...]}
-  ]
-}
-```
-
-Points are floats in backdrop pixel coordinates, one polygon ring per shape (no explicit closing point — the last point implicitly connects back to the first). After hand-editing this file, always run `make map-editor-preview` before promoting — it applies the same validation the editor UI does and will catch a bad edit (duplicate color, self-touching point, off-map point) before it reaches `campaign/map_data`.
+- `campaign/map_package.gd` — reads the package. Nothing else parses these files.
+- `campaign/province_map.gd` — builds one `Area2D` per province straight from `provinces.geo.json`. No pixel scanning, no `BitMap.opaque_to_polygons`. Mounts `class` layers as sprites under the province fills. `apply_ownership()` recolors from sim state.
+- `campaign/region_area.gd` — one province's click target; `set_owner_color()`, `clicked(province_id)`.
+- `campaign/campaign_ui.gd` — `_ready()` loads the package, hands the table to Rust in **world space** (`_world_space_province_table`), and `_refresh()` calls `_apply_province_ownership()` every tick.
+- `rust/campaign/src/godot_api.rs` — `load_factions()`, `load_provinces()`, `start_game_from_provinces()`. Note `variant_to_i64`: Godot's JSON has no integer type, so every number arrives as a float; accepting only i64 silently drops the whole table.
 
 ## Tests
 
-`make map-editor-test` (or `cd tools/map_editor && uv run --group dev pytest -q`) — covers `gapfill.py`'s fill/clip functions in isolation, `validate_project`'s invariants, the export/import raster round-trip, coastline classification/caching, and the HTTP API layer. `tests/test_gapfill_realistic.py` additionally regression-tests against the real `campaign/map_data/backdrop.png` and `dev_map_data/project.json` at full map scale/complexity — synthetic small-canvas tests alone have historically missed real-scale bugs here, so prefer extending that file over inventing another small synthetic fixture when testing gap-filling or validation against realistic geometry.
+`make map-editor-test` — format round-trips, the export pipeline (reduce modes, adjacency, clip/gap-fill, rgb24 ids, enclaves), the extensibility acceptance test, `quantize_to_legend`, coastline classification, and the trace extractor under node. `tests/test_realistic.py` runs the whole pipeline against the real `backdrop.png` and asserts the properties a playable map needs: no unclaimed land, nothing claiming sea, areas summing to the landmass, symmetric adjacency, a connected mainland, and geometry agreeing with its raster. Prefer extending that over inventing another small synthetic fixture — synthetic canvases have historically missed real-scale bugs here.
+
+`make campaign-test` (Rust, incl. province ownership following city capture) and `make campaign-smoke` (asserts the table survives the FFI round trip, tags included, and that provinces actually change hands over a campaign).

@@ -1,6 +1,6 @@
 GODOT ?= godot
 
-.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-preview promote-map
+.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-preview map-package-init map-package-check promote-map
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -23,10 +23,12 @@ help:
 	@echo "make play          - build the extension and open the campaign map in a window"
 	@echo "make play-shot     - screenshot the whole campaign window to shots/play/play.png"
 	@echo "make hud-shot      - screenshot just the bottom HUD banner to shots/play/hud.png"
-	@echo "make map-editor    - launch the browser-based territory border editor (tools/map_editor)"
-	@echo "make map-editor-test - run the map editor's pytest suite (project I/O, raster round-trip, coastline classification)"
-	@echo "make map-editor-preview - render dev_map_data/project.json to a single PNG (tools/map_editor/dev_map_data/preview.png), no browser needed"
-	@echo "make promote-map   - copy the traced dev map (tools/map_editor/dev_map_data) into campaign/map_data for the game to use"
+	@echo "make map-editor    - launch the browser-based layered map editor (tools/map_editor)"
+	@echo "make map-editor-test - run the map editor's pytest suite (format, export pipeline, coastline classification)"
+	@echo "make map-editor-preview - composite the whole layer stack to one PNG (tools/map_editor/dev_map_data/preview.png), no browser needed"
+	@echo "make map-package-init - create a fresh map package from a backdrop (SEED=N for placeholder provinces)"
+	@echo "make map-package-check - validate the dev map package without exporting"
+	@echo "make promote-map   - copy the dev map package (tools/map_editor/dev_map_data) into campaign/map_data for the game to use"
 
 armies:
 	@uv run tools/fetch_armies.py
@@ -85,39 +87,49 @@ hud-shot: play-shot
 clean-shots:
 	rm -rf shots/play
 
-# Runs the territory-border tracing tool at http://localhost:8765. Exports
-# from the editor always land in tools/map_editor/dev_map_data/ - nothing
-# touches the live campaign/map_data/ until you run `make promote-map`.
+# Runs the layered map editor at http://localhost:8765. Everything it
+# writes lands in tools/map_editor/dev_map_data/ - nothing touches the
+# live campaign/map_data/ until you run `make promote-map`.
 map-editor:
 	cd tools/map_editor && uv run server.py
 
 map-editor-test:
 	cd tools/map_editor && uv run --group dev pytest -q
 
-# Renders dev_map_data/project.json as a single PNG (region colors
-# overlaid on the real terrain backdrop) without opening a browser -
-# tools/map_editor/dev_map_data/preview.png. Runs the same
-# validate_project + export_project path the editor's Export button
-# uses, so any invalid polygon (self-intersecting, revisits a point,
-# color collision, off-map) gets outlined in red on the image and
-# listed on stdout instead of silently producing a bad export.
+# Composites every layer in manifest order over the real backdrop and
+# writes tools/map_editor/dev_map_data/preview.png. Runs the same
+# validate_package the editor's Export button does, so an invalid polygon
+# (self-intersecting, revisits a point, off-map, overlapping another
+# province) gets outlined in red on the image and listed on stdout.
 map-editor-preview:
 	cd tools/map_editor && uv run preview.py
 
-# Copies the traced dev map into campaign/map_data/, where
-# campaign/province_map.gd actually loads region_map.png + regions.txt
-# from. Run this after tracing/editing borders in `make map-editor` and
+# Creates a fresh map package from a backdrop image: manifest, layer
+# configs, faction roster, a coastline traced from the line art, and a
+# terrain layer seeded to plains. SEED=N also chops the land into N
+# placeholder provinces so the game has something to run on before
+# anything has been traced by hand.
+#   make map-package-init SEED=12
+map-package-init:
+	cd tools/map_editor && uv run init_package.py $(if $(SEED),--seed-provinces $(SEED),) $(if $(FORCE),--force,)
+
+# Loads the dev package and reports any problem that would block an
+# export, without writing anything. CI-able.
+map-package-check:
+	cd tools/map_editor && uv run check_package.py
+
+# Copies the dev map package into campaign/map_data/, where the game
+# loads it from. Run this after editing layers in `make map-editor` and
 # exporting, once you're happy with the result.
 #
-# Also forces a Godot reimport: Godot caches region_map.png as a .ctex
+# Also forces a Godot reimport: Godot caches each layer PNG as a .ctex
 # under .godot/imported/, keyed by content hash, and `make play` never
-# triggers a reimport itself - overwriting the source PNG alone leaves the
-# game rendering the stale cached texture, so newly-added territories
+# triggers a reimport itself - overwriting the source PNGs alone leaves
+# the game rendering stale cached textures, so newly-drawn provinces
 # silently don't show up until this runs.
 promote-map:
-	@test -f tools/map_editor/dev_map_data/region_map.png -a -f tools/map_editor/dev_map_data/regions.txt \
-		|| (echo "No dev map to promote - export from the map editor first (make map-editor)."; exit 1)
-	cp tools/map_editor/dev_map_data/region_map.png campaign/map_data/region_map.png
-	cp tools/map_editor/dev_map_data/regions.txt campaign/map_data/regions.txt
+	@test -f tools/map_editor/dev_map_data/provinces.table.json \
+		|| (echo "No exported dev package to promote - export from the map editor first (make map-editor)."; exit 1)
+	cd tools/map_editor && uv run promote.py
 	$(GODOT) --headless --import
-	@echo "Promoted dev map -> campaign/map_data/ and reimported"
+	@echo "Promoted dev map package -> campaign/map_data/ and reimported"
