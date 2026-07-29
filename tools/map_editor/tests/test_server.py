@@ -12,9 +12,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
-from PIL import Image
-
 import server as srv
+from PIL import Image
 
 
 def make_image(path: Path, size=(40, 40), color=(200, 200, 200)):
@@ -22,11 +21,11 @@ def make_image(path: Path, size=(40, 40), color=(200, 200, 200)):
 
 
 def make_two_tone_image(path: Path, width=200, height=100):
-    """Left half warm/land-colored, right half cool/sea-colored, matching
-    the BGR channel bias classify_coastline() looks for."""
+    """Left half white land fill, right half dark sea, matching the clean
+    line-art coastline convention classify_coastline() looks for."""
     img = np.zeros((height, width, 3), dtype=np.uint8)
-    img[:, : width // 2] = (40, 90, 150)  # BGR: land, red-biased
-    img[:, width // 2 :] = (150, 90, 40)  # BGR: sea, blue-biased
+    img[:, : width // 2] = (255, 255, 255)  # BGR: white land fill
+    img[:, width // 2 :] = (40, 40, 40)  # BGR: dark sea
     cv2.imwrite(str(path), img)
 
 

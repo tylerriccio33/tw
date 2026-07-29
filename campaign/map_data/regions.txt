@@ -10,7 +10,8 @@
  "#9a6324": "Caucasus",
  "#808000": "North_Africa",
  "#ffd8b1": "Egypt_Levant",
+ "#000075": "Persia",
  "#c65102": "France",
  "#c50202": "England",
- "#aec502": "Iberia"
+ "#c5ab02": "Iberia"
 }

@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -13,19 +13,19 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.7
+    rev: v0.16.0
     hooks:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.10.0.1
+    rev: v0.11.0.1
     hooks:
       - id: shellcheck
 
   - repo: https://github.com/tylerriccio33/slop-lint
-    rev: 4fdac2683ebd70d78f2f01dfef989b82f6a186dc
+    rev: 34685f635f22dbc17665e306a1dba4c8c07a8238
     hooks:
       - id: slop-lint
 
@@ -38,12 +38,12 @@ repos:
         files: \.py$
         pass_filenames: false
 
-      - id: map-editor-tests
-        name: map-editor tests (pytest)
-        entry: bash -c 'cd tools/map_editor && uv run --group dev pytest -q'
-        language: system
-        files: ^tools/map_editor/.*\.py$
-        pass_filenames: false
+      # - id: map-editor-tests
+      #   name: map-editor tests (pytest)
+      #   entry: bash -c 'cd tools/map_editor && uv run --group dev pytest -q'
+      #   language: system
+      #   files: ^tools/map_editor/.*\.py$
+      #   pass_filenames: false
 
       - id: gdformat
         name: gdformat

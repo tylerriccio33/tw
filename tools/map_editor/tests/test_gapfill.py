@@ -1,7 +1,6 @@
 """Unit tests for gapfill's fill/clip functions, isolated from the exporter."""
 
 import numpy as np
-
 from gapfill import clip_sea_overflow, fill_land_gaps
 
 WHITE = (255, 255, 255)

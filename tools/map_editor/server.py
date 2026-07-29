@@ -2,7 +2,9 @@
 """Local map editor server.
 
 Serves a browser-based tool for tracing faction/territory borders on top
-of a terrain image. Everything the editor writes goes to a *dev* location:
+of a clean line-art coastline map. Land is white fill, sea is a dark
+outline stroke; see assert_clean_coastline_source. Everything the editor
+writes goes to a *dev* location:
 tools/map_editor/dev_map_data/. That's never the live game data, so you
 can iterate freely. Run `make promote-map` from the repo root once a
 trace is ready. That copies it into campaign/map_data/, the directory
@@ -39,9 +41,8 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw
-
 from gapfill import clip_sea_overflow, fill_land_gaps
+from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -52,14 +53,35 @@ MIN_CONTOUR_AREA = 12  # px^2, drops single-pixel noise contours on import
 SIMPLIFY_EPSILON = 1.2  # px, cv2.approxPolyDP tolerance on import
 
 COASTLINE_WORK_WIDTH = 900  # px, classification runs on a downscaled copy for speed
-COASTLINE_BLUE_BIAS = 8  # min (B - R) for a pixel to count as "sea"-toned
+COASTLINE_LAND_MIN_GRAY = 245  # min grayscale value for a pixel to count as land fill
+# A source flattened from real transparency (e.g. a cached copy of a PNG
+# viewed outside its original app) often bakes the checkerboard in as
+# actual alternating-color pixels. A *median* blur is a no-op on a
+# perfectly regular checkerboard at any kernel size - each cell is
+# outvoted by its opposite-color neighbors, so the pattern survives
+# untouched. A *box* blur averages instead of voting, so it collapses the
+# checker into a uniform mid-gray that reads correctly as sea, while
+# solid land fill (already uniform white) stays unaffected. Must exceed
+# the checker's cell period (empirically ~15px here) to fully collapse it.
+COASTLINE_DENOISE_KERNEL = 31  # px, box-blur size for collapsing checkerboard noise
 COASTLINE_MORPH_KERNEL = 7  # px, smooths the sea mask and drops speckle before tracing
 COASTLINE_MIN_CONTOUR_AREA = 120  # px^2 at working resolution, drops speckle contours
 COASTLINE_SIMPLIFY_EPSILON = 2.0  # px at working resolution
 
+# assert_clean_coastline_source: a real painted-terrain photo/render has a
+# continuous spread of midtone pixels (mountains, shading, texture). Clean
+# line art has almost none - just white fill, a dark outline stroke, and
+# whatever color the sea uses. If more than this fraction of pixels land
+# in the mid-gray band, the source probably shows painted terrain again,
+# not the flat outline map this classifier expects.
+COASTLINE_MIDTONE_MIN_GRAY = 60
+COASTLINE_MIDTONE_MAX_GRAY = 200
+COASTLINE_MAX_MIDTONE_FRACTION = 0.05
+
 
 def make_handler(args: argparse.Namespace):
     image_path = Path(args.image).resolve()
+    assert_clean_coastline_source(image_path)
     dev_dir = Path(args.dev_dir).resolve()
     game_dir = Path(args.game_dir).resolve()
     project_path = dev_dir / "project.json"
@@ -78,7 +100,7 @@ def make_handler(args: argparse.Namespace):
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_file(self, path: Path, content_type: str = None):
+        def _send_file(self, path: Path, content_type: str | None = None):
             if not path.is_file():
                 self.send_error(404, "Not found")
                 return
@@ -142,7 +164,7 @@ def make_handler(args: argparse.Namespace):
                 try:
                     result = export_project(payload, image_path, dev_dir)
                     self._send_json({"ok": True, **result})
-                except Exception as exc:  # surface errors to the UI
+                except (ValueError, OSError) as exc:  # surface errors to the UI
                     self._send_json({"ok": False, "error": str(exc)}, 500)
             else:
                 self.send_error(404, "Not found")
@@ -198,7 +220,7 @@ def import_from_raster(source_dir: Path, image_path: Path) -> dict | None:
         if not mask.any():
             continue
 
-        contours, hierarchy = cv2.findContours(
+        contours, _hierarchy = cv2.findContours(
             mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
         polygons = []
@@ -244,28 +266,63 @@ def load_or_build_coastline(image_path: Path, cache_path: Path) -> dict:
     return {"lines": result["lines"]}
 
 
+def assert_clean_coastline_source(image_path: Path) -> None:
+    """Enforce the backdrop is clean line-art: white land fill, a dark
+    outline stroke, sea in any other color. Never a painted/photographic
+    terrain render.
+
+    No per-pixel rule can classify a painted terrain image reliably.
+    Git history shows this used to be a blue-vs-red channel bias, then a
+    hue band. Both mis-read real land as sea.
+
+    A clean outline map sidesteps that entirely. Land is just "is this
+    pixel white," which only holds if the source looks like line art.
+    So this raises loudly instead of silently producing a bad mask.
+    Called once at server/preview startup, not per-classification.
+    """
+    full = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    if full is None:
+        raise ValueError(f"Could not read image at {image_path}")
+    gray = cv2.cvtColor(full, cv2.COLOR_BGR2GRAY)
+    midtone = (gray >= COASTLINE_MIDTONE_MIN_GRAY) & (
+        gray <= COASTLINE_MIDTONE_MAX_GRAY
+    )
+    midtone_fraction = float(midtone.mean())
+    if midtone_fraction > COASTLINE_MAX_MIDTONE_FRACTION:
+        raise ValueError(
+            f"{image_path} doesn't look like a clean line-art coastline map: "
+            f"{midtone_fraction:.0%} of pixels are mid-gray (expected white "
+            f"land fill + a dark outline stroke, under "
+            f"{COASTLINE_MAX_MIDTONE_FRACTION:.0%} midtone). Painted/textured "
+            "terrain art can't be classified reliably here - trace over a "
+            "flat white-fill/black-outline coastline drawing instead."
+        )
+
+
 def _classify_sea_mask(image_path: Path):
-    """Shared land/sea heuristic: classify per-pixel on blue-vs-red bias at
-    a downscaled working resolution, then denoise with morphology. Returns
+    """Shared land/sea heuristic: classify per-pixel on brightness at a
+    downscaled working resolution, then denoise with morphology. Returns
     (sea_mask_work, full_w, full_h, work_w, work_h).
 
-    Our painted terrain art renders water in cool navy/teal tones and land
-    in warm tan/green/brown. We classify on channel bias rather than
-    region-growing from a "known sea" seed. Texture noise and haze over
-    distant land make flood-fill unreliable here.
+    The backdrop is clean line-art (see assert_clean_coastline_source):
+    white land, a dark outline stroke, sea in any other color.
+    Classification is just "is this pixel white" - no color-space
+    heuristics needed.
 
     This is a coarse heuristic, not per-pixel-exact."""
     full = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
     full_h, full_w = full.shape[:2]
 
+    # Denoise at full resolution, before downscaling - see
+    # COASTLINE_DENOISE_KERNEL for why this has to be a box blur.
+    denoised = cv2.blur(full, (COASTLINE_DENOISE_KERNEL, COASTLINE_DENOISE_KERNEL))
+
     scale = min(1.0, COASTLINE_WORK_WIDTH / full_w)
     work_w, work_h = max(1, round(full_w * scale)), max(1, round(full_h * scale))
-    work = cv2.resize(full, (work_w, work_h), interpolation=cv2.INTER_AREA)
-    work = cv2.medianBlur(work, 5)
+    work = cv2.resize(denoised, (work_w, work_h), interpolation=cv2.INTER_AREA)
 
-    blue = work[:, :, 0].astype(np.int16)
-    red = work[:, :, 2].astype(np.int16)
-    sea_mask = ((blue - red) > COASTLINE_BLUE_BIAS).astype(np.uint8) * 255
+    gray = cv2.cvtColor(work, cv2.COLOR_BGR2GRAY).astype(np.int16)
+    sea_mask = (gray < COASTLINE_LAND_MIN_GRAY).astype(np.uint8) * 255
 
     kernel = np.ones((COASTLINE_MORPH_KERNEL, COASTLINE_MORPH_KERNEL), np.uint8)
     sea_mask = cv2.morphologyEx(sea_mask, cv2.MORPH_OPEN, kernel)

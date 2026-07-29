@@ -17,9 +17,8 @@ import argparse
 import json
 from pathlib import Path
 
-from PIL import Image, ImageDraw
-
 import server as srv
+from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEV_DIR_DEFAULT = Path(__file__).resolve().parent / "dev_map_data"
@@ -112,6 +111,7 @@ def main():
     )
     args = parser.parse_args()
 
+    srv.assert_clean_coastline_source(Path(args.image))
     project = json.loads(Path(args.project).read_text())
     composite, problems = render_preview(project, Path(args.image))
 

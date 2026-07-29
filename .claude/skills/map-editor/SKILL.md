@@ -3,14 +3,14 @@ name: map-editor
 description: How the campaign's territory-border map editor works (tools/map_editor) — tracing/editing faction region polygons, exporting, validating, previewing, and promoting to the live game. Use whenever asked to add/change/fix a faction's territory borders, region colors, or region_map.png/regions.txt, or to debug why the in-game province map looks wrong.
 ---
 
-Reference for `tools/map_editor` — a browser-based tool for tracing faction territory borders on top of the campaign's painted terrain image. It is not part of the Godot game itself; it's an offline editing step that produces the two files `campaign/province_map.gd` actually loads at runtime.
+Reference for `tools/map_editor` — a browser-based tool for tracing faction territory borders on top of a clean line-art coastline map. It is not part of the Godot game itself; it's an offline editing step that produces the two files `campaign/province_map.gd` actually loads at runtime.
 
 ## Mental model
 
 - **Source of truth while editing:** `tools/map_editor/dev_map_data/project.json` — full-precision polygon points per region, in image pixel coordinates. This is what the editor UI reads and writes; treat it as the real editable data, not `region_map.png`.
 - **Dev export:** `dev_map_data/region_map.png` (flat-colored raster, one solid color per territory) + `dev_map_data/regions.txt` (JSON map of `"#hexcolor": "Region_Name"`). Produced from `project.json` by the Export button. Never touches the live game.
 - **Live game data:** `campaign/map_data/region_map.png` + `regions.txt` — same two-file format, loaded by `campaign/province_map.gd`. Only `make promote-map` copies the dev export here.
-- **Backdrop:** `campaign/map_data/backdrop.png` — the painted terrain art everything is traced on top of, used for both the editor's background image and the land/sea classification heuristic.
+- **Backdrop:** `campaign/map_data/backdrop.png` — a clean line-art coastline map (white land fill, dark outline stroke, sea rendered as anything else) everything is traced on top of, used for both the editor's background image and the land/sea classification. `server.assert_clean_coastline_source` enforces this convention at startup — painted/photographic terrain art is rejected, not silently misclassified. The previous painted-terrain backdrop is kept at `campaign/map_data/backdrop_terrain_legacy.png` for reference.
 
 Data flow: `project.json` (browser, full precision) --Export button--> `dev_map_data/{region_map.png,regions.txt}` --`make promote-map`--> `campaign/map_data/{region_map.png,regions.txt}` --Godot reimport--> live game.
 

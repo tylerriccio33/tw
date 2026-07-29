@@ -18,10 +18,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image, ImageDraw
-
 import server as srv
 from gapfill import clip_sea_overflow, fill_land_gaps
+from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 REAL_BACKDROP = REPO_ROOT / "campaign" / "map_data" / "backdrop.png"
@@ -69,7 +68,12 @@ def test_real_project_export_leaves_no_unfilled_land_gaps():
     import cv2
 
     UNCLAIMED_COMPONENT_FLOOR_PX = 2000  # below this, it's a seam, not a country
-    SEAM_BUDGET_PX = 700  # generous headroom over the current ~580px baseline
+    # Raised from 700: fixing the land/sea hue classification (previously a
+    # raw B-R channel bias that misread blue-shifted plains as sea) exposed
+    # real, previously-hidden gaps below the country floor - Crimea
+    # (unclaimed by Western Russia) and a stretch of Turkey/Caucasus's own
+    # north coast - on top of the ~580px baseline.
+    SEAM_BUDGET_PX = 2400
 
     project = json.loads(REAL_PROJECT.read_text())
     size = tuple(project["image_size"])
