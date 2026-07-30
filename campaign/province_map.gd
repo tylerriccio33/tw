@@ -31,6 +31,9 @@ const COASTLINE_KEY_SHADER := preload("res://campaign/coastline_key.gdshader")
 ## province id -> centroid, in the map's own pixel space (top-left origin,
 ## +y down). The caller decides how that lands in world space.
 var province_centers: Dictionary = {}
+## province id -> authored city position, falling back to centroid. Same
+## pixel space as province_centers.
+var city_positions: Dictionary = {}
 var map_size := Vector2.ZERO
 var package: MapPackage
 
@@ -45,6 +48,7 @@ func setup() -> bool:
 
 	map_size = package.size
 	province_centers = package.province_centers()
+	city_positions = package.city_positions()
 
 	_add_water()
 	_add_backdrop()

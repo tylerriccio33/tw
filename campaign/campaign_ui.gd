@@ -166,9 +166,9 @@ func _ready() -> void:
 	# units, so convert once here and hand the table over in world space.
 	_province_ids = []
 	_city_positions = PackedVector2Array()
-	for province_id in _province_map.province_centers:
+	for province_id in _province_map.city_positions:
 		_province_ids.append(province_id)
-		var local_pos: Vector2 = _province_map.province_centers[province_id]
+		var local_pos: Vector2 = _province_map.city_positions[province_id]
 		_city_positions.append(local_pos * MAP_SCALE - half_size)
 	if _city_positions.is_empty():
 		_fail_to_start("the map package has no provinces - nothing to play")

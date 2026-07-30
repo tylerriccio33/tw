@@ -48,6 +48,10 @@ func _sample_factions() -> Array:
 ## A province table shaped like provinces.table.json: one province per
 ## position, owners round-robin across the roster, each bordering the next so
 ## the adjacency graph is a connected ring.
+##
+## `city_position` is offset from `centroid` on purpose, so a test can tell
+## whether Rust actually sited the city on the authored point rather than
+## silently falling back to the area centroid.
 func _sample_provinces(positions: PackedVector2Array) -> Array:
 	var keys := ["red", "blue", "green", "yellow"]
 	var rows: Array = []
@@ -62,6 +66,7 @@ func _sample_provinces(positions: PackedVector2Array) -> Array:
 					"key": "province_%d" % (i + 1),
 					"name": "Province %d" % (i + 1),
 					"centroid": [positions[i].x, positions[i].y],
+					"city_position": [positions[i].x + 5, positions[i].y + 5],
 					"area_px": 1000,
 					"neighbors": [prev, next],
 					"starting_owner": keys[i % keys.size()],
@@ -128,6 +133,20 @@ func _initialize() -> void:
 		failures.append("expected 4 factions, got %d" % state["factions"].size())
 	if state["cities"].size() != 4:
 		failures.append("expected 4 cities, got %d" % state["cities"].size())
+	# A city sits on its authored city_position, not its province's area
+	# centroid - _sample_provinces() offsets them by (5, 5) so this can tell
+	# the difference.
+	for city in state["cities"]:
+		var province: int = int(city["province"])
+		var expected: Vector2 = _default_positions()[province - 1] + Vector2(5, 5)
+		var actual := Vector2(city["x"], city["y"])
+		if actual.distance_to(expected) > 0.01:
+			failures.append(
+				(
+					"city for province %d sits at %s, expected its city_position %s"
+					% [province, actual, expected]
+				)
+			)
 
 	# Play until the game ends or a safety cap trips, alternating attacks and
 	# passes so both attack_city() and end_turn() get exercised.

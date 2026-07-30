@@ -116,6 +116,16 @@ func province_centers() -> Dictionary:
 	return centers
 
 
+## Province id -> its authored city position, in map pixel space. Falls back
+## to the province's centroid for packages exported before cities existed.
+func city_positions() -> Dictionary:
+	var positions := {}
+	for province in provinces:
+		var point: Array = province.get("city_position", province.get("centroid", [0, 0]))
+		positions[int(province["id"])] = Vector2(point[0], point[1])
+	return positions
+
+
 func _read_json(path: String, fallback: Variant) -> Variant:
 	if not FileAccess.file_exists(path):
 		return fallback

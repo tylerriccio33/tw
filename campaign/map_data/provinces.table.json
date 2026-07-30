@@ -18,7 +18,11 @@
     "resources": []
    },
    "starting_owner": "red",
-   "display_color": "#4363d8"
+   "display_color": "#4363d8",
+   "city_position": [
+    968.77,
+    1411.69
+   ]
   },
   {
    "id": 2,
@@ -37,7 +41,11 @@
     "resources": []
    },
    "starting_owner": "blue",
-   "display_color": "#f58231"
+   "display_color": "#f58231",
+   "city_position": [
+    874.35,
+    688.05
+   ]
   },
   {
    "id": 3,
@@ -54,7 +62,11 @@
     "resources": []
    },
    "starting_owner": "green",
-   "display_color": "#911eb4"
+   "display_color": "#911eb4",
+   "city_position": [
+    365.65,
+    1134.54
+   ]
   }
  ]
 }

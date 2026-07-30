@@ -317,6 +317,13 @@ def make_handler(package_dir: Path):
                 elif path == "/api/project":
                     _, project = load()
                     self._send_json(project)
+                elif path.startswith("/api/layer/") and path.endswith("/points"):
+                    package, project = load()
+                    name = path[len("/api/layer/") : -len("/points")]
+                    if name not in package.layers:
+                        self.send_error(404, "no such layer")
+                        return
+                    self._send_json(mapfmt.project_points(project, name))
                 elif path == "/api/backdrop":
                     package, _ = load()
                     self._send_file(package.backdrop_path)
@@ -349,6 +356,20 @@ def make_handler(package_dir: Path):
                 if path == "/api/project":
                     mapfmt.save_project(package_dir, self._json_body())
                     self._send_json({"ok": True})
+
+                elif path.startswith("/api/layer/") and path.endswith("/points"):
+                    package, project = load()
+                    name = path[len("/api/layer/") : -len("/points")]
+                    if name not in package.layers:
+                        raise ApiError(f"no layer named '{name}'")
+                    if package.layers[name].input != "point":
+                        raise ApiError(f"'{name}' is not a point layer")
+                    payload = self._json_body()
+                    points = project.setdefault("layers", {}).setdefault(name, {})
+                    existing = points.setdefault("points", {})
+                    existing.update(payload)
+                    mapfmt.save_project(package_dir, project)
+                    self._send_json({"ok": True, "points": existing})
 
                 elif path.startswith("/api/layer/"):
                     package, _ = load()

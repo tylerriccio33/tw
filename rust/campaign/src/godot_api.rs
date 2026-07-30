@@ -37,6 +37,9 @@ struct ProvinceDef {
     key: String,
     name: String,
     centroid: (f32, f32),
+    /// Where its capital sits, from the map's `city_layer` (a `city_position`
+    /// column). Falls back to the centroid for older exports that lack one.
+    city_position: (f32, f32),
     neighbors: Vec<ProvinceId>,
     tags: HashMap<String, TagValue>,
     starting_owner: Option<String>,
@@ -217,6 +220,16 @@ impl CampaignManager {
                     })
                     .unwrap_or((0.0, 0.0));
 
+                let city_position = dict
+                    .get("city_position")
+                    .and_then(|v| v.try_to::<VarArray>().ok())
+                    .map(|a| {
+                        let x = a.at(0).try_to::<f64>().unwrap_or(0.0) as f32;
+                        let y = a.at(1).try_to::<f64>().unwrap_or(0.0) as f32;
+                        (x, y)
+                    })
+                    .unwrap_or(centroid);
+
                 let neighbors = dict
                     .get("neighbors")
                     .and_then(|v| v.try_to::<VarArray>().ok())
@@ -246,6 +259,7 @@ impl CampaignManager {
                     key: dict_string(&dict, "key").unwrap_or_else(|| format!("province_{id}")),
                     name: dict_string(&dict, "name").unwrap_or_else(|| format!("Province {id}")),
                     centroid,
+                    city_position,
                     neighbors,
                     tags,
                     starting_owner: dict_string(&dict, "starting_owner"),
@@ -296,7 +310,7 @@ impl CampaignManager {
                     id: cities.len() as CityId,
                     name: def.name.clone(),
                     income: 20,
-                    position: def.centroid,
+                    position: def.city_position,
                     owner: owner_id,
                     province: Some(def.id),
                 });

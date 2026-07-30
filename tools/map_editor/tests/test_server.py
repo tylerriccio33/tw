@@ -5,11 +5,16 @@ back from the browser have to snap onto exact legend colors before they
 touch the package.
 """
 
+import http.client
+import json
+import threading
+from http.server import ThreadingHTTPServer
+
 import mapfmt
 import numpy as np
 import pytest
 import server
-from tests.conftest import box, project_with
+from tests.conftest import box, make_package, project_with
 
 
 def two_provinces():
@@ -153,3 +158,80 @@ def test_revectorize_keeps_an_enclave_as_its_own_ring(package):
 
     assert set(by_id) == {1, 2}
     assert len(by_id[2]["polygons"]) == 2, "outer boundary plus the hole"
+
+
+# ---------------------------------------------------------------------------
+# point layer endpoint
+# ---------------------------------------------------------------------------
+
+CITIES_LAYER = {
+    "name": "cities",
+    "title": "Cities",
+    "input": "point",
+    "kind": "identity",
+    "raster": "cities.png",
+    "nodata_color": "#000000",
+    "snap_source": False,
+}
+
+
+def _live_server(package_dir):
+    handler = server.make_handler(package_dir)
+    httpd = ThreadingHTTPServer(("localhost", 0), handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    return httpd
+
+
+def test_points_endpoint_round_trips_a_provinces_point(tmp_path):
+    package = make_package(tmp_path, extra_layers={"cities": CITIES_LAYER})
+    project = project_with(package, provinces=two_provinces())
+    mapfmt.save_project(package.root, project)
+
+    httpd = _live_server(package.root)
+    try:
+        conn = http.client.HTTPConnection("localhost", httpd.server_port)
+        try:
+            conn.request(
+                "POST",
+                "/api/layer/cities/points",
+                body=json.dumps({"1": [20, 20]}),
+            )
+            resp = conn.getresponse()
+            body = json.loads(resp.read())
+            assert resp.status == 200
+            assert body["ok"] is True
+            assert body["points"]["1"] == [20, 20]
+
+            conn.request("GET", "/api/layer/cities/points")
+            resp = conn.getresponse()
+            body = json.loads(resp.read())
+            assert body["1"] == [20, 20]
+        finally:
+            conn.close()
+    finally:
+        httpd.shutdown()
+
+
+def test_points_endpoint_rejects_a_non_point_layer(tmp_path):
+    package = make_package(tmp_path, extra_layers={"cities": CITIES_LAYER})
+    project = project_with(package, provinces=two_provinces())
+    mapfmt.save_project(package.root, project)
+
+    httpd = _live_server(package.root)
+    try:
+        conn = http.client.HTTPConnection("localhost", httpd.server_port)
+        try:
+            conn.request(
+                "POST",
+                "/api/layer/terrain/points",
+                body=json.dumps({"1": [20, 20]}),
+            )
+            resp = conn.getresponse()
+            body = json.loads(resp.read())
+            assert resp.status == 400
+            assert body["ok"] is False
+        finally:
+            conn.close()
+    finally:
+        httpd.shutdown()

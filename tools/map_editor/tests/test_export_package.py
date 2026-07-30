@@ -5,12 +5,14 @@ authored coastline. Then reducing painted layers into the per-province
 table the simulation reads.
 """
 
+import json
+
 import export
 import mapfmt
 import numpy as np
 import pytest
 from PIL import Image
-from tests.conftest import box, paint, project_with
+from tests.conftest import box, make_package, paint, project_with
 
 PLAINS = "#7d9a4e"
 HILLS = "#8a7a5a"
@@ -326,3 +328,63 @@ def test_a_blocked_export_writes_nothing(package):
 
     assert not (package.root / mapfmt.TABLE_NAME).exists()
     assert not (package.root / mapfmt.GEO_NAME).exists()
+
+
+# ---------------------------------------------------------------------------
+# point-input city layer
+# ---------------------------------------------------------------------------
+
+CITIES_LAYER = {
+    "name": "cities",
+    "title": "Cities",
+    "input": "point",
+    "kind": "identity",
+    "raster": "cities.png",
+    "nodata_color": "#000000",
+    "snap_source": False,
+}
+
+
+def _package_with_cities(tmp_path):
+    package = make_package(tmp_path, extra_layers={"cities": CITIES_LAYER})
+    manifest_path = package.root / mapfmt.MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text())
+    manifest["city_layer"] = "cities"
+    manifest_path.write_text(json.dumps(manifest))
+    return mapfmt.load_package(package.root)
+
+
+def test_city_layer_rasterizes_a_dot_in_province_color(tmp_path):
+    package = _package_with_cities(tmp_path)
+    project = project_with(package, provinces=two_provinces())
+    project["layers"]["cities"]["points"] = {"1": [20, 20], "2": [40, 20]}
+
+    run_export(package, project)
+
+    with Image.open(package.raster_path("cities")) as im:
+        raster = np.array(im.convert("RGB"))
+
+    assert tuple(raster[20, 20]) == mapfmt.id_to_color(1)
+    assert tuple(raster[20, 40]) == mapfmt.id_to_color(2)
+    assert tuple(raster[0, 0]) == (0, 0, 0)
+
+
+def test_city_layer_missing_point_blocks_export(tmp_path):
+    package = _package_with_cities(tmp_path)
+    project = project_with(package, provinces=two_provinces())
+    project["layers"]["cities"]["points"] = {"1": [20, 20]}  # province 2 missing
+
+    with pytest.raises(export.ExportBlocked, match="no authored point"):
+        run_export(package, project)
+
+
+def test_province_table_gets_city_position(tmp_path):
+    package = _package_with_cities(tmp_path)
+    project = project_with(package, provinces=two_provinces())
+    project["layers"]["cities"]["points"] = {"1": [20, 20], "2": [40, 20]}
+
+    run_export(package, project)
+
+    table = {row["id"]: row for row in mapfmt.read_province_table(package.root)}
+    assert table[1]["city_position"] == [20, 20]
+    assert table[2]["city_position"] == [40, 20]

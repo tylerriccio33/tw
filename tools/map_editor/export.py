@@ -161,6 +161,36 @@ def rasterize_assign_layer(
     return canvas
 
 
+POINT_RADIUS_PX = 4
+
+
+def rasterize_point_layer(
+    project: dict,
+    cfg: mapfmt.LayerConfig,
+    size: tuple[int, int],
+    id_buf: np.ndarray | None = None,
+) -> np.ndarray:
+    """Draw one filled dot per authored point, in its own province's
+    identity color. A point-input layer is kind=identity, coupled 1:1 to
+    the province layer by province id. There is no legend to look up.
+    The color comes straight from the province id itself."""
+    canvas = _blank(size, cfg.nodata_rgb)
+    image = Image.fromarray(canvas)
+    draw = ImageDraw.Draw(image)
+    for pid_str, (x, y) in mapfmt.project_points(project, cfg.name).items():
+        rgb = mapfmt.id_to_color(int(pid_str))
+        draw.ellipse(
+            [
+                x - POINT_RADIUS_PX,
+                y - POINT_RADIUS_PX,
+                x + POINT_RADIUS_PX,
+                y + POINT_RADIUS_PX,
+            ],
+            fill=rgb,
+        )
+    return np.array(image)
+
+
 def rasterize_layer(
     project: dict,
     package: mapfmt.Package,
@@ -172,6 +202,8 @@ def rasterize_layer(
         return rasterize_polygon_layer(project, cfg, size)
     if cfg.input == "brush":
         return rasterize_brush_layer(package, cfg, size)
+    if cfg.input == "point":
+        return rasterize_point_layer(project, cfg, size, id_buf)
     return rasterize_assign_layer(project, cfg, size, id_buf)
 
 
@@ -419,6 +451,49 @@ def _validate_overlap(project: dict, package: mapfmt.Package) -> list[str]:
     return problems
 
 
+def _validate_points(project: dict, package: mapfmt.Package) -> list[str]:
+    """A point-input layer couples 1:1 to the province layer. Each
+    province needs exactly one authored point, on-map. Every authored
+    point must reference a real province."""
+    problems: list[str] = []
+    width, height = package.size
+    province_ids = {
+        int(f["id"])
+        for f in mapfmt.project_features(project, package.province_layer.name)
+        if "id" in f
+    }
+
+    for name in package.layer_order:
+        cfg = package.layers[name]
+        if cfg.input != "point":
+            continue
+        points = mapfmt.project_points(project, name)
+
+        for pid_str, xy in points.items():
+            try:
+                pid = int(pid_str)
+            except (TypeError, ValueError):
+                problems.append(
+                    f"{name} has a point keyed '{pid_str}', not a province id"
+                )
+                continue
+            if pid not in province_ids:
+                problems.append(
+                    f"{name} has a point for province {pid}, which doesn't exist"
+                )
+            if len(xy) != 2 or not (0 <= xy[0] <= width and 0 <= xy[1] <= height):
+                problems.append(
+                    f"{name} point for province {pid} at {xy} is outside the "
+                    f"{width}x{height} map"
+                )
+
+        authored = {int(k) for k in points if k.lstrip("-").isdigit()}
+        for pid in sorted(province_ids - authored):
+            problems.append(f"{name} has no authored point for province {pid}")
+
+    return problems
+
+
 def validate_package(project: dict, package: mapfmt.Package) -> list[str]:
     """Everything that would make an export misrepresent what was drawn.
     export_package refuses to write anything until this is empty - a
@@ -428,6 +503,7 @@ def validate_package(project: dict, package: mapfmt.Package) -> list[str]:
         + _validate_identity(project, package)
         + _validate_keys(project, package)
         + _validate_overlap(project, package)
+        + _validate_points(project, package)
     )
 
 
@@ -582,6 +658,9 @@ def build_province_table(
                 int(k): v for k, v in mapfmt.project_assignments(project, name).items()
             }
 
+    city_layer = package.city_layer
+    city_points = mapfmt.project_points(project, city_layer.name) if city_layer else {}
+
     table: list[dict] = []
     geo: list[dict] = []
 
@@ -605,6 +684,8 @@ def build_province_table(
             row[tag_name] = by_id.get(pid)
         if feature.get("color"):
             row["display_color"] = feature["color"]
+        if city_layer is not None and str(pid) in city_points:
+            row["city_position"] = list(city_points[str(pid)])
 
         table.append(row)
         geo.append({"id": pid, "rings": trace_rings(id_buf, pid)})
@@ -642,7 +723,7 @@ def export_package(project: dict, package: mapfmt.Package) -> dict:
             raster = raster.copy()
             raster[~masks[cfg.clip_to]] = np.array(cfg.nodata_rgb, dtype=np.uint8)
 
-        if cfg.gapfill:
+        if cfg.gapfill and cfg.input != "point":
             raster = fill_land_gaps(
                 raster,
                 masks[cfg.gapfill["within"]],

@@ -7,11 +7,13 @@
  "backdrop": "backdrop.png",
  "factions": "factions.json",
  "province_layer": "provinces",
+ "city_layer": "cities",
  "layers": [
   "coastline",
   "provinces",
   "terrain",
   "resources",
-  "ownership"
+  "ownership",
+  "cities"
  ]
 }

@@ -64,6 +64,12 @@ function assignments(name) {
   return layer.assignments;
 }
 
+function points(name) {
+  const layer = state.project.layers[name];
+  if (!layer.points) layer.points = {};
+  return layer.points;
+}
+
 function legendEntries(cfg) {
   return Object.entries(cfg.legend || {}).map(([color, entry]) => ({
     color,
@@ -345,6 +351,11 @@ function renderTools() {
     };
     wrap.append(label, slider);
     el.tools.appendChild(wrap);
+  } else if (cfg.input === "point") {
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = "Pick a province on the left, then click the map to place its point.";
+    el.tools.appendChild(hint);
   }
 }
 
@@ -393,6 +404,26 @@ function renderFeatureList() {
       empty.className = "hint";
       empty.textContent = "No provinces yet - add one to start tracing.";
       el.featureList.appendChild(empty);
+    }
+    return;
+  }
+
+  if (cfg.input === "point") {
+    // Coupled to the province layer: pick a province here, then click the
+    // map to place (or replace) that province's point.
+    const provincePts = points(state.activeLayer);
+    for (const feature of features(state.manifest.province_layer)) {
+      const row = document.createElement("div");
+      const isActive = String(feature.id) === String(state.selected[state.activeLayer]);
+      row.className = "feature-row" + (isActive ? " active" : "");
+      const has = provincePts[String(feature.id)] ? " ✓" : "";
+      row.textContent = (feature.name || `Province ${feature.id}`) + has;
+      row.onclick = () => {
+        state.selected[state.activeLayer] = feature.id;
+        renderFeatureList();
+        render();
+      };
+      el.featureList.appendChild(row);
     }
     return;
   }
@@ -665,6 +696,7 @@ function render() {
   }
 
   renderAssignOverlay(svg);
+  renderPointsOverlay(svg);
   if (state.editMode) renderVertexHandles(svg);
   renderDrawing(svg);
   renderTracePreview(svg);
@@ -747,6 +779,24 @@ function assignProvince(feature) {
   scheduleAutosave();
   renderFeatureList();
   render();
+}
+
+function renderPointsOverlay(svg) {
+  for (const name of state.manifest.layer_order) {
+    const cfg = layerCfg(name);
+    if (cfg.input !== "point" || !state.visible[name]) continue;
+    const pts = points(name);
+    for (const [pid, xy] of Object.entries(pts)) {
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", xy[0]);
+      dot.setAttribute("cy", xy[1]);
+      dot.setAttribute("class", "vertex point-marker");
+      if (name === state.activeLayer && String(pid) === String(state.selected[name])) {
+        dot.setAttribute("class", "vertex point-marker active");
+      }
+      svg.appendChild(dot);
+    }
+  }
 }
 
 function renderVertexHandles(svg) {
@@ -866,6 +916,19 @@ function svgPoint(event) {
 
 function onCanvasClick(event) {
   const cfg = activeCfg();
+  if (cfg && cfg.input === "point") {
+    const pid = state.selected[state.activeLayer];
+    if (pid === undefined || pid === null) {
+      setStatus("Pick a province on the left first", true);
+      return;
+    }
+    const at = svgPoint(event);
+    points(state.activeLayer)[String(pid)] = at;
+    scheduleAutosave();
+    renderFeatureList();
+    render();
+    return;
+  }
   if (!cfg || cfg.input !== "polygon") return;
   const at = svgPoint(event);
 

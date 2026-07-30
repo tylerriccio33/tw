@@ -52,7 +52,7 @@ NODATA_COLOR = "#000000"
 # province rather than a few stray pixels bleeding over its border.
 DEFAULT_MIN_FRACTION = 0.02
 
-VALID_INPUTS = ("polygon", "brush", "assign")
+VALID_INPUTS = ("polygon", "brush", "assign", "point")
 VALID_KINDS = ("mask", "identity", "class")
 VALID_REDUCE_MODES = ("majority", "any")
 
@@ -285,6 +285,13 @@ class Package:
         return self.layers[self.manifest["province_layer"]]
 
     @property
+    def city_layer(self) -> LayerConfig | None:
+        name = self.manifest.get("city_layer")
+        if not name:
+            return None
+        return self.layers[name]
+
+    @property
     def backdrop_path(self) -> Path:
         return self.root / self.manifest.get("backdrop", "backdrop.png")
 
@@ -338,6 +345,18 @@ def load_package(root: Path) -> Package:
 
     factions_path = root / manifest.get("factions", "factions.json")
     factions = _read_json(factions_path) if factions_path.is_file() else []
+
+    city_layer = manifest.get("city_layer")
+    if city_layer:
+        if city_layer not in layers:
+            raise PackageError(
+                f"city_layer '{city_layer}' isn't one of the declared layers"
+            )
+        if layers[city_layer].input != "point" or layers[city_layer].kind != "identity":
+            raise PackageError(
+                f"city_layer '{city_layer}' must be input=point, kind=identity, "
+                f"got input={layers[city_layer].input}, kind={layers[city_layer].kind}"
+            )
 
     _check_mask_references(layers, manifest["layers"])
     return Package(root=root, manifest=manifest, layers=layers, factions=factions)
@@ -415,6 +434,8 @@ def empty_project(size: tuple[int, int], package: Package) -> dict:
             layers[name] = {"features": []}
         elif cfg.input == "assign":
             layers[name] = {"assignments": {}}
+        elif cfg.input == "point":
+            layers[name] = {"points": {}}
         else:
             layers[name] = {}
     return {
@@ -431,6 +452,10 @@ def project_features(project: dict, layer_name: str) -> list[dict]:
 
 def project_assignments(project: dict, layer_name: str) -> dict[str, str]:
     return project.get("layers", {}).get(layer_name, {}).get("assignments", {}) or {}
+
+
+def project_points(project: dict, layer_name: str) -> dict[str, list[float]]:
+    return project.get("layers", {}).get(layer_name, {}).get("points", {}) or {}
 
 
 def load_project(root: Path, package: Package) -> dict:

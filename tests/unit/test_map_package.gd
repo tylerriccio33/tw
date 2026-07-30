@@ -76,6 +76,18 @@ func test_province_centers_read_centroid() -> void:
 	assert_eq(centers[2], Vector2(30, 40))
 
 
+func test_city_positions_reads_city_position() -> void:
+	package.load_from(FIXTURE_ROOT)
+	var positions := package.city_positions()
+	assert_eq(positions[1], Vector2(12, 22))
+
+
+func test_city_positions_falls_back_to_centroid_when_absent() -> void:
+	package.load_from(FIXTURE_ROOT)
+	var positions := package.city_positions()
+	assert_eq(positions[2], Vector2(30, 40))
+
+
 func test_geometry_loaded_by_province_id() -> void:
 	package.load_from(FIXTURE_ROOT)
 	assert_eq(package.geometry[1].size(), 1)

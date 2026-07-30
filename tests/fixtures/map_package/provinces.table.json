@@ -5,6 +5,7 @@
    "key": "province_1",
    "name": "Province One",
    "centroid": [10, 20],
+   "city_position": [12, 22],
    "area_px": 1000,
    "neighbors": [2],
    "starting_owner": "red",
