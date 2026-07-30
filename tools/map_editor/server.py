@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
@@ -236,6 +237,66 @@ def fill_gaps(project: dict, package: mapfmt.Package, layer_name: str) -> dict:
     }
 
 
+FACTION_KEY_RE = re.compile(r"[a-z0-9_]+")
+
+
+def set_factions(package: mapfmt.Package, project: dict, factions: list) -> list[dict]:
+    """Replace the faction roster and keep every "assign"-input layer's
+    legend in lockstep with it. This is the only way to add, rename, or
+    delete a starting owner. An assign layer's legend is always just the
+    roster, read back as paint-by-province categories.
+
+    Assignments naming a faction that no longer exists get dropped,
+    since export rejects a key outside its layer's own legend.
+    """
+    if not isinstance(factions, list) or not factions:
+        raise ApiError("factions must be a non-empty list")
+
+    seen_keys: set[str] = set()
+    seen_colors: set[str] = set()
+    cleaned: list[dict] = []
+    for entry in factions:
+        if not isinstance(entry, dict):
+            raise ApiError("each faction must be an object")
+        key = str(entry.get("key", "")).strip().lower()
+        name = str(entry.get("name", "")).strip()
+        color = str(entry.get("color", "")).strip().lower()
+        if not key or not FACTION_KEY_RE.fullmatch(key):
+            raise ApiError(
+                f"faction key {key!r} must be lowercase letters, digits, underscores"
+            )
+        if not name:
+            raise ApiError(f"faction '{key}' needs a name")
+        mapfmt.hex_to_rgb(color)
+        if key in seen_keys:
+            raise ApiError(f"duplicate faction key '{key}'")
+        if color in seen_colors:
+            raise ApiError(f"two factions share the color {color}")
+        seen_keys.add(key)
+        seen_colors.add(color)
+        cleaned.append({**entry, "key": key, "name": name, "color": color})
+
+    factions_path = package.root / package.manifest.get("factions", "factions.json")
+    factions_path.write_text(json.dumps(cleaned, indent=1) + "\n")
+
+    for name, cfg in package.layers.items():
+        if cfg.input != "assign":
+            continue
+        raw = dict(cfg.raw)
+        raw["legend"] = {
+            f["color"]: {"key": f["key"], "name": f["name"]} for f in cleaned
+        }
+        cfg_path = package.root / mapfmt.LAYERS_DIRNAME / f"{name}.json"
+        cfg_path.write_text(json.dumps(raw, indent=1) + "\n")
+
+        assignments = mapfmt.project_assignments(project, name)
+        pruned = {pid: fkey for pid, fkey in assignments.items() if fkey in seen_keys}
+        project.setdefault("layers", {}).setdefault(name, {})["assignments"] = pruned
+
+    mapfmt.save_project(package.root, project)
+    return cleaned
+
+
 def autotrace(package: mapfmt.Package, layer_name: str) -> list[dict]:
     cfg = package.layers.get(layer_name)
     if cfg is None or cfg.kind != "mask":
@@ -401,6 +462,12 @@ def make_handler(package_dir: Path):
                         payload.get("layer", ""),
                     )
                     self._send_json({"ok": True, **result})
+
+                elif path == "/api/factions":
+                    package, project = load()
+                    payload = self._json_body()
+                    cleaned = set_factions(package, project, payload.get("factions"))
+                    self._send_json({"ok": True, "factions": cleaned})
 
                 elif path == "/api/export":
                     package, project = load()

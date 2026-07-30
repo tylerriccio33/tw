@@ -5,14 +5,12 @@ authored coastline. Then reducing painted layers into the per-province
 table the simulation reads.
 """
 
-import json
-
 import export
 import mapfmt
 import numpy as np
 import pytest
 from PIL import Image
-from tests.conftest import box, make_package, paint, project_with
+from tests.conftest import box, paint, project_with
 
 PLAINS = "#7d9a4e"
 HILLS = "#8a7a5a"
@@ -332,30 +330,13 @@ def test_a_blocked_export_writes_nothing(package):
 
 # ---------------------------------------------------------------------------
 # point-input city layer
+#
+# init_package's default layer set now includes "cities", so the plain
+# `package` fixture already has a city_layer wired up in its manifest.
 # ---------------------------------------------------------------------------
 
-CITIES_LAYER = {
-    "name": "cities",
-    "title": "Cities",
-    "input": "point",
-    "kind": "identity",
-    "raster": "cities.png",
-    "nodata_color": "#000000",
-    "snap_source": False,
-}
 
-
-def _package_with_cities(tmp_path):
-    package = make_package(tmp_path, extra_layers={"cities": CITIES_LAYER})
-    manifest_path = package.root / mapfmt.MANIFEST_NAME
-    manifest = json.loads(manifest_path.read_text())
-    manifest["city_layer"] = "cities"
-    manifest_path.write_text(json.dumps(manifest))
-    return mapfmt.load_package(package.root)
-
-
-def test_city_layer_rasterizes_a_dot_in_province_color(tmp_path):
-    package = _package_with_cities(tmp_path)
+def test_city_layer_rasterizes_a_dot_in_province_color(package):
     project = project_with(package, provinces=two_provinces())
     project["layers"]["cities"]["points"] = {"1": [20, 20], "2": [40, 20]}
 
@@ -369,8 +350,7 @@ def test_city_layer_rasterizes_a_dot_in_province_color(tmp_path):
     assert tuple(raster[0, 0]) == (0, 0, 0)
 
 
-def test_city_layer_missing_point_blocks_export(tmp_path):
-    package = _package_with_cities(tmp_path)
+def test_city_layer_missing_point_blocks_export(package):
     project = project_with(package, provinces=two_provinces())
     project["layers"]["cities"]["points"] = {"1": [20, 20]}  # province 2 missing
 
@@ -378,8 +358,7 @@ def test_city_layer_missing_point_blocks_export(tmp_path):
         run_export(package, project)
 
 
-def test_province_table_gets_city_position(tmp_path):
-    package = _package_with_cities(tmp_path)
+def test_province_table_gets_city_position(package):
     project = project_with(package, provinces=two_provinces())
     project["layers"]["cities"]["points"] = {"1": [20, 20], "2": [40, 20]}
 

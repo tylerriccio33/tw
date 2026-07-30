@@ -10,6 +10,7 @@ import json
 import threading
 from http.server import ThreadingHTTPServer
 
+import init_package
 import mapfmt
 import numpy as np
 import pytest
@@ -74,6 +75,7 @@ def test_manifest_lists_layers_in_draw_order(package):
         "terrain",
         "resources",
         "ownership",
+        "cities",
     ]
     assert payload["size"] == list(package.size)
     assert payload["province_layer"] == "provinces"
@@ -164,16 +166,6 @@ def test_revectorize_keeps_an_enclave_as_its_own_ring(package):
 # point layer endpoint
 # ---------------------------------------------------------------------------
 
-CITIES_LAYER = {
-    "name": "cities",
-    "title": "Cities",
-    "input": "point",
-    "kind": "identity",
-    "raster": "cities.png",
-    "nodata_color": "#000000",
-    "snap_source": False,
-}
-
 
 def _live_server(package_dir):
     handler = server.make_handler(package_dir)
@@ -184,7 +176,7 @@ def _live_server(package_dir):
 
 
 def test_points_endpoint_round_trips_a_provinces_point(tmp_path):
-    package = make_package(tmp_path, extra_layers={"cities": CITIES_LAYER})
+    package = make_package(tmp_path)
     project = project_with(package, provinces=two_provinces())
     mapfmt.save_project(package.root, project)
 
@@ -214,7 +206,7 @@ def test_points_endpoint_round_trips_a_provinces_point(tmp_path):
 
 
 def test_points_endpoint_rejects_a_non_point_layer(tmp_path):
-    package = make_package(tmp_path, extra_layers={"cities": CITIES_LAYER})
+    package = make_package(tmp_path)
     project = project_with(package, provinces=two_provinces())
     mapfmt.save_project(package.root, project)
 
@@ -231,6 +223,120 @@ def test_points_endpoint_rejects_a_non_point_layer(tmp_path):
             body = json.loads(resp.read())
             assert resp.status == 400
             assert body["ok"] is False
+        finally:
+            conn.close()
+    finally:
+        httpd.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# starting owners (factions)
+# ---------------------------------------------------------------------------
+
+
+def test_set_factions_adds_a_new_owner_to_every_assign_layer(package, tmp_path):
+    project = project_with(package, provinces=two_provinces(), assignments={"1": "red"})
+    factions = package.factions + [
+        {"key": "purple", "name": "Purple", "color": "#800080", "money": 100}
+    ]
+
+    server.set_factions(package, project, factions)
+
+    reloaded = mapfmt.load_package(package.root)
+    assert "purple" in reloaded.layers["ownership"].keys
+    assert reloaded.layers["ownership"].color_for_key("purple") == "#800080"
+    assert json.loads((package.root / "factions.json").read_text()) == factions
+
+
+def test_set_factions_prunes_assignments_for_a_deleted_owner(package):
+    project = project_with(
+        package, provinces=two_provinces(), assignments={"1": "red", "2": "blue"}
+    )
+    remaining = [f for f in package.factions if f["key"] != "red"]
+
+    server.set_factions(package, project, remaining)
+
+    saved = mapfmt.load_project(package.root, mapfmt.load_package(package.root))
+    assert saved["layers"]["ownership"]["assignments"] == {"2": "blue"}
+
+
+def test_set_factions_rejects_a_duplicate_key(package):
+    project = project_with(package, provinces=two_provinces())
+    factions = package.factions + [dict(package.factions[0], color="#123456")]
+
+    with pytest.raises(server.ApiError, match="duplicate"):
+        server.set_factions(package, project, factions)
+
+
+def test_set_factions_rejects_a_shared_color(package):
+    project = project_with(package, provinces=two_provinces())
+    factions = package.factions + [
+        {"key": "purple", "name": "Purple", "color": package.factions[0]["color"]}
+    ]
+
+    with pytest.raises(server.ApiError, match="color"):
+        server.set_factions(package, project, factions)
+
+
+def test_set_factions_rejects_an_empty_roster(package):
+    project = project_with(package, provinces=two_provinces())
+
+    with pytest.raises(server.ApiError, match="non-empty"):
+        server.set_factions(package, project, [])
+
+
+def test_set_factions_rejects_a_malformed_color(package):
+    project = project_with(package, provinces=two_provinces())
+
+    with pytest.raises(mapfmt.PackageError):
+        server.set_factions(
+            package, project, [{"key": "red", "name": "Red", "color": "not-a-color"}]
+        )
+
+
+def test_factions_endpoint_round_trips_over_http(tmp_path):
+    package = make_package(tmp_path)
+    project = project_with(
+        package, provinces=two_provinces(), assignments={"1": "red", "2": "blue"}
+    )
+    mapfmt.save_project(package.root, project)
+
+    httpd = _live_server(package.root)
+    try:
+        conn = http.client.HTTPConnection("localhost", httpd.server_port)
+        try:
+            new_roster = [f for f in init_package.FACTIONS if f["key"] != "red"] + [
+                {"key": "purple", "name": "Purple", "color": "#800080", "money": 100}
+            ]
+            conn.request(
+                "POST",
+                "/api/factions",
+                body=json.dumps({"factions": new_roster}),
+            )
+            resp = conn.getresponse()
+            body = json.loads(resp.read())
+            assert resp.status == 200
+            assert body["ok"] is True
+            assert {f["key"] for f in body["factions"]} == {
+                "blue",
+                "green",
+                "yellow",
+                "purple",
+            }
+
+            conn.request("GET", "/api/manifest")
+            resp = conn.getresponse()
+            manifest = json.loads(resp.read())
+            assert {f["key"] for f in manifest["factions"]} == {
+                "blue",
+                "green",
+                "yellow",
+                "purple",
+            }
+            legend_keys = {
+                e["key"] for e in manifest["layers"]["ownership"]["legend"].values()
+            }
+            assert legend_keys == {"blue", "green", "yellow", "purple"}
         finally:
             conn.close()
     finally:

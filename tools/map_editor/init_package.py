@@ -94,10 +94,19 @@ def manifest(size: tuple[int, int]) -> dict:
         "backdrop": "backdrop.png",
         "factions": "factions.json",
         "province_layer": "provinces",
+        "city_layer": "cities",
         # Order is the draw order, the export order, and the default snap
         # order all at once. Trace the shore, cut provinces against it,
-        # paint terrain inside those, then assign who starts where.
-        "layers": ["coastline", "provinces", "terrain", "resources", "ownership"],
+        # paint terrain inside those, assign who starts where, then place
+        # each province's capital.
+        "layers": [
+            "coastline",
+            "provinces",
+            "terrain",
+            "resources",
+            "ownership",
+            "cities",
+        ],
     }
 
 
@@ -171,6 +180,15 @@ def layer_configs() -> dict[str, dict]:
             },
             "reduce": {"into": "starting_owner", "mode": "majority"},
         },
+        "cities": {
+            "name": "cities",
+            "title": "Cities",
+            "input": "point",
+            "kind": "identity",
+            "raster": "cities.png",
+            "nodata_color": "#000000",
+            "snap_source": False,
+        },
     }
 
 
@@ -202,7 +220,9 @@ def trace_land_features(land_mask: np.ndarray) -> list[dict]:
     return features
 
 
-def seed_provinces(land_mask: np.ndarray, count: int) -> list[dict]:
+def seed_provinces(
+    land_mask: np.ndarray, count: int
+) -> tuple[list[dict], dict[str, list[float]]]:
     """Chop the landmass into `count` placeholder provinces.
 
     Purely a bootstrap, so the game has something to run on before anyone
@@ -210,10 +230,14 @@ def seed_provinces(land_mask: np.ndarray, count: int) -> list[dict]:
     land, then every land pixel joins its nearest seed. The result is
     contiguous, entirely on land, and fully connected, which is all the
     pipeline needs. The borders mean nothing; retrace them.
+
+    Also hands back a capital point per province. The seed pixel already
+    sits inside its own region, so it doubles as a free placeholder
+    centroid.
     """
     ys, xs = np.nonzero(land_mask)
     if len(ys) == 0 or count < 1:
-        return []
+        return [], {}
 
     # Farthest-point sampling: start at the land centroid's nearest pixel,
     # then repeatedly take the land pixel furthest from every seed so far.
@@ -238,6 +262,7 @@ def seed_provinces(land_mask: np.ndarray, count: int) -> list[dict]:
     label_of_seed = {int(labels[sy, sx]): i for i, (sx, sy) in enumerate(seeds)}
 
     features = []
+    city_points: dict[str, list[float]] = {}
     for label, index in sorted(label_of_seed.items(), key=lambda kv: kv[1]):
         mask = ((labels == label) & land_mask).astype(np.uint8)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -254,16 +279,19 @@ def seed_provinces(land_mask: np.ndarray, count: int) -> list[dict]:
         if not polygons:
             continue
         name = f"Province {index + 1}"
+        province_id = index + 1
         features.append(
             {
-                "id": index + 1,
+                "id": province_id,
                 "key": mapfmt.slugify(name),
                 "name": name,
                 "color": PROVINCE_PALETTE[index % len(PROVINCE_PALETTE)],
                 "polygons": polygons,
             }
         )
-    return features
+        sx, sy = seeds[index]
+        city_points[str(province_id)] = [float(sx), float(sy)]
+    return features, city_points
 
 
 def seed_terrain_raster(land_mask: np.ndarray, path: Path) -> None:
@@ -315,8 +343,9 @@ def init_package(
 
     seed_terrain_raster(land_mask, layers_dir / "terrain.png")
     seed_empty_raster(size, layers_dir / "resources.png")
+    seed_empty_raster(size, layers_dir / "cities.png")
 
-    provinces = seed_provinces(land_mask, province_count)
+    provinces, city_points = seed_provinces(land_mask, province_count)
     project = {
         "format_version": mapfmt.PROJECT_FORMAT_VERSION,
         "size": [size[0], size[1]],
@@ -332,6 +361,7 @@ def init_package(
                     for i, p in enumerate(provinces)
                 }
             },
+            "cities": {"points": city_points},
         },
     }
     (package_dir / mapfmt.PROJECT_NAME).write_text(json.dumps(project, indent=1) + "\n")

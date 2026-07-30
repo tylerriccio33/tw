@@ -356,6 +356,23 @@ function renderTools() {
     hint.className = "hint";
     hint.textContent = "Pick a province on the left, then click the map to place its point.";
     el.tools.appendChild(hint);
+  } else if (cfg.input === "assign") {
+    addButton("+ Add owner", addOwner);
+    addButton(
+      "Reset all",
+      () => {
+        const count = Object.keys(assignments(state.activeLayer)).length;
+        if (!count) return;
+        showConfirm(`Clear ${count} starting owner assignment(s)?`, () => {
+          state.project.layers[state.activeLayer].assignments = {};
+          scheduleAutosave();
+          renderSidebar();
+          render();
+        });
+      },
+      false,
+      !Object.keys(assignments(state.activeLayer)).length
+    );
   }
 }
 
@@ -519,8 +536,80 @@ function legendRow(cfg, entry) {
       Object.values(assignments(state.activeLayer)).filter((k) => k === entry.key).length
     );
     row.appendChild(count);
+
+    const remove = document.createElement("button");
+    remove.className = "del";
+    remove.textContent = "✕";
+    remove.title = "Delete this starting owner";
+    remove.onclick = (e) => {
+      e.stopPropagation();
+      removeOwner(entry.key);
+    };
+    row.appendChild(remove);
   }
   return row;
+}
+
+// ---------------------------------------------------------------------------
+// starting owners (factions)
+//
+// A faction is the roster entry; an "assign" layer's legend is always
+// that same roster read back as paint-by-province categories. Adding or
+// deleting one here is the only way to add or delete a starting owner,
+// so both go through the server together - it keeps every assign layer's
+// legend and every province's assignment in lockstep.
+// ---------------------------------------------------------------------------
+
+function addOwner() {
+  showPrompt("New owner's name", "", async (name) => {
+    if (!name || !name.trim()) return;
+    const factions = state.manifest.factions;
+    let key = slugify(name);
+    let suffix = 2;
+    const existingKeys = new Set(factions.map((f) => f.key));
+    while (existingKeys.has(key)) key = `${slugify(name)}_${suffix++}`;
+    const usedColors = new Set(factions.map((f) => f.color.toLowerCase()));
+    const color = PALETTE.find((c) => !usedColors.has(c.toLowerCase())) || PALETTE[0];
+    await saveFactions([...factions, { key, name: name.trim(), color, money: 100 }]);
+  });
+}
+
+function removeOwner(key) {
+  const factions = state.manifest.factions;
+  if (factions.length <= 1) {
+    setStatus("At least one starting owner has to remain", true);
+    return;
+  }
+  const faction = factions.find((f) => f.key === key);
+  showConfirm(`Delete owner "${faction ? faction.name : key}"? Provinces assigned to ` +
+    "it start unowned.", async () => {
+    await saveFactions(factions.filter((f) => f.key !== key));
+  });
+}
+
+async function saveFactions(factions) {
+  await flushRasters();
+  const response = await fetch("/api/factions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ factions }),
+  });
+  const result = await response.json();
+  if (!result.ok) {
+    setStatus(result.error || "Couldn't save owners", true);
+    return;
+  }
+  state.manifest = await (await fetch("/api/manifest")).json();
+  state.project = await (await fetch("/api/project")).json();
+  for (const name of state.manifest.layer_order) {
+    const cfg = layerCfg(name);
+    if (cfg.input === "assign" && !legendEntries(cfg).some((e) => e.key === state.selected[name])) {
+      state.selected[name] = (legendEntries(cfg)[0] || {}).key || null;
+    }
+  }
+  setStatus("Saved");
+  renderSidebar();
+  render();
 }
 
 function renderHint() {

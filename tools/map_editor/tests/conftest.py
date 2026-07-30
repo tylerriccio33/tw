@@ -72,6 +72,14 @@ def land_rect(land_box=(10, 8, 50, 32)) -> list[list[float]]:
     return [[x0, y0], [x1 - 1, y0], [x1 - 1, y1 - 1], [x0, y1 - 1]]
 
 
+def _centroid(polygon: list[list[float]]) -> list[float]:
+    """Vertex average. Test provinces are always convex, so this lands
+    inside."""
+    xs = [p[0] for p in polygon]
+    ys = [p[1] for p in polygon]
+    return [sum(xs) / len(xs), sum(ys) / len(ys)]
+
+
 def project_with(
     package: mapfmt.Package,
     *,
@@ -85,6 +93,18 @@ def project_with(
     ]
     project["layers"]["provinces"]["features"] = provinces
     project["layers"]["ownership"]["assignments"] = assignments or {}
+    # Any point layer (e.g. cities) requires one authored point per
+    # province to export. Tests care about their own layer, not capitals,
+    # so seed every point layer with a point that's guaranteed to sit
+    # inside its province.
+    for name, cfg in package.layers.items():
+        if cfg.input != "point":
+            continue
+        project["layers"][name]["points"] = {
+            str(p["id"]): _centroid(p["polygons"][0])
+            for p in provinces
+            if p.get("polygons")
+        }
     return project
 
 
