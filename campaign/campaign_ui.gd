@@ -17,15 +17,20 @@ const MAX_TURNS := 10
 # tiny pixel grid would otherwise imply.
 const MAP_SCALE := 20.0
 
-# Pan/zoom tuning. _base_ppu is the pixels-per-world-unit at zoom 1.0, computed
-# at runtime from the map's actual size once province_map.gd has loaded it -
-# chosen so the whole map fits an 800px-tall viewport at startup. The scroll
+# Pan/zoom tuning. _base_ppu is the pixels-per-world-unit at zoom 1.0, kept in
+# sync with the viewport's larger dimension every frame the window resizes
+# (see _update_camera_transform) - a "cover" fit rather than a "contain" fit,
+# so the map fills the whole frame edge-to-edge at startup (Total War-style)
+# instead of leaving empty background letterboxed around it. The scroll
 # wheel/Z/X keys zoom in from there.
 var _base_ppu: float = 1.0
 const PAN_SPEED := 0.6  # fraction of map_extent per second, at zoom 1.0
 const ZOOM_STEP := 0.1  # per scroll-wheel notch
 const ZOOM_KEY_SPEED := 1.2  # zoom units/sec while Z/X is held
-const MIN_ZOOM := 0.6
+# _base_ppu is a cover-fit (map exactly fills the frame at zoom 1.0), so
+# zooming out below that would reveal empty background past the map's edges -
+# 1.0 is as far out as the camera goes.
+const MIN_ZOOM := 1.0
 const MAX_ZOOM := 2.2
 
 # Faction colors are declared by the map package (factions.json) and read in
@@ -74,6 +79,12 @@ var _province_ids: Array = []
 var _faction_colors: Array[Color] = DEFAULT_FACTION_COLORS.duplicate()
 var _marker_positions: Dictionary = {}
 var _map_extent: float = 0.0
+## True per-axis half-width/half-height of the map in world units - unlike
+## _map_extent (which collapses to a single scalar for pan clamping), this
+## keeps the map's actual aspect ratio so the cover-fit in
+## _update_camera_transform doesn't under-fill a non-square map's shorter
+## axis and expose the viewport's background past its edge.
+var _map_half_size := Vector2.ZERO
 var _cam_focus := Vector2.ZERO
 var _cam_zoom := 1.0
 var _selected_city_id: int = -1
@@ -147,9 +158,9 @@ func _ready() -> void:
 	# [-_map_extent, _map_extent]) doesn't have to know about map pixels.
 	var half_size: Vector2 = _province_map.map_size * MAP_SCALE / 2.0
 	_map_extent = maxf(half_size.x, half_size.y)
+	_map_half_size = half_size
 	_province_map.position = -half_size
 	_province_map.scale = Vector2.ONE * MAP_SCALE
-	_base_ppu = 800.0 / (2.0 * _map_extent)
 
 	# Province centroids are in map pixels; the simulation works in world
 	# units, so convert once here and hand the table over in world space.
@@ -224,8 +235,12 @@ func _ready() -> void:
 ## the size_changed wiring in _ready()), since --resolution/window resizes
 ## don't take effect inside the same frame that requests them.
 func _update_camera_transform() -> void:
+	var viewport_size := get_viewport_rect().size
+	_base_ppu = maxf(
+		viewport_size.x / (2.0 * _map_half_size.x), viewport_size.y / (2.0 * _map_half_size.y)
+	)
 	var pixels_per_unit := _base_ppu / _cam_zoom
-	var viewport_center := get_viewport_rect().size / 2.0
+	var viewport_center := viewport_size / 2.0
 	world_layer.position = viewport_center - _cam_focus * pixels_per_unit
 	world_layer.scale = Vector2.ONE * pixels_per_unit
 
