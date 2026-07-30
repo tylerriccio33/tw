@@ -25,6 +25,9 @@ const BORDER_COLOR := Color(0.05, 0.04, 0.03, 0.95)
 ## Painted layers sit under the province fills but over the backdrop art.
 const LAYER_ALPHA := 0.55
 
+const WATER_SHADER := preload("res://campaign/water.gdshader")
+const COASTLINE_KEY_SHADER := preload("res://campaign/coastline_key.gdshader")
+
 ## province id -> centroid, in the map's own pixel space (top-left origin,
 ## +y down). The caller decides how that lands in world space.
 var province_centers: Dictionary = {}
@@ -43,10 +46,40 @@ func setup() -> bool:
 	map_size = package.size
 	province_centers = package.province_centers()
 
+	_add_water()
 	_add_backdrop()
 	_add_painted_layers()
 	_add_provinces()
 	return true
+
+
+## The animated water sits behind everything; the backdrop's own sea fill is
+## chroma-keyed to transparent (see _add_backdrop) so it shows through.
+func _add_water() -> void:
+	var sea_color := _sea_color()
+	var rect := ColorRect.new()
+	rect.name = "Water"
+	rect.color = sea_color
+	rect.size = map_size
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var material := ShaderMaterial.new()
+	material.shader = WATER_SHADER
+	material.set_shader_parameter("deep_color", sea_color)
+	rect.material = material
+	add_child(rect)
+
+
+## The mask layer's legend is the map package's own record of which color
+## means "sea" - read it rather than hardcoding a color per-map.
+func _sea_color() -> Color:
+	for layer_name in package.layer_order():
+		var config: Dictionary = package.layer_config(layer_name)
+		if config.get("kind", "") != "mask":
+			continue
+		for hex_key in config.get("legend", {}):
+			if config["legend"][hex_key].get("key", "") == "sea":
+				return Color(hex_key)
+	return Color(0.114, 0.208, 0.314)
 
 
 func _add_backdrop() -> void:
@@ -62,6 +95,12 @@ func _add_backdrop() -> void:
 	# The package declares one size and every layer is exported at it, so the
 	# backdrop needs no scaling. The old map stretched a 1024x820 backdrop over
 	# a 1300x647 raster, which is why provinces never lined up with the coast.
+	# Its own flat sea fill is cut to transparent so the animated Water layer
+	# added just before it shows through.
+	var material := ShaderMaterial.new()
+	material.shader = COASTLINE_KEY_SHADER
+	material.set_shader_parameter("key_color", _sea_color())
+	sprite.material = material
 	add_child(sprite)
 
 
