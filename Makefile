@@ -88,6 +88,17 @@ play: campaign
 play-shot: campaign
 	GODOT=$(GODOT) ./tools/play_shot.sh
 
+# Renders the campaign to shots/play/shot.png from inside the engine, with
+# no window capture at all. play-shot needs Accessibility and Screen
+# Recording granted to whatever terminal runs it, and without them it either
+# can't find the window or writes a black frame; this works regardless. Use
+# it for reviewing a visual change - play-shot is still the one that shows
+# real window chrome. Override the size with RESOLUTION=WxH.
+shot: campaign
+	@mkdir -p shots/play
+	$(GODOT) -s tools/shoot.gd -- res://campaign/campaign.tscn \
+		shots/play/shot.png $(or $(RESOLUTION),1280x800)
+
 # Reuses play-shot's full-window capture and crops it down to just the
 # bottom HUD banner (city panel/buildings row/end-turn ribbon), so reviewing
 # a HUD tweak doesn't mean eyeballing it inside a full 1280x800 map shot.

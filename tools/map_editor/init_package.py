@@ -27,7 +27,7 @@ import coastline
 import cv2
 import mapfmt
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEV_DIR_DEFAULT = Path(__file__).resolve().parent / "dev_map_data"
@@ -220,6 +220,29 @@ def trace_land_features(land_mask: np.ndarray) -> list[dict]:
     return features
 
 
+def rasterize_land_features(features: list[dict], shape: tuple[int, int]) -> np.ndarray:
+    """The land those features actually cover once filled.
+
+    Not the same set of pixels as the mask that produced them - that gap
+    is load-bearing. Simplifying a contour can bulge a polygon across an
+    inlet's mouth. That turns a strip of water into land nothing else
+    knows about. Seeding provinces from the mask then leaves that strip
+    unclaimed, too far offshore for gapfill to reach. Export ships that
+    land to no province.
+
+    Everything downstream sees the coastline as a filled polygon, so the
+    bootstrap partitions the same thing.
+    """
+    height, width = shape
+    image = Image.new("L", (width, height), 0)
+    draw = ImageDraw.Draw(image)
+    for feature in features:
+        fill = 255 if feature["key"] == "land" else 0
+        for polygon in feature["polygons"]:
+            draw.polygon([(float(x), float(y)) for x, y in polygon], fill=fill)
+    return np.array(image) > 0
+
+
 def seed_provinces(
     land_mask: np.ndarray, count: int
 ) -> tuple[list[dict], dict[str, list[float]]]:
@@ -268,13 +291,16 @@ def seed_provinces(
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         polygons = []
         for contour in contours:
-            if cv2.contourArea(contour) < COAST_MIN_CONTOUR_AREA:
-                continue
             simplified = cv2.approxPolyDP(contour, COAST_SIMPLIFY_EPSILON, True)
             pts = [
                 [round(float(p[0][0]), 1), round(float(p[0][1]), 1)] for p in simplified
             ]
-            if len(pts) >= 3:
+            # No minimum area here, unlike the coastline trace. The
+            # coastline decides what is land; this only decides who owns
+            # it, and a region small enough to skip is land left with no
+            # owner - which export then ships, because gapfill won't reach
+            # an offshore speck. Anything expressible as a ring gets one.
+            if len({tuple(p) for p in pts}) >= 3:
                 polygons.append(pts)
         if not polygons:
             continue
@@ -328,7 +354,10 @@ def init_package(
         size = im.size
 
     coastline.assert_clean_source(backdrop)
-    land_mask = coastline.build_land_mask(backdrop)
+    coast_features = trace_land_features(coastline.build_land_mask(backdrop))
+    # Every later layer clips to the coastline *polygons*, so that is what
+    # the rest of this seeds from - see rasterize_land_features.
+    land_mask = rasterize_land_features(coast_features, (size[1], size[0]))
 
     layers_dir = package_dir / mapfmt.LAYERS_DIRNAME
     layers_dir.mkdir(parents=True, exist_ok=True)
@@ -351,7 +380,7 @@ def init_package(
         "size": [size[0], size[1]],
         "active_layer": "provinces",
         "layers": {
-            "coastline": {"features": trace_land_features(land_mask)},
+            "coastline": {"features": coast_features},
             "provinces": {"features": provinces},
             "terrain": {},
             "resources": {},

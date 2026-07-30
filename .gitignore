@@ -21,6 +21,9 @@
 # Python
 **/__pycache__/
 *.pyc
+.pytest_cache
+.ruff_cache
+.venv/
 
 # Rendered shots (scratch output of make play-shot / hud-shot).
 /shots/play/

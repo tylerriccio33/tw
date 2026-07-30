@@ -13,6 +13,12 @@ extends Node2D
 ##
 ## Painted layers (terrain, resources, anything added later) mount as sprites
 ## in manifest order beneath the province fills, so they show through.
+##
+## Borders come in two tiers, because they answer two different questions. A
+## province border says "this is a different place" and is a hairline. A
+## faction border says "this is a different power" and is heavy - it is the
+## outline of the *union* of everything one faction holds, so provinces that
+## changed hands into the same realm stop having a border between them at all.
 
 signal region_clicked(province_id: int)
 
@@ -20,10 +26,34 @@ const RegionArea := preload("res://campaign/region_area.gd")
 const MapPackage := preload("res://campaign/map_package.gd")
 
 const PACKAGE_ROOT := "res://campaign/map_data"
-const BORDER_WIDTH := 0.55
-const BORDER_COLOR := Color(0.05, 0.04, 0.03, 0.95)
 ## Painted layers sit under the province fills but over the backdrop art.
 const LAYER_ALPHA := 0.55
+
+# Widths are in map pixels; the whole node is scaled up by the caller, so
+# these stay proportional to the map rather than to the window.
+const PROVINCE_BORDER_WIDTH := 1.1
+const PROVINCE_BORDER_COLOR := Color(1.0, 1.0, 1.0, 0.35)
+const FACTION_BORDER_WIDTH := 4.0
+const FACTION_BORDER_COLOR := Color(0.04, 0.03, 0.02, 0.92)
+
+## Provinces are traced from a raster one id per pixel, so two that share a
+## border come out roughly a pixel apart rather than sharing vertices. Union
+## them as-is and that seam survives as a hairline crack, which would then
+## get drawn as a faction border straight down the middle of one realm.
+## Growing each province by more than the seam is wide closes it.
+const FACTION_BORDER_GROW := 2.5
+
+## Region names, styled after the engraved labels on a period map: small,
+## letter-spaced, upper case. Drawn at a large font size and scaled down so
+## they stay crisp when the camera zooms in.
+const LABEL_FONT := preload("res://assets/fonts/Baloo2-SemiBold.ttf")
+const LABEL_FONT_SIZE := 64
+const LABEL_HEIGHT_PX := 17.0  # in map pixels, once scaled
+const LABEL_COLOR := Color(0.99, 0.97, 0.92, 0.72)
+const LABEL_OUTLINE_COLOR := Color(0.06, 0.05, 0.04, 0.85)
+const LABEL_OUTLINE_SIZE := 14
+## How far, in map pixels, a name is lifted off a capital sitting under it.
+const LABEL_CITY_CLEARANCE := 42.0
 
 const WATER_SHADER := preload("res://campaign/water.gdshader")
 const COASTLINE_KEY_SHADER := preload("res://campaign/coastline_key.gdshader")
@@ -38,6 +68,13 @@ var map_size := Vector2.ZERO
 var package: MapPackage
 
 var _areas: Dictionary = {}  ## province id -> RegionArea
+## province id -> Array of outer-ring PackedVector2Array, for faction unions.
+var _outer_rings: Dictionary = {}
+var _faction_borders_root: Node2D
+## The ownership the faction borders were last built for. Rebuilding a set of
+## polygon unions on every state refresh would be work for nothing; ownership
+## only changes when a province is taken.
+var _border_ownership: Dictionary = {}
 
 
 func setup() -> bool:
@@ -54,6 +91,8 @@ func setup() -> bool:
 	_add_backdrop()
 	_add_painted_layers()
 	_add_provinces()
+	_add_faction_borders()
+	_add_province_labels()
 	return true
 
 
@@ -76,14 +115,18 @@ func _add_water() -> void:
 ## The mask layer's legend is the map package's own record of which color
 ## means "sea" - read it rather than hardcoding a color per-map.
 func _sea_color() -> Color:
+	return _mask_color("sea", Color(0.114, 0.208, 0.314))
+
+
+func _mask_color(key: String, fallback: Color) -> Color:
 	for layer_name in package.layer_order():
 		var config: Dictionary = package.layer_config(layer_name)
 		if config.get("kind", "") != "mask":
 			continue
 		for hex_key in config.get("legend", {}):
-			if config["legend"][hex_key].get("key", "") == "sea":
+			if config["legend"][hex_key].get("key", "") == key:
 				return Color(hex_key)
-	return Color(0.114, 0.208, 0.314)
+	return fallback
 
 
 func _add_backdrop() -> void:
@@ -99,8 +142,10 @@ func _add_backdrop() -> void:
 	# The package declares one size and every layer is exported at it, so the
 	# backdrop needs no scaling. The old map stretched a 1024x820 backdrop over
 	# a 1300x647 raster, which is why provinces never lined up with the coast.
-	# Its own flat sea fill is cut to transparent so the animated Water layer
-	# added just before it shows through.
+	# Both its flat fills are cut to transparent, leaving only the drawn
+	# coastline stroke: the sea fill so the animated Water layer added just
+	# before it shows through, the land fill because the province fills cover
+	# the land (see coastline_key.gdshader).
 	var material := ShaderMaterial.new()
 	material.shader = COASTLINE_KEY_SHADER
 	material.set_shader_parameter("key_color", _sea_color())
@@ -151,31 +196,108 @@ func _add_provinces() -> void:
 		regions_root.add_child(area)
 		_areas[province_id] = area
 
+		var outer: Array = []
 		for ring in rings:
-			# A hole is the boundary of an enclave another province owns. It
-			# must not become a click target here, or clicks inside the enclave
-			# would land on whoever surrounds it.
-			if ring.get("hole", false):
-				continue
 			var polygon := _ring_to_polygon(ring)
 			if polygon.size() < 3:
 				continue
 
-			var collision := CollisionPolygon2D.new()
-			collision.polygon = polygon
-			area.add_child(collision)
+			# A hole is the boundary of an enclave another province owns. It
+			# must not become a click target or a fill here, or clicks inside
+			# the enclave would land on whoever surrounds it - but it is still
+			# a province border, so it gets the hairline like any other edge.
+			if not ring.get("hole", false):
+				outer.append(polygon)
 
-			var fill := Polygon2D.new()
-			fill.polygon = polygon
-			area.add_child(fill)
+				var collision := CollisionPolygon2D.new()
+				collision.polygon = polygon
+				area.add_child(collision)
 
-			var border := Line2D.new()
-			border.points = polygon
-			border.add_point(polygon[0])
-			border.width = BORDER_WIDTH
-			border.default_color = BORDER_COLOR
-			border.joint_mode = Line2D.LINE_JOINT_ROUND
-			area.add_child(border)
+				var fill := Polygon2D.new()
+				fill.polygon = polygon
+				area.add_child(fill)
+
+			area.add_child(_outline(polygon, PROVINCE_BORDER_WIDTH, PROVINCE_BORDER_COLOR))
+
+		_outer_rings[province_id] = outer
+
+
+## A closed Line2D tracing one ring.
+func _outline(polygon: PackedVector2Array, width: float, color: Color) -> Line2D:
+	var line := Line2D.new()
+	line.points = polygon
+	line.add_point(polygon[0])
+	line.width = width
+	line.default_color = color
+	line.joint_mode = Line2D.LINE_JOINT_ROUND
+	return line
+
+
+## Heavy outlines around each realm, drawn over the province fills and
+## rebuilt from simulation state - see _rebuild_faction_borders.
+func _add_faction_borders() -> void:
+	_faction_borders_root = Node2D.new()
+	_faction_borders_root.name = "FactionBorders"
+	add_child(_faction_borders_root)
+
+
+func _add_province_labels() -> void:
+	var labels_root := Node2D.new()
+	labels_root.name = "ProvinceLabels"
+	add_child(labels_root)
+
+	for province in package.provinces:
+		var province_id := int(province["id"])
+		var name_text: String = province.get("name", "")
+		if name_text == "":
+			continue
+
+		var label := Label.new()
+		# Letter-spaced caps. A Label has no tracking of its own, and a space
+		# between glyphs is what gives these the engraved look the region
+		# names on a period map have.
+		label.text = " ".join(name_text.to_upper().split(""))
+		label.add_theme_font_override("font", LABEL_FONT)
+		label.add_theme_font_size_override("font_size", LABEL_FONT_SIZE)
+		label.add_theme_color_override("font_color", LABEL_COLOR)
+		# Names sit over whatever province color they land on, so they carry
+		# their own dark outline rather than relying on contrast.
+		label.add_theme_constant_override("outline_size", LABEL_OUTLINE_SIZE)
+		label.add_theme_color_override("font_outline_color", LABEL_OUTLINE_COLOR)
+		# Drawn at a large font size and scaled down, so the text stays crisp
+		# as the camera zooms in rather than being resampled up from a small
+		# glyph cache.
+		var shrink := LABEL_HEIGHT_PX / float(LABEL_FONT_SIZE)
+		label.scale = Vector2.ONE * shrink
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# A Control positions from its top-left corner, so centre it on the
+		# anchor by hand - its own size is only known once the font is set.
+		label.position = (
+			_label_anchor(province_id, province) - label.get_minimum_size() * shrink / 2.0
+		)
+		labels_root.add_child(label)
+
+
+## Where a province's name goes. The area centroid reads best, but for a
+## crescent or an archipelago it can fall in open water - so fall back to the
+## authored city point, which is inside its province by construction.
+##
+## Both tend to land in the middle of a province, and so does its capital, so
+## the name gets lifted clear of the city marker when the two coincide.
+func _label_anchor(province_id: int, province: Dictionary) -> Vector2:
+	var point: Vector2 = city_positions.get(province_id, Vector2.ZERO)
+	var centroid: Array = province.get("centroid", [])
+	if centroid.size() == 2:
+		var candidate := Vector2(centroid[0], centroid[1])
+		for ring in _outer_rings.get(province_id, []):
+			if Geometry2D.is_point_in_polygon(candidate, ring):
+				point = candidate
+				break
+
+	var city: Vector2 = city_positions.get(province_id, point)
+	if point.distance_to(city) < LABEL_CITY_CLEARANCE:
+		point.y -= LABEL_CITY_CLEARANCE
+	return point
 
 
 func _ring_to_polygon(ring: Dictionary) -> PackedVector2Array:
@@ -200,3 +322,62 @@ func apply_ownership(owner_by_province: Dictionary, faction_colors: Array) -> vo
 		if owner >= 0 and owner < faction_colors.size():
 			color = faction_colors[owner]
 		_areas[province_id].set_owner_color(color)
+
+	if owner_by_province != _border_ownership:
+		_border_ownership = owner_by_province.duplicate()
+		_rebuild_faction_borders(owner_by_province)
+
+
+## Outlines each realm as one shape rather than outlining its provinces
+## separately, so an internal border between two provinces of the same faction
+## carries only the province hairline and the heavy line follows the frontier.
+##
+## Recomputed from ownership alone, which means conquest redraws the frontier
+## with nothing on disk changing - the same property province colors have.
+func _rebuild_faction_borders(owner_by_province: Dictionary) -> void:
+	if _faction_borders_root == null:
+		return  # no setup() yet, so there is nothing on screen to redraw
+	for child in _faction_borders_root.get_children():
+		child.queue_free()
+
+	var rings_by_owner: Dictionary = {}
+	for province_id in _outer_rings:
+		var owner: int = owner_by_province.get(province_id, -1)
+		if owner < 0:
+			continue  # nobody holds it, so there is no frontier to draw
+		var grown: Array = rings_by_owner.get(owner, [])
+		for ring in _outer_rings[province_id]:
+			# Grow before merging, not after, so the seam between neighbours
+			# is gone by the time the union runs. See FACTION_BORDER_GROW.
+			for piece in Geometry2D.offset_polygon(ring, FACTION_BORDER_GROW):
+				grown.append(piece)
+		rings_by_owner[owner] = grown
+
+	for owner in rings_by_owner:
+		for polygon in _union_all(rings_by_owner[owner]):
+			if polygon.size() < 3:
+				continue
+			_faction_borders_root.add_child(
+				_outline(polygon, FACTION_BORDER_WIDTH, FACTION_BORDER_COLOR)
+			)
+
+
+## Merges every polygon that touches into one, leaving genuinely separate
+## landmasses separate - a faction holding an island and a mainland gets an
+## outline round each, not one shape bridging the sea.
+func _union_all(polygons: Array) -> Array:
+	var merged: Array = []
+	for polygon in polygons:
+		var pending: PackedVector2Array = polygon
+		var disjoint: Array = []
+		for existing in merged:
+			var union: Array = Geometry2D.merge_polygons(existing, pending)
+			# One polygon back means they overlapped and are now a single
+			# shape; anything else means they never touched.
+			if union.size() == 1:
+				pending = union[0]
+			else:
+				disjoint.append(existing)
+		disjoint.append(pending)
+		merged = disjoint
+	return merged

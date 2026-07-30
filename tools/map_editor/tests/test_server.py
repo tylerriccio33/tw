@@ -15,6 +15,7 @@ import mapfmt
 import numpy as np
 import pytest
 import server
+from PIL import Image
 from tests.conftest import box, make_package, project_with
 
 
@@ -160,6 +161,30 @@ def test_revectorize_keeps_an_enclave_as_its_own_ring(package):
 
     assert set(by_id) == {1, 2}
     assert len(by_id[2]["polygons"]) == 2, "outer boundary plus the hole"
+
+
+def test_revectorize_handles_a_mask_layer_keyed_by_legend_entry(package):
+    """A brush/mask layer (e.g. terrain) revectorizes by legend key, not id,
+    and carries over any prior feature fields for that key."""
+    cfg = package.layers["terrain"]
+    plains_hex = next(iter(cfg.legend))
+    plains_rgb = mapfmt.hex_to_rgb(plains_hex)
+
+    raster = np.zeros((40, 60, 3), dtype=np.uint8)
+    raster[:] = np.array(cfg.nodata_rgb, dtype=np.uint8)
+    raster[10:30, 15:45] = plains_rgb
+
+    key = cfg.legend[plains_hex]["key"]
+    prior_project = {
+        "layers": {"terrain": {"features": [{"key": key, "note": "prior"}]}}
+    }
+
+    features = server.revectorize(raster, cfg, prior_project)
+    by_key = {f["key"]: f for f in features}
+
+    assert key in by_key
+    assert by_key[key]["note"] == "prior"
+    assert by_key[key]["polygons"]
 
 
 # ---------------------------------------------------------------------------
@@ -341,3 +366,277 @@ def test_factions_endpoint_round_trips_over_http(tmp_path):
             conn.close()
     finally:
         httpd.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# the HTTP surface itself
+# ---------------------------------------------------------------------------
+
+
+class _Client:
+    """Small wrapper so route tests read as one line per request instead of
+    hand-rolling http.client boilerplate each time."""
+
+    def __init__(self, port):
+        self.port = port
+
+    def get(self, path):
+        conn = http.client.HTTPConnection("localhost", self.port)
+        try:
+            conn.request("GET", path)
+            resp = conn.getresponse()
+            return resp.status, resp.read(), resp
+        finally:
+            conn.close()
+
+    def post(self, path, body=b"", headers=None):
+        conn = http.client.HTTPConnection("localhost", self.port)
+        try:
+            conn.request("POST", path, body=body, headers=headers or {})
+            resp = conn.getresponse()
+            return resp.status, resp.read(), resp
+        finally:
+            conn.close()
+
+
+@pytest.fixture
+def client(tmp_path):
+    package = make_package(tmp_path)
+    project = project_with(package, provinces=two_provinces())
+    mapfmt.save_project(package.root, project)
+    httpd = _live_server(package.root)
+    try:
+        yield _Client(httpd.server_port), package
+    finally:
+        httpd.shutdown()
+
+
+def test_get_root_serves_the_editor_html(client):
+    c, _ = client
+    status, _body, resp = c.get("/")
+    assert status == 200
+    assert resp.getheader("Content-Type") == "text/html"
+
+
+def test_get_static_asset(client):
+    c, _package = client
+    import os
+
+    static_files = list(server.STATIC_DIR.rglob("*"))
+    files = [p for p in static_files if p.is_file()]
+    assert files, "expected at least one static asset to exist"
+    rel = os.path.relpath(files[0], server.STATIC_DIR)
+    status, _body, _ = c.get(f"/static/{rel}")
+    assert status == 200
+
+
+def test_get_missing_static_asset_is_404(client):
+    c, _ = client
+    status, _, _ = c.get("/static/does-not-exist.js")
+    assert status == 404
+
+
+def test_get_project_returns_saved_project(client):
+    c, _ = client
+    status, body, _ = c.get("/api/project")
+    assert status == 200
+    payload = json.loads(body)
+    assert "layers" in payload
+
+
+def test_get_points_for_unknown_layer_is_404(client):
+    c, _ = client
+    status, _, _ = c.get("/api/layer/nonsense/points")
+    assert status == 404
+
+
+def test_get_backdrop(client):
+    c, _ = client
+    status, body, _resp = c.get("/api/backdrop")
+    assert status == 200
+    assert body[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_get_layer_raster_falls_back_to_blank_when_unpainted(client):
+    c, package = client
+    raster_path = package.raster_path("terrain")
+    if raster_path.is_file():
+        raster_path.unlink()
+    status, _body, resp = c.get("/api/layer/terrain")
+    assert status == 200
+    assert resp.getheader("Content-Type") == "image/png"
+
+
+def test_get_layer_raster_serves_existing_file(client):
+    c, _package = client
+    status, _body, _ = c.get("/api/layer/terrain.png")
+    assert status == 200
+
+
+def test_get_layer_raster_for_unknown_layer_is_404(client):
+    c, _ = client
+    status, _, _ = c.get("/api/layer/nonsense")
+    assert status == 404
+
+
+def test_get_unknown_path_is_404(client):
+    c, _ = client
+    status, _, _ = c.get("/api/nope")
+    assert status == 404
+
+
+def test_get_reports_package_error_as_500(client):
+    c, package = client
+    (package.root / mapfmt.MANIFEST_NAME).write_text("not json")
+    status, body, _ = c.get("/api/manifest")
+    assert status == 500
+    assert "error" in json.loads(body)
+
+
+def test_post_project_saves_to_disk(client):
+    c, package = client
+    new_project = mapfmt.load_project(package.root, package)
+    new_project["layers"]["provinces"]["features"][0]["name"] = "Renamed"
+    status, body, _ = c.post(
+        "/api/project",
+        body=json.dumps(new_project).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    assert status == 200
+    assert json.loads(body)["ok"] is True
+    reloaded = mapfmt.load_project(package.root, package)
+    assert reloaded["layers"]["provinces"]["features"][0]["name"] == "Renamed"
+
+
+def test_post_project_with_malformed_json_is_500(client):
+    c, _ = client
+    status, body, _ = c.post("/api/project", body=b"{not json")
+    assert status == 500
+    assert json.loads(body)["ok"] is False
+
+
+def test_post_layer_raster_for_unknown_layer_is_400(client):
+    c, _ = client
+    status, body, _ = c.post("/api/layer/nonsense", body=b"")
+    assert status == 400
+    assert json.loads(body)["ok"] is False
+
+
+def test_post_layer_raster_uploads_and_quantizes(client):
+    import io
+
+    c, package = client
+    cfg = package.layers["terrain"]
+    plains_rgb = mapfmt.hex_to_rgb(next(iter(cfg.legend)))
+    raster = np.zeros((package.size[1], package.size[0], 3), dtype=np.uint8)
+    raster[5:10, 5:10] = plains_rgb
+    buf = io.BytesIO()
+    Image.fromarray(raster).save(buf, format="PNG")
+
+    status, body, _ = c.post("/api/layer/terrain", body=buf.getvalue())
+    assert status == 200
+    assert json.loads(body)["ok"] is True
+
+    with Image.open(package.raster_path("terrain")) as im:
+        saved = np.array(im.convert("RGB"))
+    assert tuple(saved[7, 7]) == plains_rgb
+
+
+def test_post_autotrace_returns_features(client):
+    c, _ = client
+    status, body, _ = c.post("/api/autotrace/coastline", body=b"")
+    assert status == 200
+    payload = json.loads(body)
+    assert payload["ok"] is True
+    assert isinstance(payload["features"], list)
+
+
+def test_post_autotrace_on_a_non_mask_layer_is_400(client):
+    c, _ = client
+    status, _body, _ = c.post("/api/autotrace/provinces", body=b"")
+    assert status == 400
+
+
+def test_post_fillgaps_over_http(client):
+    c, package = client
+    project = mapfmt.load_project(package.root, package)
+    status, body, _ = c.post(
+        "/api/fillgaps",
+        body=json.dumps({"project": project, "layer": "provinces"}).encode(),
+    )
+    assert status == 200
+    payload = json.loads(body)
+    assert payload["ok"] is True
+    assert "features" in payload
+
+
+def test_post_export_succeeds_for_a_valid_project(client):
+    c, package = client
+    project = mapfmt.load_project(package.root, package)
+    status, body, _ = c.post(
+        "/api/export", body=json.dumps({"project": project}).encode()
+    )
+    assert status == 200
+    assert json.loads(body)["ok"] is True
+    assert (package.root / mapfmt.TABLE_NAME).is_file()
+
+
+def test_post_export_reports_validation_problems_as_400(client):
+    c, package = client
+    project = mapfmt.load_project(package.root, package)
+    project["layers"]["provinces"]["features"][0]["polygons"] = [
+        [[10, 8], [30, 32], [30, 8], [10, 32]]  # bowtie
+    ]
+    status, body, _ = c.post(
+        "/api/export", body=json.dumps({"project": project}).encode()
+    )
+    assert status == 400
+    assert json.loads(body)["ok"] is False
+
+
+def test_post_unknown_path_is_404(client):
+    c, _ = client
+    status, _, _ = c.post("/api/nope", body=b"")
+    assert status == 404
+
+
+# ---------------------------------------------------------------------------
+# main()
+# ---------------------------------------------------------------------------
+
+
+def test_main_exits_with_a_helpful_message_when_no_package_exists(tmp_path):
+    import sys
+
+    argv = sys.argv
+    sys.argv = ["server.py", "--package-dir", str(tmp_path / "nowhere")]
+    try:
+        with pytest.raises(SystemExit, match="make map-package-init"):
+            server.main()
+    finally:
+        sys.argv = argv
+
+
+def test_main_starts_and_stops_the_server(tmp_path, monkeypatch, capsys):
+    package = make_package(tmp_path)
+
+    class FakeHTTPServer:
+        def __init__(self, addr, handler):
+            self.addr = addr
+
+        def serve_forever(self):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(server, "ThreadingHTTPServer", FakeHTTPServer)
+
+    import sys
+
+    argv = sys.argv
+    sys.argv = ["server.py", "--package-dir", str(package.root), "--port", "0"]
+    try:
+        server.main()  # returns normally: main() catches the KeyboardInterrupt
+    finally:
+        sys.argv = argv
+
+    out = capsys.readouterr().out
+    assert "Map editor running" in out

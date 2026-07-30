@@ -2,39 +2,16 @@
  "format_version": 1,
  "provinces": [
   {
-   "id": 1,
-   "key": "england",
-   "name": "England",
-   "centroid": [
-    968.77,
-    1411.69
-   ],
-   "area_px": 291518,
-   "neighbors": [
-    2
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "red",
-   "display_color": "#4363d8",
-   "city_position": [
-    968.77,
-    1411.69
-   ]
-  },
-  {
    "id": 2,
    "key": "scotland",
    "name": "Scotland",
    "centroid": [
-    874.35,
-    688.05
+    848.69,
+    653.28
    ],
-   "area_px": 126920,
+   "area_px": 195914,
    "neighbors": [
-    1
+    6
    ],
    "tags": {
     "terrain": "plains",
@@ -43,8 +20,8 @@
    "starting_owner": "blue",
    "display_color": "#f58231",
    "city_position": [
-    874.35,
-    688.05
+    862.0,
+    597.0
    ]
   },
   {
@@ -52,10 +29,10 @@
    "key": "ireland",
    "name": "Ireland",
    "centroid": [
-    365.65,
-    1134.54
+    355.02,
+    1131.76
    ],
-   "area_px": 156262,
+   "area_px": 206085,
    "neighbors": [],
    "tags": {
     "terrain": "plains",
@@ -64,8 +41,105 @@
    "starting_owner": "green",
    "display_color": "#911eb4",
    "city_position": [
-    365.65,
-    1134.54
+    381.0,
+    1140.0
+   ]
+  },
+  {
+   "id": 4,
+   "key": "wessex",
+   "name": "Wessex",
+   "centroid": [
+    783.33,
+    1675.55
+   ],
+   "area_px": 59240,
+   "neighbors": [
+    7
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "red",
+   "display_color": "#911eb4",
+   "city_position": [
+    871.0,
+    1643.0
+   ]
+  },
+  {
+   "id": 5,
+   "key": "wales",
+   "name": "Wales",
+   "centroid": [
+    772.57,
+    1399.45
+   ],
+   "area_px": 70931,
+   "neighbors": [
+    6,
+    7
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "red",
+   "display_color": "#46f0f0",
+   "city_position": [
+    800.0,
+    1420.0
+   ]
+  },
+  {
+   "id": 6,
+   "key": "northumbria",
+   "name": "Northumbria",
+   "centroid": [
+    985.94,
+    1143.46
+   ],
+   "area_px": 84620,
+   "neighbors": [
+    2,
+    5,
+    7
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "red",
+   "display_color": "#bfef45",
+   "city_position": [
+    1001.0,
+    1148.0
+   ]
+  },
+  {
+   "id": 7,
+   "key": "anglia",
+   "name": "Anglia",
+   "centroid": [
+    1095.68,
+    1487.49
+   ],
+   "area_px": 144474,
+   "neighbors": [
+    4,
+    5,
+    6
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "red",
+   "display_color": "#fabed4",
+   "city_position": [
+    1056.0,
+    1489.0
    ]
   }
  ]

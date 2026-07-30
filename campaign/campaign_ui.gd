@@ -8,6 +8,7 @@ extends Node2D
 
 const ArmyLayer := preload("res://campaign/army_layer.gd")
 const ProvinceMap := preload("res://campaign/province_map.gd")
+const CityMarker := preload("res://campaign/city_marker.gd")
 const MAX_TURNS := 10
 
 # The map is Thomas Holtvedt's grand-strategy-simple region bitmap (a
@@ -329,32 +330,23 @@ func _project_markers() -> void:
 		var pos := _world_to_screen(_city_positions[i])
 		_marker_positions[i] = pos
 		if city_markers.has(i):
-			var marker: ColorRect = city_markers[i]
-			marker.position = pos - marker.size / 2.0
+			var marker: CityMarker = city_markers[i]
+			marker.position = pos - marker.anchor_offset()
 	if _army_layer != null:
 		_army_layer.project()
 
 
-func _ensure_city_marker(city: Dictionary) -> ColorRect:
+func _ensure_city_marker(city: Dictionary) -> CityMarker:
 	var id: int = int(city["id"])
 	if city_markers.has(id):
 		return city_markers[id]
 
-	var pos: Vector2 = _marker_positions.get(id, Vector2.ZERO)
-
-	var marker := ColorRect.new()
-	marker.size = Vector2(32, 32)
-	marker.position = pos - marker.size / 2.0
-	marker.mouse_filter = Control.MOUSE_FILTER_STOP
-	marker.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	marker.gui_input.connect(_on_city_marker_input.bind(id))
+	var marker := CityMarker.new()
+	marker.setup(String(city["name"]))
+	marker.position = _marker_positions.get(id, Vector2.ZERO) - marker.anchor_offset()
+	marker.clicked.connect(_on_city_marker_clicked.bind(id))
 	cities_root.add_child(marker)
 	city_markers[id] = marker
-
-	var label := Label.new()
-	label.text = city["name"]
-	label.position = pos + Vector2(-16, 18)
-	cities_root.add_child(label)
 
 	return marker
 
@@ -362,11 +354,7 @@ func _ensure_city_marker(city: Dictionary) -> ColorRect:
 ## Clicking a city marker selects it: if it belongs to another faction it's
 ## picked as the attack target (mirrored into the dropdown attack_city()
 ## already reads from), otherwise it's just shown in the bottom info panel.
-func _on_city_marker_input(event: InputEvent, city_id: int) -> void:
-	if not (
-		event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT
-	):
-		return
+func _on_city_marker_clicked(city_id: int) -> void:
 	_selected_city_id = city_id
 	for i in target_option.item_count:
 		if target_option.get_item_id(i) == city_id:
@@ -410,8 +398,8 @@ func _refresh() -> void:
 	_apply_province_ownership(state)
 
 	for city in state["cities"]:
-		var marker: ColorRect = _ensure_city_marker(city)
-		marker.color = _faction_colors[int(city["owner"]) % _faction_colors.size()]
+		var marker: CityMarker = _ensure_city_marker(city)
+		marker.set_faction_color(_faction_colors[int(city["owner"]) % _faction_colors.size()])
 
 	var lines: Array[String] = []
 	lines.append("Turn %d / %d" % [state["turn"], state["max_turns"]])

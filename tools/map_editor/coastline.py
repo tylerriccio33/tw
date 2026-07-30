@@ -35,6 +35,40 @@ MORPH_KERNEL = 7  # px, smooths the sea mask and drops speckle before tracing
 MIN_CONTOUR_AREA = 120  # px^2 at working resolution, drops speckle contours
 SIMPLIFY_EPSILON = 2.0  # px at working resolution
 
+# build_land_mask classifies at full resolution instead of reusing the
+# downscaled, box-blurred working copy above. The blur is what makes a
+# flattened checkerboard readable, but averaging over DENOISE_KERNEL px
+# also pulls the white/sea threshold roughly half a kernel *inland*: the
+# mask came out ~15px inside the art's own shore all the way round, and
+# small islands averaged down to sea and vanished outright. A coastline
+# short of the shore leaves the backdrop's white land fill showing as a
+# rim around every province, since provinces clip to this mask.
+#
+# Dropping the blur means white checkerboard cells in a flattened source
+# would read as land again, so the defense moves to component size. Each
+# such cell is an isolated island of roughly CHECKER_CELL_PX^2 (its
+# same-color diagonal neighbors only touch at corners, so 4-connectivity
+# keeps them separate), and this discards anything that small. Real land
+# that tiny is a speck no province could hold.
+CHECKER_CELL_PX = 15  # px, cell period of a baked-in transparency checkerboard
+MIN_ISLAND_PX = 4 * CHECKER_CELL_PX**2  # px^2, smallest land component kept
+
+# Line art draws a dark stroke along the shore, and the stroke isn't white
+# so it isn't land. That leaves the mask a pixel ragged in both directions:
+# where a strait or river mouth is drawn narrow the strokes from either
+# bank meet and pinch the landmass to a single pixel of white, and a spit
+# or a stroke's own anti-aliasing leaves 1px hairs sticking out.
+#
+# Either one is a ring no polygon tracer can express. A contour walked
+# around a 1px pinch or hair traverses the same pixel twice, so the ring
+# revisits a point - which is exactly what export refuses, because it
+# fills as a pinched-shut shape rather than the area meant.
+#
+# A close then an open at the stroke's own width fixes both: the close
+# bridges pinches, the open shaves hairs. Neither moves the shore, and
+# together they leave every ring on this map traceable.
+SMOOTH_KERNEL = 3  # px, closes 1px pinches then shaves 1px hairs
+
 # assert_clean_source: a real painted-terrain photo/render has a
 # continuous spread of midtone pixels (mountains, shading, texture). Clean
 # line art has almost none - just white fill, a dark outline stroke, and
@@ -105,10 +139,31 @@ def _sea_mask(image_path: Path):
 
 
 def build_land_mask(image_path: Path) -> np.ndarray:
-    """Full-resolution boolean mask, True where image_path counts as land."""
-    sea, full_w, full_h, _work_w, _work_h = _sea_mask(image_path)
-    sea_full = cv2.resize(sea, (full_w, full_h), interpolation=cv2.INTER_NEAREST)
-    return sea_full == 0
+    """Full-resolution boolean mask, True where image_path counts as land.
+
+    Land is the art's own white fill, at its own edges. See
+    MIN_ISLAND_PX for why this reads the raw pixels rather than the
+    blurred working copy _sea_mask builds.
+
+    The dark outline stroke a line-art coast uses stays *out* of the
+    mask. That is deliberate: it keeps a couple of shore pixels visible
+    outside every province fill. That reads as a coastline, not a gap.
+    """
+    full = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    if full is None:
+        raise ValueError(f"Could not read image at {image_path}")
+    gray = cv2.cvtColor(full, cv2.COLOR_BGR2GRAY)
+    land = (gray >= LAND_MIN_GRAY).astype(np.uint8)
+
+    kernel = np.ones((SMOOTH_KERNEL, SMOOTH_KERNEL), np.uint8)
+    land = cv2.morphologyEx(land, cv2.MORPH_CLOSE, kernel)
+    land = cv2.morphologyEx(land, cv2.MORPH_OPEN, kernel)
+
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(land, connectivity=4)
+    keep = np.zeros(count, dtype=bool)
+    for label in range(1, count):
+        keep[label] = stats[label, cv2.CC_STAT_AREA] >= MIN_ISLAND_PX
+    return keep[labels]
 
 
 def trace_lines(image_path: Path) -> list:
