@@ -11,6 +11,7 @@ Straightforward loop for any visual change in this Godot campaign map (`campaign
 2. **Render it**: `make play-shot` — builds the campaign Rust GDExtension, launches `campaign.tscn` in a real window, waits for it to settle, and takes an OS-level screenshot to `shots/play/play.png`.
    - For a HUD-only change, `make hud-shot` reuses the same capture and crops it down to just the bottom HUD banner, written to `shots/play/hud.png`.
 3. **Review it**: read `shots/play/play.png` (or `shots/play/hud.png`) with the Read tool and actually look at it. Check the change did what was intended and didn't break anything else.
+4. **For measurable questions** (padding/alignment off, screenshot regressed, image blurry), don't just eyeball it — use the `image-inspect` skill (`tools/image_inspect.py`) to get actual numbers: `compare` against a prior shot, `border`/`lines` for padding/alignment, `blur` for sharpness.
 
 ## Notes
 

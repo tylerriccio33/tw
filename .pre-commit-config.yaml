@@ -33,7 +33,7 @@ repos:
     hooks:
       - id: pyrefly
         name: pyrefly
-        entry: uv run --with pyrefly --with pillow --with numpy --with scipy --with opencv-python-headless --with pytest pyrefly check tools
+        entry: uv run --with pyrefly --with pillow --with numpy --with scipy --with opencv-python-headless --with scikit-image --with pytest pyrefly check tools
         language: system
         files: \.py$
         pass_filenames: false
