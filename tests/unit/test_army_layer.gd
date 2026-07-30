@@ -66,11 +66,11 @@ func test_sync_deselects_when_the_selected_army_dies() -> void:
 	assert_eq(layer.selected_army_id(), -1)
 
 
-func test_project_positions_each_marker_at_its_ground_position() -> void:
+func test_project_positions_each_marker_beside_its_ground_position() -> void:
 	manager.armies = [_army(1, 0, 10, 10)]
 	layer.sync(manager.get_state())
-	var marker: Panel = layer._markers[1]
-	assert_eq(marker.position, Vector2(10, 10) - marker.size / 2.0)
+	var marker: Control = layer._markers[1]
+	assert_eq(marker.position, Vector2(10, 10) + ArmyLayer.DRAW_OFFSET - marker.anchor_offset())
 
 
 func test_select_accepts_a_player_owned_army() -> void:

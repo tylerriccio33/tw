@@ -20,11 +20,18 @@ signal log_message(text: String)
 ## can re-render the rest of the HUD.
 signal state_changed
 
+const ArmyMarker := preload("res://campaign/army_marker.gd")
+
 const PLAYER_FACTION := 0
-const MARKER_SIZE := Vector2(24, 24)
 const MOVE_SECONDS := 0.7  # how long one army's move animation takes
 const RANGE_RING_POINTS := 48
 const RANGE_RING_COLOR := Color(1.0, 1.0, 1.0, 0.55)
+## A same-owner army starts standing exactly on its capital's city marker
+## (see godot_api::spawn_starting_armies), so the piece is nudged this far
+## from its true ground position purely for the draw - it would otherwise sit
+## fully behind the keep icon. Sync/order/move math all stay on the
+## un-nudged ground position; only project() applies this.
+const DRAW_OFFSET := Vector2(20.0, -22.0)
 
 var _manager: Node
 var _world_to_screen: Callable
@@ -87,34 +94,17 @@ func selected_army_id() -> int:
 ## ---------------------------------------------------------------------------
 
 
-func _ensure_marker(army: Dictionary) -> Panel:
+func _ensure_marker(army: Dictionary) -> Control:
 	var id: int = int(army["id"])
 	if _markers.has(id):
 		return _markers[id]
 
-	var marker := Panel.new()
-	marker.size = MARKER_SIZE
-	marker.mouse_filter = Control.MOUSE_FILTER_STOP
-	marker.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var marker := ArmyMarker.new()
+	marker.setup()
 	marker.gui_input.connect(_on_marker_input.bind(id))
 	add_child(marker)
 	_markers[id] = marker
 	return marker
-
-
-func _marker_style(owner_id: int, selected: bool) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	var faction_color := _faction_colors[owner_id % _faction_colors.size()]
-	sb.bg_color = Color(faction_color, 0.95 if selected else 0.85)
-	sb.set_border_width_all(3 if selected else 2)
-	sb.border_color = Color.WHITE if selected else Color.BLACK
-	# Round it right off into a disc, so armies never read as city squares.
-	var radius := int(MARKER_SIZE.x / 2.0)
-	sb.corner_radius_top_left = radius
-	sb.corner_radius_top_right = radius
-	sb.corner_radius_bottom_left = radius
-	sb.corner_radius_bottom_right = radius
-	return sb
 
 
 ## Rebuilds the pieces from a state snapshot: creates any new marker, restyles
@@ -126,10 +116,9 @@ func sync(state: Dictionary) -> void:
 	for army in state.get("armies", []):
 		var id: int = int(army["id"])
 		live[id] = true
-		var marker := _ensure_marker(army)
-		marker.add_theme_stylebox_override(
-			"panel", _marker_style(int(army["owner"]), id == _selected_id)
-		)
+		var marker: ArmyMarker = _ensure_marker(army)
+		marker.set_faction_color(_faction_colors[int(army["owner"]) % _faction_colors.size()])
+		marker.set_selected(id == _selected_id)
 		marker.tooltip_text = (
 			"%s\n%d / %d move points%s"
 			% [
@@ -159,7 +148,7 @@ func _remove_marker(id: int) -> void:
 			tween.kill()
 		_tweens.erase(id)
 	if _markers.has(id):
-		var marker: Panel = _markers[id]
+		var marker: ArmyMarker = _markers[id]
 		marker.queue_free()
 		_markers.erase(id)
 	_ground.erase(id)
@@ -169,9 +158,11 @@ func _remove_marker(id: int) -> void:
 ## Called on any camera change, and every frame while a piece is animating.
 func project() -> void:
 	for id: int in _markers.keys():
-		var marker: Panel = _markers[id]
+		var marker: ArmyMarker = _markers[id]
 		marker.visible = true
-		marker.position = _world_to_screen.call(_ground[id]) - marker.size / 2.0
+		marker.position = (
+			_world_to_screen.call(_ground[id]) + DRAW_OFFSET - marker.anchor_offset()
+		)
 	_project_range_ring()
 
 
