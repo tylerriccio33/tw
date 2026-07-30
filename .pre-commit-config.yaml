@@ -77,3 +77,10 @@ repos:
         language: system
         files: ^rust/campaign/.*\.rs$
         pass_filenames: false
+
+      - id: gut-test
+        name: gut test (campaign GDScript)
+        entry: make gut-test
+        language: system
+        files: ^(campaign|tests)/.*\.gd$
+        pass_filenames: false

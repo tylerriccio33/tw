@@ -1,0 +1,4 @@
+[
+ {"key": "red", "name": "Red", "color": "#cd5c5c", "money": 100},
+ {"key": "blue", "name": "Blue", "color": "#6495ed", "money": 100}
+]

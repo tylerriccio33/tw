@@ -1,0 +1,17 @@
+{
+ "provinces": [
+  {
+   "id": 1,
+   "rings": [
+    {"points": [0, 0, 10, 0, 10, 10, 0, 10], "hole": false}
+   ]
+  },
+  {
+   "id": 2,
+   "rings": [
+    {"points": [10, 0, 20, 0, 20, 10, 10, 10], "hole": false},
+    {"points": [12, 2, 14, 2, 14, 4, 12, 4], "hole": true}
+   ]
+  }
+ ]
+}

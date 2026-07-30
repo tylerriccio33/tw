@@ -1,6 +1,6 @@
 GODOT ?= godot
 
-.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-preview map-package-init map-package-check promote-map
+.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-preview map-package-init map-package-check promote-map gut gut-test
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -29,6 +29,8 @@ help:
 	@echo "make map-package-init - create a fresh map package from a backdrop (SEED=N for placeholder provinces)"
 	@echo "make map-package-check - validate the dev map package without exporting"
 	@echo "make promote-map   - copy the dev map package (tools/map_editor/dev_map_data) into campaign/map_data for the game to use"
+	@echo "make gut           - vendor the GUT addon (GDScript unit testing) into addons/gut/"
+	@echo "make gut-test      - run the GDScript unit tests under tests/unit/ with GUT"
 
 armies:
 	@uv run tools/fetch_armies.py
@@ -66,6 +68,17 @@ campaign-test:
 
 campaign-smoke:
 	GODOT=$(GODOT) ./tools/godot_gate.sh --headless --script res://tools/campaign_smoke.gd
+
+# Vendors GUT (https://github.com/bitwes/Gut) into addons/gut/, the same way
+# `make armies` vendors the knight model. addons/gut/ is gitignored, so a
+# fresh clone needs this once before gut-test works.
+gut:
+	@uv run tools/fetch_gut.py
+
+# Runs the GDScript unit tests under tests/unit/ headless, per .gutconfig.json.
+# Exits nonzero on any failure, so it's CI-able like campaign-smoke.
+gut-test: gut
+	GODOT=$(GODOT) ./tools/godot_gate.sh --headless -s res://addons/gut/gut_cmdln.gd -gexit
 
 play: campaign
 	$(GODOT) res://campaign/campaign.tscn --resolution $(or $(RESOLUTION),1280x800)

@@ -11,6 +11,13 @@
 # Vendored Quaternius CC0 knight model - run `make armies`
 /assets/armies/
 
+# Vendored GUT (GDScript unit-testing addon) - run `make gut`
+/addons/gut/
+
+# Download cache for the vendoring scripts (fetch_armies.py, fetch_gut.py) -
+# large, re-fetchable, not meant to be committed.
+/tools/vendor_cache/
+
 # Python
 **/__pycache__/
 *.pyc
