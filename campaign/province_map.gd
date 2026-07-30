@@ -43,18 +43,6 @@ const FACTION_BORDER_COLOR := Color(0.04, 0.03, 0.02, 0.92)
 ## Growing each province by more than the seam is wide closes it.
 const FACTION_BORDER_GROW := 2.5
 
-## Region names, styled after the engraved labels on a period map: small,
-## letter-spaced, upper case. Drawn at a large font size and scaled down so
-## they stay crisp when the camera zooms in.
-const LABEL_FONT := preload("res://assets/fonts/Baloo2-SemiBold.ttf")
-const LABEL_FONT_SIZE := 64
-const LABEL_HEIGHT_PX := 17.0  # in map pixels, once scaled
-const LABEL_COLOR := Color(0.99, 0.97, 0.92, 0.72)
-const LABEL_OUTLINE_COLOR := Color(0.06, 0.05, 0.04, 0.85)
-const LABEL_OUTLINE_SIZE := 14
-## How far, in map pixels, a name is lifted off a capital sitting under it.
-const LABEL_CITY_CLEARANCE := 42.0
-
 const WATER_SHADER := preload("res://campaign/water.gdshader")
 const COASTLINE_KEY_SHADER := preload("res://campaign/coastline_key.gdshader")
 
@@ -92,7 +80,6 @@ func setup() -> bool:
 	_add_painted_layers()
 	_add_provinces()
 	_add_faction_borders()
-	_add_province_labels()
 	return true
 
 
@@ -239,65 +226,6 @@ func _add_faction_borders() -> void:
 	_faction_borders_root = Node2D.new()
 	_faction_borders_root.name = "FactionBorders"
 	add_child(_faction_borders_root)
-
-
-func _add_province_labels() -> void:
-	var labels_root := Node2D.new()
-	labels_root.name = "ProvinceLabels"
-	add_child(labels_root)
-
-	for province in package.provinces:
-		var province_id := int(province["id"])
-		var name_text: String = province.get("name", "")
-		if name_text == "":
-			continue
-
-		var label := Label.new()
-		# Letter-spaced caps. A Label has no tracking of its own, and a space
-		# between glyphs is what gives these the engraved look the region
-		# names on a period map have.
-		label.text = " ".join(name_text.to_upper().split(""))
-		label.add_theme_font_override("font", LABEL_FONT)
-		label.add_theme_font_size_override("font_size", LABEL_FONT_SIZE)
-		label.add_theme_color_override("font_color", LABEL_COLOR)
-		# Names sit over whatever province color they land on, so they carry
-		# their own dark outline rather than relying on contrast.
-		label.add_theme_constant_override("outline_size", LABEL_OUTLINE_SIZE)
-		label.add_theme_color_override("font_outline_color", LABEL_OUTLINE_COLOR)
-		# Drawn at a large font size and scaled down, so the text stays crisp
-		# as the camera zooms in rather than being resampled up from a small
-		# glyph cache.
-		var shrink := LABEL_HEIGHT_PX / float(LABEL_FONT_SIZE)
-		label.scale = Vector2.ONE * shrink
-		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		# A Control positions from its top-left corner, so centre it on the
-		# anchor by hand - its own size is only known once the font is set.
-		label.position = (
-			_label_anchor(province_id, province) - label.get_minimum_size() * shrink / 2.0
-		)
-		labels_root.add_child(label)
-
-
-## Where a province's name goes. The area centroid reads best, but for a
-## crescent or an archipelago it can fall in open water - so fall back to the
-## authored city point, which is inside its province by construction.
-##
-## Both tend to land in the middle of a province, and so does its capital, so
-## the name gets lifted clear of the city marker when the two coincide.
-func _label_anchor(province_id: int, province: Dictionary) -> Vector2:
-	var point: Vector2 = city_positions.get(province_id, Vector2.ZERO)
-	var centroid: Array = province.get("centroid", [])
-	if centroid.size() == 2:
-		var candidate := Vector2(centroid[0], centroid[1])
-		for ring in _outer_rings.get(province_id, []):
-			if Geometry2D.is_point_in_polygon(candidate, ring):
-				point = candidate
-				break
-
-	var city: Vector2 = city_positions.get(province_id, point)
-	if point.distance_to(city) < LABEL_CITY_CLEARANCE:
-		point.y -= LABEL_CITY_CLEARANCE
-	return point
 
 
 func _ring_to_polygon(ring: Dictionary) -> PackedVector2Array:

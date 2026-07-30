@@ -38,12 +38,12 @@ repos:
         files: \.py$
         pass_filenames: false
 
-      # - id: map-editor-tests
-      #   name: map-editor tests (pytest)
-      #   entry: bash -c 'cd tools/map_editor && uv run --group dev pytest -q'
-      #   language: system
-      #   files: ^tools/map_editor/.*\.py$
-      #   pass_filenames: false
+      - id: map-editor-tests
+        name: map-editor tests (pytest)
+        entry: bash -c 'cd tools/map_editor && uv run pytest -q'
+        language: system
+        files: ^tools/map_editor/.*\.py$
+        pass_filenames: false
 
       - id: gdformat
         name: gdformat

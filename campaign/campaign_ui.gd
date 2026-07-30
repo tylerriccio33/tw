@@ -28,11 +28,15 @@ var _base_ppu: float = 1.0
 const PAN_SPEED := 0.6  # fraction of map_extent per second, at zoom 1.0
 const ZOOM_STEP := 0.1  # per scroll-wheel notch
 const ZOOM_KEY_SPEED := 1.2  # zoom units/sec while Z/X is held
-# _base_ppu is a cover-fit (map exactly fills the frame at zoom 1.0), so
-# zooming out below that would reveal empty background past the map's edges -
-# 1.0 is as far out as the camera goes.
-const MIN_ZOOM := 1.0
-const MAX_ZOOM := 2.2
+# pixels_per_unit is _base_ppu / _cam_zoom, so _cam_zoom is an *inverse* zoom
+# factor - lower means more magnified. _base_ppu is a cover-fit (map exactly
+# fills the frame when _cam_zoom is 1.0), so 1.0 is as far as _cam_zoom can
+# rise: going past it shrinks pixels_per_unit below the cover-fit ratio and
+# reveals empty background past the map's edges (X, or scroll-down, raises
+# _cam_zoom - "zooming out" was doing exactly that before this was fixed).
+# The lower bound is how far in Z/scroll-up can magnify.
+const MIN_ZOOM := 1.0 / 2.2
+const MAX_ZOOM := 1.0
 
 # Faction colors are declared by the map package (factions.json) and read in
 # _ready(), so the palette lives with the scenario rather than in this script.
@@ -235,15 +239,42 @@ func _ready() -> void:
 ## anchors against. Must be re-run whenever that rect actually changes (see
 ## the size_changed wiring in _ready()), since --resolution/window resizes
 ## don't take effect inside the same frame that requests them.
+##
+## _cam_focus is clamped here (rather than only where it's set/panned) so
+## every source of change - initial framing on the cities' midpoint, WASD
+## pan, and zoom itself changing how much world the viewport covers - funnels
+## through one place. Without it, an off-centre starting focus or a pan/zoom
+## near a corner can push the map's edge inside the viewport and expose the
+## empty grey background past it, even though MIN_ZOOM=1.0 is meant to be as
+## far out as the camera goes.
 func _update_camera_transform() -> void:
 	var viewport_size := get_viewport_rect().size
 	_base_ppu = maxf(
 		viewport_size.x / (2.0 * _map_half_size.x), viewport_size.y / (2.0 * _map_half_size.y)
 	)
 	var pixels_per_unit := _base_ppu / _cam_zoom
+	_cam_focus = _clamp_cam_focus(_cam_focus, _map_half_size, viewport_size, pixels_per_unit)
 	var viewport_center := viewport_size / 2.0
 	world_layer.position = viewport_center - _cam_focus * pixels_per_unit
 	world_layer.scale = Vector2.ONE * pixels_per_unit
+
+
+## Clamps a camera focus so the map's edge never falls short of the
+## viewport's edge on either axis. Pure geometry (no node state) so it can be
+## tested directly: half of the viewport, in world units at the given
+## pixels_per_unit, is how far off-centre the focus can sit before that axis's
+## near edge of the map would clear the viewport.
+static func _clamp_cam_focus(
+	focus: Vector2, map_half_size: Vector2, viewport_size: Vector2, pixels_per_unit: float
+) -> Vector2:
+	var half_viewport_world := (viewport_size / 2.0) / pixels_per_unit
+	var max_focus := Vector2(
+		maxf(map_half_size.x - half_viewport_world.x, 0.0),
+		maxf(map_half_size.y - half_viewport_world.y, 0.0)
+	)
+	return Vector2(
+		clampf(focus.x, -max_focus.x, max_focus.x), clampf(focus.y, -max_focus.y, max_focus.y)
+	)
 
 
 func _on_viewport_resized() -> void:
@@ -278,9 +309,9 @@ func _process(delta: float) -> void:
 
 	if move != Vector2.ZERO:
 		move = move.normalized()
-		_cam_focus = (_cam_focus + move * PAN_SPEED * _map_extent * _cam_zoom * delta).limit_length(
-			_map_extent
-		)
+		# Precisely clamped in _update_camera_transform below, which knows the
+		# current viewport/zoom; this only needs to move the focus, not bound it.
+		_cam_focus += move * PAN_SPEED * _map_extent * _cam_zoom * delta
 		changed = true
 
 	# Z zooms in, X zooms out - mirrors the scroll wheel but held-key smooth.
@@ -380,17 +411,32 @@ func _on_region_clicked(province_id: int) -> void:
 
 
 ## The province table as the simulation wants it: same rows the map package
-## shipped, but with centroids converted from map pixels into world units so
-## Rust never has to know what a pixel is.
+## shipped, but with centroid AND city_position converted from map pixels into
+## world units so Rust never has to know what a pixel is. Missing either
+## conversion leaves that field in raw map-pixel space (tens to hundreds of
+## units) next to a world space that spans +-tens of thousands of units - Rust
+## would then site whatever reads that field within a few pixels of world
+## origin instead of on the actual settlement, which is how starting armies
+## for every faction ended up stacked on top of each other near the map's
+## centre instead of at their own capitals.
 func _world_space_province_table(half_size: Vector2) -> Array:
 	var rows: Array = []
 	for province in _province_map.package.provinces:
 		var row: Dictionary = province.duplicate(true)
 		var centroid: Array = province.get("centroid", [0, 0])
-		var world := Vector2(centroid[0], centroid[1]) * MAP_SCALE - half_size
-		row["centroid"] = [world.x, world.y]
+		row["centroid"] = _pixel_array_to_world(centroid, half_size)
+		if province.has("city_position"):
+			row["city_position"] = _pixel_array_to_world(province["city_position"], half_size)
 		rows.append(row)
 	return rows
+
+
+## Converts a `[x, y]` map-pixel pair (as provinces.table.json stores centroid/
+## city_position) into a `[x, y]` world-unit pair, per this script's
+## MAP_SCALE/half_size convention.
+func _pixel_array_to_world(pixel: Array, half_size: Vector2) -> Array:
+	var world := Vector2(pixel[0], pixel[1]) * MAP_SCALE - half_size
+	return [world.x, world.y]
 
 
 func _refresh() -> void:
