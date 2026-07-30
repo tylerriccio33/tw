@@ -3,19 +3,15 @@
  "provinces": [
   {
    "id": 1,
-   "key": "province_1",
-   "name": "Province 1",
+   "key": "england",
+   "name": "England",
    "centroid": [
-    582.77,
-    407.72
+    968.77,
+    1411.69
    ],
-   "area_px": 39359,
+   "area_px": 291518,
    "neighbors": [
-    7,
-    8,
-    9,
-    10,
-    12
+    2
    ],
    "tags": {
     "terrain": "plains",
@@ -26,15 +22,15 @@
   },
   {
    "id": 2,
-   "key": "province_2",
-   "name": "Province 2",
+   "key": "scotland",
+   "name": "Scotland",
    "centroid": [
-    74.9,
-    651.93
+    874.35,
+    688.05
    ],
-   "area_px": 3529,
+   "area_px": 126920,
    "neighbors": [
-    5
+    1
    ],
    "tags": {
     "terrain": "plains",
@@ -45,13 +41,13 @@
   },
   {
    "id": 3,
-   "key": "province_3",
-   "name": "Province 3",
+   "key": "ireland",
+   "name": "Ireland",
    "centroid": [
-    58.02,
-    87.59
+    365.65,
+    1134.54
    ],
-   "area_px": 840,
+   "area_px": 156262,
    "neighbors": [],
    "tags": {
     "terrain": "plains",
@@ -59,192 +55,6 @@
    },
    "starting_owner": "green",
    "display_color": "#911eb4"
-  },
-  {
-   "id": 4,
-   "key": "province_4",
-   "name": "Province 4",
-   "centroid": [
-    796.84,
-    88.26
-   ],
-   "area_px": 9060,
-   "neighbors": [
-    9
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "yellow",
-   "display_color": "#46f0f0"
-  },
-  {
-   "id": 5,
-   "key": "province_5",
-   "name": "Province 5",
-   "centroid": [
-    183.73,
-    534.34
-   ],
-   "area_px": 28423,
-   "neighbors": [
-    2,
-    12
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "red",
-   "display_color": "#bfef45"
-  },
-  {
-   "id": 6,
-   "key": "province_6",
-   "name": "Province 6",
-   "centroid": [
-    877.28,
-    322.21
-   ],
-   "area_px": 14188,
-   "neighbors": [
-    9,
-    10
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "blue",
-   "display_color": "#fabed4"
-  },
-  {
-   "id": 7,
-   "key": "province_7",
-   "name": "Province 7",
-   "centroid": [
-    543.03,
-    612.55
-   ],
-   "area_px": 13434,
-   "neighbors": [
-    1,
-    10,
-    12
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "green",
-   "display_color": "#469990"
-  },
-  {
-   "id": 8,
-   "key": "province_8",
-   "name": "Province 8",
-   "centroid": [
-    544.09,
-    140.56
-   ],
-   "area_px": 15823,
-   "neighbors": [
-    1,
-    9,
-    11
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "yellow",
-   "display_color": "#dcbeff"
-  },
-  {
-   "id": 9,
-   "key": "province_9",
-   "name": "Province 9",
-   "centroid": [
-    744.95,
-    240.59
-   ],
-   "area_px": 49549,
-   "neighbors": [
-    1,
-    4,
-    6,
-    8,
-    10
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "red",
-   "display_color": "#9a6324"
-  },
-  {
-   "id": 10,
-   "key": "province_10",
-   "name": "Province 10",
-   "centroid": [
-    746.13,
-    456.81
-   ],
-   "area_px": 28676,
-   "neighbors": [
-    1,
-    6,
-    7,
-    9
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "blue",
-   "display_color": "#808000"
-  },
-  {
-   "id": 11,
-   "key": "province_11",
-   "name": "Province 11",
-   "centroid": [
-    422.42,
-    235.42
-   ],
-   "area_px": 8126,
-   "neighbors": [
-    8
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "green",
-   "display_color": "#ffd8b1"
-  },
-  {
-   "id": 12,
-   "key": "province_12",
-   "name": "Province 12",
-   "centroid": [
-    403.56,
-    499.11
-   ],
-   "area_px": 38166,
-   "neighbors": [
-    1,
-    5,
-    7
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "yellow",
-   "display_color": "#000075"
   }
  ]
 }
