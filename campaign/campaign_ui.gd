@@ -7,6 +7,7 @@ extends Node2D
 ## unchanged from before this script also owned world/camera setup.
 
 const ArmyLayer := preload("res://campaign/army_layer.gd")
+const HudBuilder := preload("res://campaign/campaign_hud_builder.gd")
 const ProvinceMap := preload("res://campaign/province_map.gd")
 const CityMarker := preload("res://campaign/city_marker.gd")
 const MAX_TURNS := 10
@@ -71,6 +72,7 @@ const FONT_BOLD := preload("res://assets/fonts/Baloo2-Bold.ttf")
 @onready var target_option: OptionButton = $UI/Controls/TargetOption
 @onready var attack_button: Button = $UI/Controls/AttackButton
 @onready var bottom_banner: Control = $UI/BottomBanner
+@onready var _top_bar: Control = $UI/TopBar
 @onready var cities_root: Control = $CityMarkers
 
 var end_turn_button: Button
@@ -122,6 +124,24 @@ const BUILDINGS := [
 ]
 const LOCKED_BUILDINGS := ["Castle", "Castle", "City"]
 
+# Top-bar resource cluster (money/deficit/food/season/year): render-only
+# placeholders, [icon glyph, label, display value] - not wired to any real
+# economy state yet.
+const TOP_BAR_STATS := [
+	["🪙", "Treasury", "10,000"],
+	["📉", "Deficit", "-250"],
+	["🌾", "Food", "+4.0K"],
+	["☀", "Season", "Summer"],
+	["📅", "Year", "395 AD"],
+]
+const TOP_BAR_PLACEHOLDER_ICON_COUNT := 3
+
+# Top-bar widgets refreshed alongside the bottom banner.
+var _top_bar_stat_value_labels: Dictionary = {}
+var settlements_button: Button
+var armies_button: Button
+var wiki_button: Button
+
 
 func _fail_to_start(message: String) -> void:
 	printerr("error: ", message)
@@ -143,7 +163,19 @@ func _ready() -> void:
 	get_window().content_scale_size = Vector2i(1280, 800)
 	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 
-	_build_bottom_banner()
+	# UI/BottomBanner/TopBar are full-rect-anchored Controls sitting directly
+	# under this Node2D (not under another Control), so Godot only recomputes
+	# their anchor-derived size on a viewport *resize* notification. The
+	# viewport is already at its final size before this scene's first frame
+	# (--resolution / content_scale_size are both set before load), so that
+	# notification never fires and every anchored Control here is stuck at
+	# size (0, 0) forever - the whole bottom banner and top bar render
+	# shrunk into a sliver pinned at the top-left instead of covering the
+	# screen. Priming size explicitly once (mirrored in
+	# _on_viewport_resized for real resizes) fixes that.
+	_sync_ui_root_size()
+	HudBuilder.build_top_bar(self)
+	HudBuilder.build_bottom_banner(self)
 
 	_province_map = ProvinceMap.new()
 	_province_map.name = "ProvinceMap"
@@ -278,8 +310,24 @@ static func _clamp_cam_focus(
 
 
 func _on_viewport_resized() -> void:
+	_sync_ui_root_size()
 	_update_camera_transform()
 	_project_markers()
+
+
+## See the comment in _ready() above: full-rect anchored Controls whose
+## parent isn't itself a Control never pick up an anchor-driven resize on
+## their own here, so this pokes their `size` directly to the current
+## viewport rect. Anchors still do the proportional work for every child
+## underneath - this just keeps the *root* Controls themselves from being
+## stuck at (0, 0).
+func _sync_ui_root_size() -> void:
+	var viewport_size := get_viewport_rect().size
+	$UI.set_deferred("size", viewport_size)
+	bottom_banner.set_deferred("size", viewport_size)
+	if _top_bar != null:
+		_top_bar.set_deferred("size", viewport_size)
+	cities_root.set_deferred("size", viewport_size)
 
 
 ## World-space point for a screen pixel, from world_layer's current
@@ -567,333 +615,6 @@ func _run_ai_factions() -> void:
 	_refresh()
 
 
-## ---------------------------------------------------------------------------
-## Bottom banner: a Total War-style HUD strip (city info panel, buildings
-## row, end-turn ribbon) built once here and then just refreshed with new
-## label text/colors on every turn/battle event. Positions are anchor
-## fractions of the full viewport, measured off a reference screenshot, so
-## the banner keeps its on-screen proportions across window sizes.
-## ---------------------------------------------------------------------------
-
-
-func _style_box(
-	bg: Color, border_color: Color = Color.TRANSPARENT, border_w: int = 0
-) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	if border_w > 0:
-		sb.set_border_width_all(border_w)
-		sb.border_color = border_color
-	return sb
-
-
-func _set_font(control: Control, font: Font, size: int = -1) -> void:
-	control.add_theme_font_override("font", font)
-	if size > 0:
-		control.add_theme_font_size_override("font_size", size)
-
-
-func _anchor_rect(control: Control, left: float, top: float, right: float, bottom: float) -> void:
-	control.anchor_left = left
-	control.anchor_top = top
-	control.anchor_right = right
-	control.anchor_bottom = bottom
-	control.offset_left = 0
-	control.offset_top = 0
-	control.offset_right = 0
-	control.offset_bottom = 0
-
-
-func _build_bottom_banner() -> void:
-	bottom_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_build_city_panel()
-	_build_buildings_panel()
-	_build_end_turn_banner()
-
-
-func _build_city_panel() -> void:
-	var panel := Control.new()
-	panel.name = "CityPanel"
-	_anchor_rect(panel, 0.017, 0.617, 0.187, 0.99)
-	bottom_banner.add_child(panel)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 0)
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.add_child(vbox)
-
-	# Header: navy bar with the city name and a faction-colored tab.
-	var header := PanelContainer.new()
-	header.add_theme_stylebox_override("panel", _style_box(HUD_BLUE))
-	header.custom_minimum_size = Vector2(0, 40)
-	vbox.add_child(header)
-
-	var header_row := HBoxContainer.new()
-	header_row.add_theme_constant_override("separation", 8)
-	header.add_child(header_row)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 10)
-	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header_row.add_child(margin)
-
-	_city_panel_name_label = Label.new()
-	_city_panel_name_label.text = "Burgos"
-	_set_font(_city_panel_name_label, FONT_BOLD, 20)
-	_city_panel_name_label.add_theme_color_override("font_color", Color.WHITE)
-	_city_panel_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	margin.add_child(_city_panel_name_label)
-
-	_city_panel_owner_tab = ColorRect.new()
-	_city_panel_owner_tab.custom_minimum_size = Vector2(36, 40)
-	_city_panel_owner_tab.color = Color.INDIAN_RED
-	header_row.add_child(_city_panel_owner_tab)
-
-	# Body: parchment background holding the governor row and stat list.
-	var body := PanelContainer.new()
-	body.add_theme_stylebox_override("panel", _style_box(HUD_CREAM))
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(body)
-
-	var body_margin := MarginContainer.new()
-	for side in ["left", "top", "right", "bottom"]:
-		body_margin.add_theme_constant_override("margin_%s" % side, 10)
-	body.add_child(body_margin)
-
-	var body_vbox := VBoxContainer.new()
-	body_vbox.add_theme_constant_override("separation", 6)
-	body_margin.add_child(body_vbox)
-
-	var gov_row := HBoxContainer.new()
-	gov_row.add_theme_constant_override("separation", 10)
-	gov_row.custom_minimum_size = Vector2(0, 60)
-	body_vbox.add_child(gov_row)
-
-	var gov_button := PanelContainer.new()
-	gov_button.add_theme_stylebox_override("panel", _style_box(Color(0.6, 0.6, 0.58)))
-	gov_button.custom_minimum_size = Vector2(60, 60)
-	gov_row.add_child(gov_button)
-
-	var gov_label := Label.new()
-	gov_label.text = "Gov..."
-	_set_font(gov_label, FONT_MEDIUM, 13)
-	gov_label.add_theme_color_override("font_color", Color(0.2, 0.2, 0.2))
-	gov_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	gov_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	gov_button.add_child(gov_label)
-
-	var perk_label := Label.new()
-	perk_label.text = "Perk pts   0"
-	_city_panel_perk_label = perk_label
-	_set_font(perk_label, FONT_SEMIBOLD, 15)
-	perk_label.add_theme_color_override("font_color", Color(0.2, 0.2, 0.2))
-	perk_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	perk_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	gov_row.add_child(perk_label)
-
-	var menu_pill := PanelContainer.new()
-	var pill_sb := _style_box(HUD_BLUE)
-	pill_sb.corner_radius_top_left = 14
-	pill_sb.corner_radius_top_right = 14
-	pill_sb.corner_radius_bottom_left = 14
-	pill_sb.corner_radius_bottom_right = 14
-	menu_pill.add_theme_stylebox_override("panel", pill_sb)
-	menu_pill.custom_minimum_size = Vector2(36, 28)
-	var menu_label := Label.new()
-	menu_label.text = "☰"
-	menu_label.add_theme_color_override("font_color", Color.WHITE)
-	menu_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	menu_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	menu_pill.add_child(menu_label)
-	gov_row.add_child(menu_pill)
-
-	var stats_list := VBoxContainer.new()
-	stats_list.add_theme_constant_override("separation", 4)
-	body_vbox.add_child(stats_list)
-
-	for i in STAT_ROWS.size():
-		var row_def: Array = STAT_ROWS[i]
-		# A visual gap before "Region wea..." matches the reference, which
-		# groups income-adjacent stats apart from the population stats above.
-		if row_def[0] == "region_wealth":
-			var spacer := Control.new()
-			spacer.custom_minimum_size = Vector2(0, 10)
-			stats_list.add_child(spacer)
-		stats_list.add_child(_make_stat_row(row_def[0], row_def[1], row_def[2]))
-
-
-func _make_stat_row(key: String, label_text: String, icon: String) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-
-	var icon_label := Label.new()
-	icon_label.text = icon
-	icon_label.add_theme_color_override("font_color", HUD_BLUE)
-	icon_label.custom_minimum_size = Vector2(20, 0)
-	row.add_child(icon_label)
-
-	var name_label := Label.new()
-	name_label.text = label_text
-	_set_font(name_label, FONT_MEDIUM)
-	name_label.add_theme_color_override("font_color", Color(0.25, 0.25, 0.25))
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(name_label)
-
-	var value_label := Label.new()
-	value_label.text = "0"
-	value_label.add_theme_color_override("font_color", Color(0.05, 0.05, 0.05))
-	_set_font(value_label, FONT_BOLD, 15)
-	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	row.add_child(value_label)
-	_city_stat_value_labels[key] = value_label
-
-	return row
-
-
-func _build_buildings_panel() -> void:
-	var panel := Control.new()
-	panel.name = "BuildingsPanel"
-	_anchor_rect(panel, 0.19, 0.824, 0.762, 0.99)
-	bottom_banner.add_child(panel)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 0)
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.add_child(vbox)
-
-	var tabs_row := HBoxContainer.new()
-	tabs_row.add_theme_constant_override("separation", 2)
-	tabs_row.custom_minimum_size = Vector2(0, 34)
-	vbox.add_child(tabs_row)
-	tabs_row.add_child(_make_tab_button("Buildings", true))
-	tabs_row.add_child(_make_tab_button("Characters", false))
-	tabs_row.add_child(_make_tab_button("Military", false))
-
-	var cards_row := PanelContainer.new()
-	cards_row.add_theme_stylebox_override("panel", _style_box(HUD_CREAM))
-	cards_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(cards_row)
-
-	var cards_margin := MarginContainer.new()
-	for side in ["left", "top", "right", "bottom"]:
-		cards_margin.add_theme_constant_override("margin_%s" % side, 4)
-	cards_row.add_child(cards_margin)
-
-	var cards_hbox := HBoxContainer.new()
-	cards_hbox.add_theme_constant_override("separation", 4)
-	cards_margin.add_child(cards_hbox)
-
-	for b in BUILDINGS:
-		cards_hbox.add_child(_make_building_card(b["name"], b["level"], false))
-	for name in LOCKED_BUILDINGS:
-		cards_hbox.add_child(_make_building_card(name, -1, true))
-
-	var red_strip := PanelContainer.new()
-	red_strip.add_theme_stylebox_override("panel", _style_box(HUD_MAROON))
-	red_strip.custom_minimum_size = Vector2(56, 0)
-	cards_hbox.add_child(red_strip)
-
-	var red_vbox := VBoxContainer.new()
-	red_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	red_vbox.add_theme_constant_override("separation", 8)
-	red_vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	red_strip.add_child(red_vbox)
-	for glyph in ["🏰", "⛵"]:
-		var icon_circle := PanelContainer.new()
-		var circle_sb := _style_box(Color(0.15, 0.15, 0.15))
-		circle_sb.corner_radius_top_left = 18
-		circle_sb.corner_radius_top_right = 18
-		circle_sb.corner_radius_bottom_left = 18
-		circle_sb.corner_radius_bottom_right = 18
-		icon_circle.add_theme_stylebox_override("panel", circle_sb)
-		icon_circle.custom_minimum_size = Vector2(36, 36)
-		var glyph_label := Label.new()
-		glyph_label.text = glyph
-		glyph_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		glyph_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		glyph_label.add_theme_color_override("font_color", Color.WHITE)
-		icon_circle.add_child(glyph_label)
-		red_vbox.add_child(icon_circle)
-
-
-func _make_tab_button(text: String, active: bool) -> PanelContainer:
-	var tab := PanelContainer.new()
-	tab.add_theme_stylebox_override("panel", _style_box(HUD_BLUE if active else HUD_BLUE_DARK))
-	var margin := MarginContainer.new()
-	for side in ["left", "right"]:
-		margin.add_theme_constant_override("margin_%s" % side, 14)
-	tab.add_child(margin)
-	var label := Label.new()
-	label.text = text
-	_set_font(label, FONT_SEMIBOLD)
-	label.add_theme_color_override("font_color", Color.WHITE)
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	margin.add_child(label)
-	return tab
-
-
-func _make_building_card(name: String, level: int, locked: bool) -> VBoxContainer:
-	var card := VBoxContainer.new()
-	card.add_theme_constant_override("separation", 2)
-	card.custom_minimum_size = Vector2(84, 0)
-
-	var image_panel := PanelContainer.new()
-	image_panel.add_theme_stylebox_override(
-		"panel", _style_box(Color(0.7, 0.7, 0.7) if locked else Color.WHITE, Color.BLACK, 1)
-	)
-	image_panel.custom_minimum_size = Vector2(0, 70)
-	card.add_child(image_panel)
-
-	if not locked:
-		var level_label := Label.new()
-		level_label.text = "Lv.%d" % level
-		_set_font(level_label, FONT_BOLD, 13)
-		level_label.add_theme_color_override("font_color", Color.BLACK)
-		image_panel.add_child(level_label)
-	elif name == "Mine":
-		var q_label := Label.new()
-		q_label.text = "?"
-		_set_font(q_label, FONT_BOLD, 28)
-		q_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		q_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		q_label.add_theme_color_override("font_color", Color(0.1, 0.1, 0.1))
-		image_panel.add_child(q_label)
-
-	var caption := Label.new()
-	caption.text = name
-	_set_font(caption, FONT_SEMIBOLD)
-	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	caption.add_theme_color_override("font_color", Color(0.15, 0.15, 0.15))
-	card.add_child(caption)
-
-	return card
-
-
-func _build_end_turn_banner() -> void:
-	end_turn_button = Button.new()
-	end_turn_button.name = "EndTurnButton"
-	_anchor_rect(end_turn_button, 0.89, 0.87, 0.965, 0.93)
-	end_turn_button.text = "END TURN 1"
-	end_turn_button.add_theme_color_override("font_color", Color.WHITE)
-	_set_font(end_turn_button, FONT_BOLD, 16)
-	var sb := _style_box(Color(0.55, 0.13, 0.05), Color(0.85, 0.45, 0.1), 2)
-	end_turn_button.add_theme_stylebox_override("normal", sb)
-	end_turn_button.add_theme_stylebox_override(
-		"hover", _style_box(Color(0.65, 0.18, 0.07), Color(0.85, 0.45, 0.1), 2)
-	)
-	end_turn_button.add_theme_stylebox_override(
-		"pressed", _style_box(Color(0.45, 0.1, 0.04), Color(0.85, 0.45, 0.1), 2)
-	)
-	bottom_banner.add_child(end_turn_button)
-	end_turn_button.pressed.connect(_on_end_turn_pressed)
-
-
-func _format_stat(n: int) -> String:
-	if n >= 1000:
-		return "%.1fK" % (n / 1000.0)
-	return str(n)
-
-
 ## Picks which city's data the banner shows: the first city owned by whoever
 ## is acting this turn, falling back to city 0 if that faction somehow holds
 ## none (shouldn't happen - a faction with no cities is eliminated).
@@ -922,7 +643,7 @@ func _refresh_bottom_banner(state: Dictionary) -> void:
 	for row_def in STAT_ROWS:
 		var key: String = row_def[0]
 		var multiplier: int = row_def[3]
-		_city_stat_value_labels[key].text = _format_stat(income * multiplier)
+		_city_stat_value_labels[key].text = HudBuilder.format_stat(income * multiplier)
 
 	end_turn_button.text = "END TURN %d" % int(state["turn"])
 	end_turn_button.disabled = bool(state["game_over"]) or _ai_running

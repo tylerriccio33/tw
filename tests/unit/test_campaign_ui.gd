@@ -6,6 +6,7 @@ extends GutTest
 const CampaignUI := preload("res://campaign/campaign_ui.gd")
 const MapPackage := preload("res://campaign/map_package.gd")
 const ProvinceMapStub := preload("res://tests/fixtures/province_map_stub.gd")
+const CampaignScene := preload("res://campaign/campaign.tscn")
 
 var ui: Node2D
 
@@ -124,3 +125,85 @@ func test_clamp_cam_focus_allows_panning_once_zoomed_in() -> void:
 	)
 	# half_size - half_viewport_world = (1000, 500) - (250, 125)
 	assert_eq(clamped, Vector2(750, 375))
+
+
+## ---------------------------------------------------------------------------
+## Top bar / bottom banner rendering: unlike the tests above, these load the
+## real campaign.tscn (rather than a bare CampaignUI.new()) so _ready() runs
+## end to end - the sizing bug below only shows up once UI/BottomBanner/
+## TopBar are real scene children with anchors, which a bare script instance
+## doesn't have.
+## ---------------------------------------------------------------------------
+
+
+## Regression test for a real bug: UI/BottomBanner/TopBar are full-rect
+## anchored Controls parented directly under a Node2D, not another Control.
+## Godot only recomputes an anchored Control's size on a viewport *resize*
+## notification, and the viewport is already at its final size before the
+## scene's first frame runs (content_scale_size is set synchronously in
+## _ready), so that notification never fires - every one of them was stuck
+## at size (0, 0) forever, and the whole HUD rendered shrunk into a sliver
+## pinned at the top-left instead of covering the screen. _sync_ui_root_size()
+## in campaign_ui.gd primes their size explicitly to guard against this.
+func test_hud_root_controls_fill_the_viewport_after_ready() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var viewport_size: Vector2 = instance.get_viewport_rect().size
+	var bottom_banner: Control = instance.get_node("UI/BottomBanner")
+	var top_bar: Control = instance.get_node("UI/TopBar")
+
+	assert_gt(bottom_banner.size.x, 0.0, "bottom banner width is stuck at zero")
+	assert_gt(bottom_banner.size.y, 0.0, "bottom banner height is stuck at zero")
+	assert_almost_eq(bottom_banner.size.x, viewport_size.x, 1.0)
+	assert_almost_eq(bottom_banner.size.y, viewport_size.y, 1.0)
+	assert_gt(top_bar.size.x, 0.0, "top bar width is stuck at zero")
+	assert_almost_eq(top_bar.size.x, viewport_size.x, 1.0)
+
+
+## The bottom banner (city panel/buildings tray/end-turn button) must
+## actually render in the bottom portion of the screen - it used to collapse
+## into the top-left corner because of the zero-size bug above.
+func test_bottom_banner_widgets_render_in_the_bottom_half_of_the_screen() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var viewport_size: Vector2 = instance.get_viewport_rect().size
+	var end_turn_button: Button = instance.end_turn_button
+	var city_panel: Control = instance.get_node("UI/BottomBanner/CityPanel")
+
+	assert_gt(
+		end_turn_button.position.y,
+		viewport_size.y / 2.0,
+		"end turn button should sit low on screen"
+	)
+	assert_gt(city_panel.position.y, viewport_size.y / 2.0, "city panel should sit low on screen")
+
+
+## The new Attila-style resource strip: treasury/deficit/food/season/year on
+## the left, settlements/armies/wiki buttons on the right. Render-only - no
+## behavior wired up yet.
+func test_top_bar_has_resource_stats_and_nav_buttons() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var stat_labels: Dictionary = instance._top_bar_stat_value_labels
+	for expected_stat in ["Treasury", "Deficit", "Food", "Season", "Year"]:
+		assert_true(stat_labels.has(expected_stat), "missing top bar stat: %s" % expected_stat)
+
+	assert_not_null(instance.settlements_button)
+	assert_not_null(instance.armies_button)
+	assert_not_null(instance.wiki_button)
+
+	var top_bar: Control = instance.get_node("UI/TopBar")
+	var viewport_size: Vector2 = instance.get_viewport_rect().size
+	assert_lt(
+		top_bar.get_node("Bar").size.y,
+		viewport_size.y / 4.0,
+		"top bar should be a thin strip, not a large chunk of the screen"
+	)
+	# Nav buttons belong on the right side of the bar, past its horizontal midpoint.
+	assert_gt(instance.wiki_button.global_position.x, viewport_size.x / 2.0)
