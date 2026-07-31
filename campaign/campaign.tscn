@@ -23,30 +23,6 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="LogLabel" type="RichTextLabel" parent="UI"]
-layout_mode = 0
-offset_left = 16.0
-offset_top = 156.0
-offset_right = 400.0
-offset_bottom = 396.0
-bbcode_enabled = true
-scroll_following = true
-
-[node name="Controls" type="HBoxContainer" parent="UI"]
-layout_mode = 0
-offset_left = 16.0
-offset_top = 404.0
-offset_right = 600.0
-offset_bottom = 440.0
-
-[node name="TargetOption" type="OptionButton" parent="UI/Controls"]
-custom_minimum_size = Vector2(300, 0)
-layout_mode = 2
-
-[node name="AttackButton" type="Button" parent="UI/Controls"]
-layout_mode = 2
-text = "Attack"
-
 [node name="BottomBanner" type="Control" parent="UI"]
 anchors_preset = 15
 anchor_right = 1.0

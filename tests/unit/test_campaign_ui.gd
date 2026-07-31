@@ -197,6 +197,7 @@ func test_top_bar_has_resource_stats_and_nav_buttons() -> void:
 	assert_not_null(instance.settlements_button)
 	assert_not_null(instance.armies_button)
 	assert_not_null(instance.wiki_button)
+	assert_not_null(instance.log_button)
 
 	var top_bar: Control = instance.get_node("UI/TopBar")
 	var viewport_size: Vector2 = instance.get_viewport_rect().size
@@ -207,3 +208,32 @@ func test_top_bar_has_resource_stats_and_nav_buttons() -> void:
 	)
 	# Nav buttons belong on the right side of the bar, past its horizontal midpoint.
 	assert_gt(instance.wiki_button.global_position.x, viewport_size.x / 2.0)
+	assert_gt(instance.log_button.global_position.x, viewport_size.x / 2.0)
+
+
+## The game log used to be an always-visible RichTextLabel floating over the
+## map. It now lives behind a top-bar icon: hidden until clicked, and toggled
+## shut again on a second click.
+func test_log_button_toggles_the_log_panel() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	assert_false(instance._log_panel.visible, "log panel should start hidden")
+
+	instance.log_button.pressed.emit()
+	assert_true(instance._log_panel.visible, "log panel should show after clicking the log button")
+
+	instance.log_button.pressed.emit()
+	assert_false(instance._log_panel.visible, "log panel should hide again on a second click")
+
+
+## Turn/battle messages append into the log panel's RichTextLabel, not the old
+## always-visible LogLabel node (removed from campaign.tscn).
+func test_append_log_writes_into_the_log_panel_label() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	instance.call("_append_log", "Turn 1: faction 0 begins.")
+	assert_true(instance.log_label.get_parsed_text().contains("Turn 1: faction 0 begins."))

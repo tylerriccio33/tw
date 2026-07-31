@@ -84,9 +84,36 @@ static func build_top_bar(ui: Node) -> void:
 	ui.settlements_button = _make_top_bar_button(ui, "🏘", "Settlements")
 	ui.armies_button = _make_top_bar_button(ui, "⚔", "Armies")
 	ui.wiki_button = _make_top_bar_button(ui, "📖", "Wiki")
+	ui.log_button = _make_top_bar_button(ui, "📜", "Log")
 	buttons_row.add_child(ui.settlements_button)
 	buttons_row.add_child(ui.armies_button)
 	buttons_row.add_child(ui.wiki_button)
+	buttons_row.add_child(ui.log_button)
+
+	_build_log_panel(ui)
+
+
+## Hidden by default; the log button in the top bar toggles it. Anchored under
+## the top bar's right edge so it drops down near the icon that opens it,
+## rather than the old always-on log strip that used to sit over the map.
+static func _build_log_panel(ui: Node) -> void:
+	var panel := PanelContainer.new()
+	panel.name = "LogPanel"
+	panel.visible = false
+	panel.add_theme_stylebox_override("panel", style_box(ui.HUD_BLUE_DARK, ui.HUD_BLUE, 2))
+	anchor_rect(panel, 0.6, 0.07, 0.998, 0.4)
+	ui._top_bar.add_child(panel)
+	ui._log_panel = panel
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_%s" % side, 8)
+	panel.add_child(margin)
+
+	ui.log_label = RichTextLabel.new()
+	ui.log_label.bbcode_enabled = true
+	ui.log_label.scroll_following = true
+	margin.add_child(ui.log_label)
 
 
 static func _make_top_bar_stat(

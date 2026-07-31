@@ -67,9 +67,6 @@ const FONT_BOLD := preload("res://assets/fonts/Baloo2-Bold.ttf")
 
 @onready var manager: Node = $CampaignManager
 @onready var world_layer: Node2D = $WorldLayer
-@onready var log_label: RichTextLabel = $UI/LogLabel
-@onready var target_option: OptionButton = $UI/Controls/TargetOption
-@onready var attack_button: Button = $UI/Controls/AttackButton
 @onready var bottom_banner: Control = $UI/BottomBanner
 @onready var _top_bar: Control = $UI/TopBar
 @onready var cities_root: Control = $CityMarkers
@@ -140,11 +137,13 @@ var _top_bar_stat_value_labels: Dictionary = {}
 var settlements_button: Button
 var armies_button: Button
 var wiki_button: Button
+var log_button: Button
+var log_label: RichTextLabel
+var _log_panel: Control
 
 
 func _fail_to_start(message: String) -> void:
 	printerr("error: ", message)
-	attack_button.disabled = true
 	end_turn_button.disabled = true
 
 
@@ -233,7 +232,7 @@ func _ready() -> void:
 	manager.turn_started.connect(_on_turn_started)
 	manager.battle_resolved.connect(_on_battle_resolved)
 	manager.game_over.connect(_on_game_over)
-	attack_button.pressed.connect(_on_attack_pressed)
+	log_button.pressed.connect(_on_log_button_pressed)
 
 	# Armies are clamped to the map extent, so a random AI walk can't march
 	# off the edge of the world. Must be set before the game starts.
@@ -428,15 +427,9 @@ func _ensure_city_marker(city: Dictionary) -> CityMarker:
 	return marker
 
 
-## Clicking a city marker selects it: if it belongs to another faction it's
-## picked as the attack target (mirrored into the dropdown attack_city()
-## already reads from), otherwise it's just shown in the bottom info panel.
+## Clicking a city marker selects it and shows it in the bottom info panel.
 func _on_city_marker_clicked(city_id: int) -> void:
 	_selected_city_id = city_id
-	for i in target_option.item_count:
-		if target_option.get_item_id(i) == city_id:
-			target_option.select(i)
-			break
 	_refresh_bottom_banner(manager.get_state())
 
 
@@ -448,10 +441,6 @@ func _on_region_clicked(province_id: int) -> void:
 	for city in state["cities"]:
 		if int(city.get("province", -1)) == province_id:
 			_selected_city_id = int(city["id"])
-			for i in target_option.item_count:
-				if target_option.get_item_id(i) == _selected_city_id:
-					target_option.select(i)
-					break
 			_refresh_bottom_banner(state)
 			return
 
@@ -494,11 +483,9 @@ func _refresh() -> void:
 		marker.set_faction_color(_faction_colors[int(city["owner"]) % _faction_colors.size()])
 
 	_army_layer.sync(state)
-	_rebuild_target_options(state)
 	_refresh_bottom_banner(state)
 
 	if state["game_over"]:
-		attack_button.disabled = true
 		end_turn_button.disabled = true
 		var winner_id: int = state["winner"]
 		var winner_name := "nobody"
@@ -508,22 +495,8 @@ func _refresh() -> void:
 		_append_log("[b]Game over. %s wins.[/b]" % winner_name)
 
 
-func _rebuild_target_options(state: Dictionary) -> void:
-	target_option.clear()
-	var current_faction: int = state["current_faction"]
-	for city in state["cities"]:
-		if int(city["owner"]) != current_faction:
-			target_option.add_item(
-				"%s (owned by faction %d)" % [city["name"], city["owner"]], int(city["id"])
-			)
-	attack_button.disabled = target_option.item_count == 0 or state["game_over"]
-
-
-func _on_attack_pressed() -> void:
-	if target_option.item_count == 0:
-		return
-	var target_city_id: int = target_option.get_item_id(target_option.selected)
-	manager.attack_city(target_city_id)
+func _on_log_button_pressed() -> void:
+	_log_panel.visible = not _log_panel.visible
 
 
 func _on_end_turn_pressed() -> void:
