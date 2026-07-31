@@ -67,7 +67,6 @@ const FONT_BOLD := preload("res://assets/fonts/Baloo2-Bold.ttf")
 
 @onready var manager: Node = $CampaignManager
 @onready var world_layer: Node2D = $WorldLayer
-@onready var status_label: Label = $UI/StatusLabel
 @onready var log_label: RichTextLabel = $UI/LogLabel
 @onready var target_option: OptionButton = $UI/Controls/TargetOption
 @onready var attack_button: Button = $UI/Controls/AttackButton
@@ -145,7 +144,6 @@ var wiki_button: Button
 
 func _fail_to_start(message: String) -> void:
 	printerr("error: ", message)
-	status_label.text = message
 	attack_button.disabled = true
 	end_turn_button.disabled = true
 
@@ -494,32 +492,6 @@ func _refresh() -> void:
 	for city in state["cities"]:
 		var marker: CityMarker = _ensure_city_marker(city)
 		marker.set_faction_color(_faction_colors[int(city["owner"]) % _faction_colors.size()])
-
-	var lines: Array[String] = []
-	lines.append("Turn %d / %d" % [state["turn"], state["max_turns"]])
-	for faction in state["factions"]:
-		var alive_marker := "" if faction["alive"] else " (eliminated)"
-		lines.append(
-			(
-				"%s: $%d, %d cities%s"
-				% [faction["name"], faction["money"], faction["cities"], alive_marker]
-			)
-		)
-	var selected_army: int = _army_layer.selected_army_id()
-	if selected_army != -1:
-		for army in state["armies"]:
-			if int(army["id"]) == selected_army:
-				lines.append(
-					(
-						"[%s] %d / %d move points"
-						% [army["name"], int(army["movement"]), int(army["max_movement"])]
-					)
-				)
-	elif int(state["current_faction"]) == PLAYER_FACTION:
-		lines.append(
-			"Click an army to select, left-click the map to march, right-click an enemy to attack."
-		)
-	status_label.text = "\n".join(lines)
 
 	_army_layer.sync(state)
 	_rebuild_target_options(state)
