@@ -84,3 +84,10 @@ repos:
         language: system
         files: ^(campaign|tests)/.*\.gd$
         pass_filenames: false
+
+      - id: render-test
+        name: render test (golden-image SSIM gate)
+        entry: make render-test
+        language: system
+        files: ^(campaign/.*\.(gd|gdshader|tscn)|campaign/map_data/.*|assets/(armies|buildings)/.*|tools/(shoot\.gd|render_test\.py)|tests/golden/.*)$
+        pass_filenames: false

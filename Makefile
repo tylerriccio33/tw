@@ -1,6 +1,6 @@
 GODOT ?= godot
 
-.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-preview map-package-init map-package-check promote-map gut gut-test
+.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-preview map-package-init map-package-check promote-map gut gut-test render-shots render-test render-test-update
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -31,6 +31,8 @@ help:
 	@echo "make promote-map   - copy the dev map package (tools/map_editor/dev_map_data) into campaign/map_data for the game to use"
 	@echo "make gut           - vendor the GUT addon (GDScript unit testing) into addons/gut/"
 	@echo "make gut-test      - run the GDScript unit tests under tests/unit/ with GUT"
+	@echo "make render-test        - SSIM-gate a fresh capture of the campaign scene against tests/golden/"
+	@echo "make render-test-update - accept the current capture as the new tests/golden/ baseline"
 
 armies:
 	@uv run tools/fetch_armies.py
@@ -110,6 +112,32 @@ hud-shot: play-shot
 
 clean-shots:
 	rm -rf shots/play
+
+# Captures the deterministic post-boot campaign scene via tools/shoot.gd for
+# render-test to compare against tests/golden/. `armies` is a prerequisite
+# because army_marker.gd preloads an assets/armies/ icon at parse time - on
+# a machine that never ran `make armies`, that preload comes back empty and
+# the capture would silently render a blank piece instead of failing.
+render-shots: campaign armies
+	@mkdir -p shots/render_test/actual
+	$(GODOT) -s tools/shoot.gd -- res://campaign/campaign.tscn \
+		shots/render_test/actual/campaign_boot.png 1280x800
+
+# SSIM-diffs the fresh capture above against tests/golden/*.png and fails if
+# either drops below threshold (tools/render_test.py) - the automated half
+# of what the visual-change-review workflow does by eye: a shader that
+# stopped compiling, a HUD panel drawn in front of the map instead of
+# behind it, a marker that silently lost its texture. Prints where it wrote
+# a diff heatmap on failure.
+render-test: render-shots
+	@uv run tools/render_test.py compare
+
+# Overwrites tests/golden/ with the current capture. Run once you've looked
+# at a `make render-test` failure's diff heatmap (shots/render_test/diff/)
+# and confirmed the change was intentional - this has no review step of its
+# own, it just accepts whatever render-shots produced.
+render-test-update: render-shots
+	@uv run tools/render_test.py update
 
 # Runs the layered map editor at http://localhost:8765. Everything it
 # writes lands in tools/map_editor/dev_map_data/ - nothing touches the

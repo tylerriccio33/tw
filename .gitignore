@@ -25,8 +25,9 @@
 .ruff_cache
 .venv/
 
-# Rendered shots (scratch output of make play-shot / hud-shot).
+# Rendered shots (scratch output of make play-shot / hud-shot / render-test).
 /shots/play/
+/shots/render_test/
 
 # Reference/target mockups dropped at repo root during design work - not
 # game assets, not meant to be committed.

@@ -73,6 +73,20 @@ func test_project_positions_each_marker_beside_its_ground_position() -> void:
 	assert_eq(marker.position, Vector2(10, 10) + ArmyLayer.DRAW_OFFSET - marker.anchor_offset())
 
 
+## Render invariant: two armies with distinct model positions must land on
+## distinct screen positions. This is the layer that would have caught the
+## "every faction's starting army landed stacked at the map centre" bug
+## (0434ac4) if the root cause had been here instead of upstream in
+## campaign_ui.gd's world-space conversion (see test_campaign_ui.gd) -
+## kept as a standing guard against any future bug in this projection.
+func test_project_gives_armies_at_different_ground_positions_different_screen_positions() -> void:
+	manager.armies = [_army(1, 0, 10, 10), _army(2, 1, 200, 300)]
+	layer.sync(manager.get_state())
+	var a: Control = layer._markers[1]
+	var b: Control = layer._markers[2]
+	assert_ne(a.position, b.position)
+
+
 func test_select_accepts_a_player_owned_army() -> void:
 	manager.armies = [_army(1, 0, 10, 10)]
 	layer.sync(manager.get_state())
