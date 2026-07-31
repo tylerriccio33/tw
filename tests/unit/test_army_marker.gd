@@ -1,8 +1,8 @@
 extends GutTest
 ## Covers campaign/army_marker.gd's non-drawing surface: layout sizing,
 ## faction/selection state, and the anchor offset the parent layer positions
-## against. The spear-and-pennant glyph drawn in _draw() is exercised
-## visually via the visual-change-review workflow, not here.
+## against. The knight-icon glyph drawn in _draw() is exercised visually via
+## the visual-change-review workflow, not here.
 
 const ArmyMarker := preload("res://campaign/army_marker.gd")
 
@@ -25,7 +25,7 @@ func test_setup_makes_the_marker_clickable() -> void:
 	assert_eq(marker.mouse_filter, Control.MOUSE_FILTER_STOP)
 
 
-func test_anchor_offset_is_the_foot_of_the_spear() -> void:
+func test_anchor_offset_is_the_foot_of_the_marker() -> void:
 	marker.setup()
 	assert_eq(marker.anchor_offset(), Vector2(marker.SIZE.x / 2.0, marker.SIZE.y))
 

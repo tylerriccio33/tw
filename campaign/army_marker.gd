@@ -1,19 +1,20 @@
 extends Control
-## The piece drawn for one army on the campaign map: a spear planted in the
-## ground with a small pennant in its owner's color.
+## The piece drawn for one army on the campaign map: a chess-knight icon
+## tinted in its owner's color, sitting on a dark backing disc.
 ##
-## Deliberately a different silhouette from CityMarker's keep - a spear reads
+## Deliberately a different silhouette from CityMarker's keep - a knight reads
 ## as "unit standing here" at a glance and stays legible even sitting right
 ## next to (or on top of) a same-colored city plaque, which a plain color
 ## disc did not: on the owner's own territory the map, the plaque and a flat
 ## disc are all close to the same hue, so the disc all but vanished into the
-## background. The pole and pennant border are drawn in ink and white
-## respectively regardless of faction color, so the shape itself - not just
-## the tint - carries the read.
+## background. The backing disc is drawn in ink regardless of faction color,
+## so the shape itself - not just the tint - carries the read, and it's sized
+## large enough to stay prominent at typical campaign zoom levels.
 
-const SIZE := Vector2(22, 30)
+const ICON := preload("res://assets/armies/icons/chess_knight.png")
+const SIZE := Vector2(56, 68)
 const INK := Color(0.10, 0.08, 0.06)
-const POLE_WIDTH := 2.5
+const DISC_RADIUS := 26.0
 
 var faction_color: Color = Color.WHITE
 var selected: bool = false
@@ -41,28 +42,28 @@ func set_selected(is_selected: bool) -> void:
 	queue_redraw()
 
 
-## Where the spear's butt meets the ground - the point the parent should
+## Where the knight's feet meet the ground - the point the parent should
 ## centre on the army's world position, mirroring CityMarker.anchor_offset().
 func anchor_offset() -> Vector2:
 	return Vector2(SIZE.x / 2.0, SIZE.y)
 
 
 func _draw() -> void:
-	var pole_top := Vector2(SIZE.x / 2.0, 2.0)
-	var pole_bottom := Vector2(SIZE.x / 2.0, SIZE.y)
-	draw_line(pole_top, pole_bottom, INK, POLE_WIDTH)
-
-	var pennant := PackedVector2Array(
-		[
-			pole_top,
-			pole_top + Vector2(SIZE.x / 2.0 - 2.0, SIZE.y * 0.14),
-			pole_top + Vector2(0, SIZE.y * 0.30),
-		]
+	var disc_center := Vector2(SIZE.x / 2.0, SIZE.y - DISC_RADIUS * 0.85)
+	draw_circle(disc_center, DISC_RADIUS, INK)
+	draw_arc(
+		disc_center,
+		DISC_RADIUS,
+		0,
+		TAU,
+		32,
+		Color.WHITE if selected else faction_color,
+		3.0 if selected else 2.0
 	)
-	draw_colored_polygon(pennant, faction_color)
-	var closed := pennant.duplicate()
-	closed.append(pennant[0])
-	draw_polyline(closed, Color.WHITE if selected else INK, 2.0 if selected else 1.5)
+
+	var icon_size := Vector2(DISC_RADIUS, DISC_RADIUS) * 1.7
+	var icon_rect := Rect2(disc_center - icon_size / 2.0, icon_size)
+	draw_texture_rect(ICON, icon_rect, false, faction_color)
 
 	if selected:
-		draw_arc(pole_bottom - Vector2(0, 3.0), 6.0, 0, TAU, 16, Color.WHITE, 2.0)
+		draw_arc(disc_center, DISC_RADIUS + 4.0, 0, TAU, 32, Color.WHITE, 2.0)
