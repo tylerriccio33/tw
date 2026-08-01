@@ -13,6 +13,8 @@ The prompter is asking for several things that are naturally parallel: each one 
 
 Before spawning anything, read the request and mentally assign each sub-task to the file(s)/function(s) it will touch (use Explore or a quick grep if unsure). Two sub-tasks are safe to parallelize when their edit surfaces don't overlap — different files, or clearly different functions in the same file. If two sub-tasks look like they'll edit the *same function*, merge them into one agent's task instead of splitting.
 
+Keep this partitioning pass cheap and treat its findings as a rough starting map, not verified fact — don't spend a full separate Explore agent round-trip on it for a request this size, and don't feed its line numbers to fix-agents as if they were load-bearing. By the time a fix-agent actually opens the file the numbers may have drifted (earlier edits, or another agent's change), and a fix-agent should always re-read and re-verify the relevant code itself before trusting a diagnosis handed to it — including whether the described bug is even still present.
+
 ## Step 2: decide whether you need worktree isolation at all
 
 Default to **no isolation** — let agents edit the shared working tree directly — when you're confident their edit surfaces are disjoint (per Step 1). This is cheaper and avoids a merge step entirely.
@@ -32,6 +34,8 @@ Each agent's prompt should tell it to verify its own change with the *narrowest*
 - Map editor change: `cd tools/map_editor && uv run pytest -q <path::test_name>`.
 
 Tell the agent explicitly **not** to run `make ci` / the full integration suite — that happens once, centrally, after all agents land (Step 5). Running it per-agent is redundant and, if agents share a tree, can race.
+
+If an agent adds new GDScript test functions, tell it to also run `gdlint` on just the file(s) it touched (not the full suite) before reporting done, and to check the new function count against `.gdlintrc`'s `max-public-methods` (currently 30) with e.g. `grep -c '^func test_' <file>`. Catching an over-the-limit test file at this stage costs one lint call; catching it at Step 5 costs a full `make ci` cycle (Rust tests + GUT suite + render golden-image gate) per fix.
 
 ## Step 4: collect and merge
 
