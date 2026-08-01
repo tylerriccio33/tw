@@ -122,4 +122,8 @@ func test_set_highlighted_provinces_of_empty_hides_every_thick_border() -> void:
 	map.set_highlighted_provinces([])
 
 	for area in provinces_root.get_children():
-		assert_eq(_visible_highlight_border_count(area), 0, "%s still shows a highlight border" % area.name)
+		assert_eq(
+			_visible_highlight_border_count(area),
+			0,
+			"%s still shows a highlight border" % area.name
+		)

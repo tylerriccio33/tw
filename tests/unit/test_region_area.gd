@@ -137,9 +137,7 @@ func test_set_highlight_true_shows_the_thick_green_border() -> void:
 	assert_true(line.visible)
 	assert_eq(line.default_color, RegionArea.HIGHLIGHT_BORDER_COLOR)
 	assert_eq(line.width, RegionArea.HIGHLIGHT_BORDER_WIDTH)
-	assert_true(
-		line.width > 1.1, "must be noticeably thicker than the 1.1px province hairline"
-	)
+	assert_true(line.width > 1.1, "must be noticeably thicker than the 1.1px province hairline")
 
 
 func test_set_highlight_false_hides_the_thick_green_border_again() -> void:

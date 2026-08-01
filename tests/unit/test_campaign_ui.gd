@@ -418,7 +418,8 @@ func test_settlement_panel_appears_on_marker_click() -> void:
 	assert_eq(instance._selected_city_id, int(city["id"]))
 	assert_true(instance._city_panel.visible, "city panel should show after selecting a settlement")
 	assert_true(
-		instance._buildings_panel.visible, "buildings panel should show after selecting a settlement"
+		instance._buildings_panel.visible,
+		"buildings panel should show after selecting a settlement"
 	)
 	assert_eq(instance._city_panel_name_label.text, String(city["name"]))
 
