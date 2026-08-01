@@ -18,12 +18,22 @@ const HIGHLIGHT_COLOR := Color(0.35, 0.95, 0.45)
 const HIGHLIGHT_ALPHA := 0.5
 const HIGHLIGHT_HOVER_ALPHA := 0.75
 
+## Thick border traced along the province's own boundary while it's a valid
+## move target, so the maximum move distance is legible from the outline
+## alone rather than only from the (fairly subtle) fill tint. Deliberately
+## much heavier than PROVINCE_BORDER_WIDTH in province_map.gd.
+const HIGHLIGHT_BORDER_WIDTH := 6.0
+const HIGHLIGHT_BORDER_COLOR := Color(0.2, 1.0, 0.35, 0.95)
+
 var province_id: int = -1
 var display_name: String = ""
 
 var _owner_color: Color = Color(0.6, 0.6, 0.6)
 var _hovered := false
 var _highlighted := false
+## One Line2D per outer ring, added by province_map when it builds this
+## province's polygons (see add_highlight_border). Hidden until highlighted.
+var _highlight_borders: Array = []
 
 
 func _ready() -> void:
@@ -38,6 +48,22 @@ func set_owner_color(color: Color) -> void:
 	_repaint()
 
 
+## Registers one of this province's outer-ring polygons as a thick border to
+## show while it's highlighted. province_map calls this once per outer ring
+## while building the province, right alongside the hairline outline it
+## always draws - see province_map._add_provinces.
+func add_highlight_border(polygon: PackedVector2Array) -> void:
+	var line := Line2D.new()
+	line.points = polygon
+	line.add_point(polygon[0])
+	line.width = HIGHLIGHT_BORDER_WIDTH
+	line.default_color = HIGHLIGHT_BORDER_COLOR
+	line.joint_mode = Line2D.LINE_JOINT_ROUND
+	line.visible = _highlighted
+	add_child(line)
+	_highlight_borders.append(line)
+
+
 ## Marks whether this province is currently a legal move target - see
 ## army_layer's move to province_map.set_highlighted_provinces.
 func set_highlight(active: bool) -> void:
@@ -45,6 +71,8 @@ func set_highlight(active: bool) -> void:
 		return
 	_highlighted = active
 	_repaint()
+	for line in _highlight_borders:
+		line.visible = _highlighted
 
 
 func _repaint() -> void:

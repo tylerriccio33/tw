@@ -204,6 +204,10 @@ func _add_provinces() -> void:
 				fill.polygon = polygon
 				area.add_child(fill)
 
+				# Hidden until this province becomes a valid move target - see
+				# region_area.add_highlight_border/set_highlight.
+				area.add_highlight_border(polygon)
+
 			area.add_child(_outline(polygon, PROVINCE_BORDER_WIDTH, PROVINCE_BORDER_COLOR))
 
 		_outer_rings[province_id] = outer
