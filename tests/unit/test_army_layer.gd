@@ -164,6 +164,20 @@ func test_order_selected_to_logs_a_garrison_message_when_the_army_enters_a_city(
 	assert_signal_emitted_with_parameters(layer, "log_message", ["Army garrisons in city 42."])
 
 
+## Regression: clicking an invalid move target (e.g. a non-adjacent province,
+## which the engine rejects from move_army) used to leave the army selected
+## with no feedback that the click did nothing. It should deselect instead.
+func test_order_selected_to_deselects_when_the_engine_rejects_the_move() -> void:
+	manager.armies = [_army(1, 0, 10, 10)]
+	layer.sync(manager.get_state())
+	layer.select(1)
+	manager.move_army_result = false
+
+	layer.order_selected_to(Vector2(500, 500))
+
+	assert_eq(layer.selected_army_id(), -1)
+
+
 func test_order_selected_at_screen_ignores_a_click_off_the_world() -> void:
 	manager.armies = [_army(1, 0, 10, 10)]
 	layer.sync(manager.get_state())

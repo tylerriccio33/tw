@@ -293,6 +293,10 @@ func order_selected_to(ground: Vector2) -> void:
 	if _manager.current_faction_id() != PLAYER_FACTION or _manager.is_game_over():
 		return
 	if not _manager.move_army(_selected_id, ground.x, ground.y):
+		# The engine rejected the order (e.g. the target isn't one of this
+		# army's reachable provinces this turn) - deselect instead of leaving
+		# the army armed with no feedback that the click did nothing.
+		select(-1)
 		return
 	# An army that finished its march inside one of our own empty cities takes
 	# up residence there rather than camping outside the gate.

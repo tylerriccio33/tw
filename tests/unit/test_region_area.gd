@@ -25,25 +25,25 @@ func test_set_owner_color_tints_existing_children_at_fill_alpha() -> void:
 	assert_eq(poly.color, Color(Color.RED, 0.55))
 
 
-func test_hover_raises_alpha_and_exit_restores_it() -> void:
+func test_hover_darkens_and_raises_alpha_and_exit_restores_it() -> void:
 	var poly := _add_polygon()
 	region.set_owner_color(Color.RED)
 
 	region._on_mouse_entered()
-	assert_eq(poly.color, Color(Color.RED, 0.85))
+	assert_eq(poly.color, Color(Color.RED.darkened(RegionArea.HOVER_DARKEN), 0.85))
 
 	region._on_mouse_exited()
 	assert_eq(poly.color, Color(Color.RED, 0.55))
 
 
-func test_a_polygon_added_after_hover_starts_picks_up_the_hover_alpha() -> void:
+func test_a_polygon_added_after_hover_starts_picks_up_the_hover_tint() -> void:
 	region.set_owner_color(Color.RED)
 	region._on_mouse_entered()
 
 	var poly := _add_polygon()
 	region._on_child_entered_tree(poly)
 
-	assert_eq(poly.color, Color(Color.RED, 0.85))
+	assert_eq(poly.color, Color(Color.RED.darkened(RegionArea.HOVER_DARKEN), 0.85))
 
 
 func test_a_non_polygon_child_is_ignored() -> void:
@@ -103,7 +103,13 @@ func test_hovering_a_highlighted_province_uses_the_highlight_hover_alpha() -> vo
 
 	region._on_mouse_entered()
 
-	assert_eq(poly.color, Color(RegionArea.HIGHLIGHT_COLOR, RegionArea.HIGHLIGHT_HOVER_ALPHA))
+	assert_eq(
+		poly.color,
+		Color(
+			RegionArea.HIGHLIGHT_COLOR.darkened(RegionArea.HOVER_DARKEN),
+			RegionArea.HIGHLIGHT_HOVER_ALPHA
+		)
+	)
 
 
 func test_set_highlight_to_its_current_value_is_a_noop() -> void:

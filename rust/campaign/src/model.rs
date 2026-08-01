@@ -1180,6 +1180,96 @@ mod tests {
         );
     }
 
+    /// Regression for a GDScript-side hang: `campaign_ui.gd::_run_ai_factions`
+    /// loops `while current_faction_id() != PLAYER_FACTION`, relying on the
+    /// round-robin eventually landing back on faction 0. But a dead faction's
+    /// index is *permanently* skipped (see end_turn), and `game_over` only
+    /// fires once at most one faction remains alive - so if faction 0 (the
+    /// player) is eliminated while 2+ other factions are still alive,
+    /// `current_faction_id()` can never equal 0 again and `game_over` never
+    /// becomes true. This asserts the two facts that combine into that trap,
+    /// so a future change to either one gets caught here instead of only
+    /// surfacing as a frozen GDScript loop: the round-robin must permanently
+    /// exclude a dead faction 0, and the campaign must NOT consider itself
+    /// over while 2+ factions remain alive, even if one of them was the
+    /// "first" faction.
+    #[test]
+    fn end_turn_never_revisits_an_eliminated_faction_even_when_others_remain_alive() {
+        let mut c = end_turn_test_campaign();
+
+        // Eliminate faction 0 (mirrors what resolve_siege does): strip its
+        // city and mark it dead directly.
+        c.cities.iter_mut().find(|city| city.id == 0).unwrap().owner = 1;
+        c.factions[0].alive = false;
+
+        for _ in 0..10 {
+            c.end_turn();
+            assert_ne!(
+                c.current_faction_id(),
+                0,
+                "an eliminated faction's index must never be selected again"
+            );
+        }
+
+        // Two factions (1 and 2) are still alive, so the campaign must not
+        // be over - if this were ever true instead, is_game_over() would be
+        // the thing that saves the GDScript loop from spinning forever.
+        assert!(
+            !c.game_over,
+            "campaign must not end just because a non-last faction (e.g. the player) died"
+        );
+    }
+
+    fn end_turn_test_campaign() -> Campaign {
+        let factions = vec![
+            Faction {
+                id: 0,
+                name: "Red".into(),
+                money: 0,
+                alive: true,
+            },
+            Faction {
+                id: 1,
+                name: "Blue".into(),
+                money: 0,
+                alive: true,
+            },
+            Faction {
+                id: 2,
+                name: "Green".into(),
+                money: 0,
+                alive: true,
+            },
+        ];
+        let cities = vec![
+            City {
+                id: 0,
+                name: "Redhold".into(),
+                income: 10,
+                position: (0.0, 0.0),
+                owner: 0,
+                province: None,
+            },
+            City {
+                id: 1,
+                name: "Bluehold".into(),
+                income: 10,
+                position: (1.0, 0.0),
+                owner: 1,
+                province: None,
+            },
+            City {
+                id: 2,
+                name: "Greenhold".into(),
+                income: 10,
+                position: (2.0, 0.0),
+                owner: 2,
+                province: None,
+            },
+        ];
+        Campaign::new(factions, cities, 1000)
+    }
+
     #[test]
     fn attack_transfers_city_on_win() {
         let mut c = sample_campaign();

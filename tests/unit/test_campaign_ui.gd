@@ -63,6 +63,32 @@ func _stub_province_map(provinces: Array) -> Node:
 
 
 ## ---------------------------------------------------------------------------
+## _move_target_for_province: resolves a clicked province to a world-space
+## move target, whether or not a city stands in it. Regression coverage for
+## the bug where clicking a neighboring province with no city silently issued
+## no order at all, since resolution used to only ever match city provinces.
+## ---------------------------------------------------------------------------
+
+
+func test_move_target_for_province_resolves_city_centroid_and_missing_cases() -> void:
+	ui._city_world_positions = {5: Vector2(123.0, 456.0)}
+	var city_state := {"cities": [{"id": 5, "province": 2}]}
+	var city_target: Vector2 = ui.call("_move_target_for_province", 2, city_state)
+	assert_eq(city_target, Vector2(123.0, 456.0))
+
+	ui._province_map = _stub_province_map([])
+	ui._province_map.province_centers = {7: Vector2(10.0, 20.0)}
+	ui._province_map.map_size = Vector2(100.0, 100.0)
+	var empty_state := {"cities": []}
+	var centroid_target: Vector2 = ui.call("_move_target_for_province", 7, empty_state)
+	var half_size := Vector2(100.0, 100.0) * CampaignUI.MAP_SCALE / 2.0
+	assert_eq(centroid_target, Vector2(10.0, 20.0) * CampaignUI.MAP_SCALE - half_size)
+
+	var missing_target: Vector2 = ui.call("_move_target_for_province", 99, empty_state)
+	assert_eq(missing_target, Vector2.INF)
+
+
+## ---------------------------------------------------------------------------
 ## Zoom direction: pixels_per_unit is _base_ppu / _cam_zoom, so _cam_zoom is an
 ## *inverse* zoom factor - raising it shrinks pixels_per_unit. _base_ppu is a
 ## cover fit at _cam_zoom == 1.0, so 1.0 has to be the *ceiling* on _cam_zoom,
@@ -394,7 +420,7 @@ func test_region_clicked_on_a_cityless_province_does_nothing() -> void:
 ## ---------------------------------------------------------------------------
 
 
-func test_settlement_panel_hidden_before_any_selection() -> void:
+func test_settlement_panel_appears_on_marker_click() -> void:
 	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
 	add_child_autofree(instance)
 	await wait_process_frames(3)
@@ -405,12 +431,6 @@ func test_settlement_panel_hidden_before_any_selection() -> void:
 	# Core HUD stays up regardless of selection state.
 	assert_true(instance.end_turn_button.visible)
 	assert_true(instance.get_node("UI/TopBar").visible)
-
-
-func test_settlement_panel_appears_on_marker_click() -> void:
-	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
-	add_child_autofree(instance)
-	await wait_process_frames(3)
 
 	var city: Dictionary = instance.manager.get_state()["cities"][0]
 	instance.call("_on_city_marker_clicked", int(city["id"]))

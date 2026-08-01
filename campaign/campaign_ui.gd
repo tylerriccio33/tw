@@ -111,9 +111,23 @@ var _map_half_size := Vector2.ZERO
 var _cam_focus := Vector2.ZERO
 var _cam_zoom := 1.0
 var _selected_city_id: int = -1
+## Set when the player clicks a province with no city of its own, so the
+## bottom banner can show province-level detail instead of nothing - see
+## _refresh_bottom_banner. Mutually exclusive with _selected_city_id; whoever
+## sets one clears the other.
+var _selected_province_id: int = -1
 
 var _army_layer: Control
 var _ai_running := false
+## Set once PLAYER_FACTION is detected dead while other AI factions are still
+## alive - see _run_ai_factions. Rust's own game_over only fires once at most
+## one faction remains standing (last-faction-wins elimination), so a
+## defeated-but-not-last player would otherwise leave _run_ai_factions'
+## "wait for it to be PLAYER_FACTION's turn again" loop spinning forever,
+## since a dead faction's index is permanently skipped by the round-robin in
+## Campaign::end_turn and can never come up again. This flag is this script's
+## own stand-in for "game over, for the player" in that case.
+var _player_defeated := false
 
 # AI-turn camera watch. `_watching_ai_moves` is true only for the duration of
 # a single `manager.run_ai_turn()` call (see _run_ai_factions); the
@@ -179,15 +193,26 @@ const LOCKED_BUILDINGS := ["Castle", "Castle", "City"]
 
 # Top-bar resource cluster (money/deficit/food/season/year): render-only
 # placeholders, [icon glyph, label, display value] - not wired to any real
-# economy state yet.
+# economy state yet. "Year" is the exception: its display value here is only
+# the initial label text (before the first _refresh()); the live value is
+# computed from state["turn"] by _refresh_bottom_banner() below, since Rust
+# has no year concept, only a faction-turn counter.
 const TOP_BAR_STATS := [
 	["🪙", "Treasury", "10,000"],
 	["📉", "Deficit", "-250"],
 	["🌾", "Food", "+4.0K"],
 	["☀", "Season", "Summer"],
-	["📅", "Year", "395 AD"],
+	["📅", "Year", "1200 AD"],
 ]
 const TOP_BAR_PLACEHOLDER_ICON_COUNT := 3
+
+# Calendar year shown in the top bar is derived from state["turn"] rather
+# than tracked separately in Rust: START_YEAR is the year at turn 1, and each
+# faction-turn advances the calendar by YEARS_PER_TURN. Kept as a whole year
+# per turn (not per round) to match how the "END TURN %d" counter already
+# reads state["turn"] directly (see _refresh_bottom_banner).
+const START_YEAR := 1200
+const YEARS_PER_TURN := 1
 
 # Top-bar widgets refreshed alongside the bottom banner.
 var _top_bar_stat_value_labels: Dictionary = {}
@@ -218,6 +243,7 @@ func _on_settlement_tab_selected(tab_name: String) -> void:
 ## _refresh_bottom_banner.
 func _on_settlement_panel_close_pressed() -> void:
 	_selected_city_id = -1
+	_selected_province_id = -1
 	_refresh_bottom_banner(manager.get_state())
 
 
@@ -477,8 +503,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			# (army and/or city panel) instead of issuing an order onto an
 			# unmovable spot.
 			_army_layer.select(-1)
-			if _selected_city_id != -1:
+			if _selected_city_id != -1 or _selected_province_id != -1:
 				_selected_city_id = -1
+				_selected_province_id = -1
 				_refresh_bottom_banner(manager.get_state())
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			# Right-click on open map does nothing; right-click only attacks
@@ -529,6 +556,7 @@ func _ensure_city_marker(city: Dictionary) -> CityMarker:
 ## Clicking a city marker selects it and shows it in the bottom info panel.
 func _on_city_marker_clicked(city_id: int) -> void:
 	_selected_city_id = city_id
+	_selected_province_id = -1
 	_refresh_bottom_banner(manager.get_state())
 
 
@@ -545,27 +573,50 @@ func _on_city_marker_clicked(city_id: int) -> void:
 ## name, so two places can share a name.
 func _on_region_clicked(province_id: int) -> void:
 	var state: Dictionary = manager.get_state()
+
+	if _army_layer.selected_army_id() != -1:
+		var world_pos: Vector2 = _move_target_for_province(province_id, state)
+		if world_pos == Vector2.INF:
+			# Nothing to march onto (e.g. a province with no centroid data) -
+			# treat it the same as an invalid target: deselect rather than
+			# leave the army selected with no feedback.
+			_army_layer.select(-1)
+			return
+		# order_selected_to itself deselects if the engine rejects the move
+		# (e.g. the province isn't reachable this turn), so an invalid click
+		# always clears the selection one way or another.
+		_army_layer.order_selected_to(world_pos)
+		return
+
 	for city in state["cities"]:
 		if int(city.get("province", -1)) != province_id:
 			continue
-		if _army_layer.selected_army_id() != -1:
-			var world_pos: Vector2 = _city_world_positions.get(int(city["id"]), Vector2.INF)
-			if world_pos != Vector2.INF:
-				_army_layer.order_selected_to(world_pos)
-			return
 		_selected_city_id = int(city["id"])
+		_selected_province_id = -1
 		_refresh_bottom_banner(state)
 		return
 
-	# No city stands in this province: march the selected army to its
-	# centroid instead of silently doing nothing.
-	if _army_layer.selected_army_id() != -1:
-		var center_px: Vector2 = _province_map.province_centers.get(province_id, Vector2.INF)
-		if center_px == Vector2.INF:
-			return
-		var half_size: Vector2 = _province_map.map_size * MAP_SCALE / 2.0
-		var world_pos: Vector2 = center_px * MAP_SCALE - half_size
-		_army_layer.order_selected_to(world_pos)
+	# No city stands in this province: show province-level detail instead of
+	# nothing, so every province click brings up some HUD info.
+	_selected_city_id = -1
+	_selected_province_id = province_id
+	_refresh_bottom_banner(state)
+
+
+## Resolves a clicked province to a world-space move target for the selected
+## army: the province's city if it has one, otherwise its own centroid, so
+## land provinces with no city of their own are still reachable by clicking
+## anywhere inside them. Returns Vector2.INF if the province has neither.
+func _move_target_for_province(province_id: int, state: Dictionary) -> Vector2:
+	for city in state["cities"]:
+		if int(city.get("province", -1)) == province_id:
+			return _city_world_positions.get(int(city["id"]), Vector2.INF)
+
+	var center_px: Vector2 = _province_map.province_centers.get(province_id, Vector2.INF)
+	if center_px == Vector2.INF:
+		return Vector2.INF
+	var half_size: Vector2 = _province_map.map_size * MAP_SCALE / 2.0
+	return center_px * MAP_SCALE - half_size
 
 
 ## The province table as the simulation wants it: same rows the map package
@@ -632,7 +683,7 @@ func _on_log_button_pressed() -> void:
 
 
 func _on_end_turn_pressed() -> void:
-	if _ai_running:
+	if _ai_running or _player_defeated:
 		return
 	_army_layer.select(-1)
 	manager.end_turn()
@@ -676,12 +727,25 @@ func _append_log(text: String) -> void:
 ## Plays every AI faction in sequence after the player ends their turn,
 ## pausing between them so a whole round of army moves is watchable instead of
 ## resolving in a single frame. Player orders are locked out for the duration.
+##
+## Terminates on is_game_over() (last-faction-standing elimination or turn
+## limit) OR on the round-robin coming back around to PLAYER_FACTION OR on
+## PLAYER_FACTION itself having been eliminated. That third condition is not
+## redundant with is_game_over(): Campaign::end_turn's round-robin
+## permanently skips dead factions, so once PLAYER_FACTION is dead its index
+## can never come up again - without this check, and with 2+ AI factions
+## still alive (so is_game_over() stays false), this loop would spin forever
+## and the player would never get control back.
 func _run_ai_factions() -> void:
 	_ai_running = true
 	_army_layer.set_orders_locked(true)
 	end_turn_button.disabled = true
 
-	while not manager.is_game_over() and manager.current_faction_id() != PLAYER_FACTION:
+	while (
+		not manager.is_game_over()
+		and manager.current_faction_id() != PLAYER_FACTION
+		and _is_player_faction_alive()
+	):
 		_ai_moves.clear()
 		_watching_ai_moves = true
 		manager.run_ai_turn()
@@ -691,9 +755,23 @@ func _run_ai_factions() -> void:
 		await get_tree().create_timer(AI_STEP_SECONDS).timeout
 		manager.end_turn()
 
+	if not manager.is_game_over() and not _is_player_faction_alive():
+		_player_defeated = true
+		_append_log("[b]Your faction has been eliminated. Game over.[/b]")
+
 	_ai_running = false
 	_army_layer.set_orders_locked(false)
 	_refresh()
+
+
+## Whether PLAYER_FACTION still holds at least one city/army, per the latest
+## simulation snapshot. See _run_ai_factions for why this matters separately
+## from manager.is_game_over().
+func _is_player_faction_alive() -> bool:
+	for faction in manager.get_state()["factions"]:
+		if int(faction["id"]) == PLAYER_FACTION:
+			return bool(faction["alive"])
+	return true
 
 
 ## Collects every army_moved signal fired while `_watching_ai_moves` is set -
@@ -762,7 +840,12 @@ func _set_cam_zoom(zoom: float) -> void:
 ## lingering.
 func _refresh_bottom_banner(state: Dictionary) -> void:
 	end_turn_button.text = "END TURN %d" % int(state["turn"])
-	end_turn_button.disabled = bool(state["game_over"]) or _ai_running
+	end_turn_button.disabled = bool(state["game_over"]) or _ai_running or _player_defeated
+
+	var year_label: Label = _top_bar_stat_value_labels.get("Year")
+	if year_label != null:
+		var year: int = START_YEAR + (int(state["turn"]) - 1) * YEARS_PER_TURN
+		year_label.text = "%d AD" % year
 
 	var shown_city: Dictionary = {}
 	if _selected_city_id != -1:
@@ -775,22 +858,51 @@ func _refresh_bottom_banner(state: Dictionary) -> void:
 		if shown_city.is_empty():
 			_selected_city_id = -1
 
-	if shown_city.is_empty():
+	if not shown_city.is_empty():
+		_city_panel.visible = true
+		_buildings_panel.visible = true
+
+		_city_panel_name_label.text = shown_city["name"]
+		_city_panel_owner_tab.color = (_faction_colors[
+			int(shown_city["owner"]) % _faction_colors.size()
+		])
+
+		var income: int = int(shown_city["income"])
+		for row_def in STAT_ROWS:
+			var key: String = row_def[0]
+			var multiplier: int = row_def[3]
+			_city_stat_value_labels[key].text = HudBuilder.format_stat(income * multiplier)
+		return
+
+	# A province with no city of its own was clicked: show its name/owner in
+	# the same panel rather than nothing, but there's no settlement to run a
+	# buildings/military tray for.
+	var shown_province: Dictionary = {}
+	if _selected_province_id != -1:
+		for province in state.get("provinces", []):
+			if int(province["id"]) == _selected_province_id:
+				shown_province = province
+				break
+		if shown_province.is_empty():
+			_selected_province_id = -1
+
+	if shown_province.is_empty():
 		_city_panel.visible = false
 		_buildings_panel.visible = false
 		return
 
 	_city_panel.visible = true
-	_buildings_panel.visible = true
+	_buildings_panel.visible = false
 
-	_city_panel_name_label.text = shown_city["name"]
-	_city_panel_owner_tab.color = _faction_colors[int(shown_city["owner"]) % _faction_colors.size()]
+	_city_panel_name_label.text = shown_province["name"]
+	var owner: int = int(shown_province["owner"])
+	_city_panel_owner_tab.color = (
+		_faction_colors[owner % _faction_colors.size()] if owner >= 0 else Color(0.5, 0.5, 0.5)
+	)
 
-	var income: int = int(shown_city["income"])
 	for row_def in STAT_ROWS:
 		var key: String = row_def[0]
-		var multiplier: int = row_def[3]
-		_city_stat_value_labels[key].text = HudBuilder.format_stat(income * multiplier)
+		_city_stat_value_labels[key].text = "-"
 
 
 ## Top-middle turn-order indicator: shows whichever faction is acting this

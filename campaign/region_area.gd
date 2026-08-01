@@ -1,7 +1,7 @@
 extends Area2D
 ## One province's click target on the map. Every child Polygon2D is tinted with
-## its owner's color and brightens on hover, so a province lights up under the
-## mouse with no per-province art.
+## its owner's color and darkens (and becomes more opaque) on hover, so a
+## province visibly reacts to the mouse with no per-province art.
 ##
 ## The color is pushed in by province_map.apply_ownership() on every state
 ## refresh rather than read from a file, because ownership is simulation state -
@@ -17,6 +17,12 @@ const HOVER_ALPHA := 0.85
 const HIGHLIGHT_COLOR := Color(0.35, 0.95, 0.45)
 const HIGHLIGHT_ALPHA := 0.5
 const HIGHLIGHT_HOVER_ALPHA := 0.75
+## How far the tint is blended toward black on hover (Color.darkened's
+## amount) - this, not the alpha bump alone, is what makes a hovered
+## province read as "darkens", not "brightens": raising alpha on its own
+## just makes the existing tint more saturated/opaque, which over the
+## lighter backdrop art reads as brighter, not darker.
+const HOVER_DARKEN := 0.25
 
 ## Thick border traced along the province's own boundary while it's a valid
 ## move target, so the maximum move distance is legible from the outline
@@ -77,10 +83,13 @@ func set_highlight(active: bool) -> void:
 
 func _repaint() -> void:
 	var color := _owner_color
-	var alpha := HOVER_ALPHA if _hovered else FILL_ALPHA
+	var alpha := FILL_ALPHA
 	if _highlighted:
 		color = HIGHLIGHT_COLOR
-		alpha = HIGHLIGHT_HOVER_ALPHA if _hovered else HIGHLIGHT_ALPHA
+		alpha = HIGHLIGHT_ALPHA
+	if _hovered:
+		color = color.darkened(HOVER_DARKEN)
+		alpha = HIGHLIGHT_HOVER_ALPHA if _highlighted else HOVER_ALPHA
 	for node in get_children():
 		if node is Polygon2D:
 			node.color = Color(color, alpha)

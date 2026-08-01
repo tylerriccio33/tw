@@ -11,6 +11,12 @@ var package: RefCounted
 ## that it fired and what it was given.
 var highlighted_calls: Array = []
 
+## province id -> centroid in map-pixel space, and the map's own pixel size -
+## see campaign_ui.gd::_move_target_for_province, which reads both to place a
+## move order on a province with no city of its own.
+var province_centers: Dictionary = {}
+var map_size := Vector2.ZERO
+
 
 func set_highlighted_provinces(ids: Array) -> void:
 	highlighted_calls.append(ids)
