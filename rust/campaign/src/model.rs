@@ -1088,6 +1088,98 @@ mod tests {
         assert_eq!(c.turn, 3);
     }
 
+    /// Every alive faction must get exactly one turn per round, in a stable
+    /// rotation, and a faction that dies mid-round must be skipped on all
+    /// subsequent rounds without desyncing the rotation for anyone else.
+    #[test]
+    fn end_turn_visits_every_alive_faction_exactly_once_per_round() {
+        let factions = vec![
+            Faction {
+                id: 0,
+                name: "Red".into(),
+                money: 0,
+                alive: true,
+            },
+            Faction {
+                id: 1,
+                name: "Blue".into(),
+                money: 0,
+                alive: true,
+            },
+            Faction {
+                id: 2,
+                name: "Green".into(),
+                money: 0,
+                alive: true,
+            },
+        ];
+        let cities = vec![
+            City {
+                id: 0,
+                name: "Redhold".into(),
+                income: 10,
+                position: (0.0, 0.0),
+                owner: 0,
+                province: None,
+            },
+            City {
+                id: 1,
+                name: "Bluehold".into(),
+                income: 10,
+                position: (1.0, 0.0),
+                owner: 1,
+                province: None,
+            },
+            City {
+                id: 2,
+                name: "Greenhold".into(),
+                income: 10,
+                position: (2.0, 0.0),
+                owner: 2,
+                province: None,
+            },
+        ];
+        let mut c = Campaign::new(factions, cities, 100);
+
+        // First round: current_faction starts at 0 (Red); three end_turn
+        // calls should visit Blue, Green, then wrap back to Red -- every
+        // faction id appearing in current_faction exactly once.
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            c.end_turn();
+            seen.push(c.current_faction_id());
+        }
+        seen.sort();
+        assert_eq!(seen, vec![0, 1, 2]);
+        assert_eq!(c.current_faction_id(), 0);
+
+        // Eliminate Blue mid-round: strip its only city (mirrors what
+        // resolve_siege does) and mark it dead directly.
+        c.cities.iter_mut().find(|city| city.id == 1).unwrap().owner = 0;
+        c.factions[1].alive = false;
+
+        // From here, the rotation must skip Blue forever: Red -> Green ->
+        // Red -> Green ..., never landing on the dead faction, and never
+        // getting stuck re-selecting Red every call (which would silently
+        // deny Green its turn).
+        for _ in 0..6 {
+            c.end_turn();
+            let current = c.current_faction_id();
+            assert_ne!(current, 1, "dead faction must never be selected");
+        }
+        let mut round_trip = Vec::new();
+        for _ in 0..2 {
+            c.end_turn();
+            round_trip.push(c.current_faction_id());
+        }
+        round_trip.sort();
+        assert_eq!(
+            round_trip,
+            vec![0, 2],
+            "post-elimination rotation must still cycle through both remaining alive factions"
+        );
+    }
+
     #[test]
     fn attack_transfers_city_on_win() {
         let mut c = sample_campaign();

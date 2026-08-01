@@ -468,13 +468,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_camera_transform()
 			_project_markers()
 		elif event.button_index == MOUSE_BUTTON_LEFT:
-			# Left-click on open map = "march there". A left-click that
-			# reached here missed every marker; if an army is selected this
-			# is a move order, otherwise it's a deselect.
-			if _army_layer.selected_army_id() != -1:
-				_army_layer.order_selected_at_screen(event.position)
-			else:
-				_army_layer.select(-1)
+			# A left-click that reaches here missed every province polygon
+			# (each one has its own Area2D that would otherwise have
+			# consumed it via _on_region_clicked) and every army/city
+			# marker - i.e. it landed on water/impassable terrain or
+			# outside the map entirely. That's never a valid move or
+			# selection target, so clear whatever's currently selected
+			# (army and/or city panel) instead of issuing an order onto an
+			# unmovable spot.
+			_army_layer.select(-1)
+			if _selected_city_id != -1:
+				_selected_city_id = -1
+				_refresh_bottom_banner(manager.get_state())
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			# Right-click on open map does nothing; right-click only attacks
 			# via the marker handler in army_layer._on_marker_input.
@@ -527,13 +532,17 @@ func _on_city_marker_clicked(city_id: int) -> void:
 	_refresh_bottom_banner(manager.get_state())
 
 
-## Clicking a province polygon while an army is selected is a move order onto
-## whichever city stands in it - the same order a click on that city's marker
-## would give, just aimed at the land instead. This is the only way to reach
-## a bordering province that has no marker of its own under the mouse.
-## Otherwise it mirrors _on_city_marker_input: selects the city standing in
-## that province. Matched by province id rather than by name, so two places
-## can share a name.
+## Clicking a province polygon while an army is selected is a move order into
+## that province - onto whichever city stands in it if there is one, or onto
+## the province's own centroid otherwise, so land provinces with no city of
+## their own are still reachable by clicking anywhere inside them. (Before
+## this fallback, clicking such a province with an army selected fell
+## straight through this function and issued no order at all, since it only
+## ever matched provinces that had a city.) This is the only way to reach a
+## bordering province that has no marker of its own under the mouse.
+## Without a selected army it mirrors _on_city_marker_input: selects the city
+## standing in that province, if any. Matched by province id rather than by
+## name, so two places can share a name.
 func _on_region_clicked(province_id: int) -> void:
 	var state: Dictionary = manager.get_state()
 	for city in state["cities"]:
@@ -547,6 +556,16 @@ func _on_region_clicked(province_id: int) -> void:
 		_selected_city_id = int(city["id"])
 		_refresh_bottom_banner(state)
 		return
+
+	# No city stands in this province: march the selected army to its
+	# centroid instead of silently doing nothing.
+	if _army_layer.selected_army_id() != -1:
+		var center_px: Vector2 = _province_map.province_centers.get(province_id, Vector2.INF)
+		if center_px == Vector2.INF:
+			return
+		var half_size: Vector2 = _province_map.map_size * MAP_SCALE / 2.0
+		var world_pos: Vector2 = center_px * MAP_SCALE - half_size
+		_army_layer.order_selected_to(world_pos)
 
 
 ## The province table as the simulation wants it: same rows the map package
