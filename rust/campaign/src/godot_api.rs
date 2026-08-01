@@ -452,6 +452,7 @@ impl CampaignManager {
             ad.set("movement", army.movement as f64);
             ad.set("max_movement", army.max_movement as f64);
             ad.set("garrisoned", army.garrisoned.map_or(-1, |g| g as i64));
+            ad.set("moved_this_turn", army.moved_this_turn);
             armies.push(&ad.to_variant());
         }
 

@@ -81,6 +81,16 @@ var _city_positions: PackedVector2Array = []
 var _province_ids: Array = []
 var _faction_colors: Array[Color] = DEFAULT_FACTION_COLORS.duplicate()
 var _marker_positions: Dictionary = {}
+## City id (as assigned by the Rust campaign state) -> world position, taken
+## straight from state["cities"] each _refresh(). Provinces with no starting
+## owner get no city in Rust (start_game_from_provinces), so city ids are a
+## *compacted* subset of the province array's indices - keying marker
+## placement off the province-array loop index, as _project_markers() used
+## to, silently misaligns a marker's screen position (and therefore its
+## click target) the moment any province in the list is unowned. Populated
+## in _refresh(); read by _project_markers() and _ensure_city_marker() so
+## every marker is placed, and therefore clicked, by its own real city id.
+var _city_world_positions: Dictionary = {}
 var _map_extent: float = 0.0
 ## True per-axis half-width/half-height of the map in world units - unlike
 ## _map_extent (which collapses to a single scalar for pan clamping), this
@@ -101,6 +111,25 @@ var _city_panel_name_label: Label
 var _city_panel_owner_tab: ColorRect
 var _city_panel_perk_label: Label
 var _city_stat_value_labels: Dictionary = {}
+
+# Settlement-panel tab content (Buildings/Military) - built once by
+# HudBuilder.build_bottom_banner(), swapped in/out by _on_settlement_tab.
+var _buildings_content: Control
+var _military_content: Control
+
+# Military tab: stubbed unit rows, purely for visual layout - not backed by
+# any real army/garrison simulation state yet.
+const ARMY_UNITS := [
+	{"name": "Swordsmen", "icon": "⚔", "count": 80},
+	{"name": "Spearmen", "icon": "🛡", "count": 120},
+	{"name": "Longbowmen", "icon": "🏹", "count": 60},
+	{"name": "Mounted Knights", "icon": "🐎", "count": 40},
+]
+const GARRISON_UNITS := [
+	{"name": "Town Militia", "icon": "🪓", "count": 100},
+	{"name": "Town Watch", "icon": "🛡", "count": 50},
+	{"name": "Crossbowmen", "icon": "🏹", "count": 30},
+]
 
 const STAT_ROWS := [
 	# [state key, display label, icon glyph, per-income multiplier]
@@ -140,6 +169,13 @@ var wiki_button: Button
 var log_button: Button
 var log_label: RichTextLabel
 var _log_panel: Control
+
+
+## Swaps which settlement-panel tab content is visible (Buildings/Military).
+## Wired to each tab button's `toggled` signal by HudBuilder.
+func _on_settlement_tab_selected(tab_name: String) -> void:
+	_buildings_content.visible = tab_name == "Buildings"
+	_military_content.visible = tab_name == "Military"
 
 
 func _fail_to_start(message: String) -> void:
@@ -398,15 +434,25 @@ func _unhandled_input(event: InputEvent) -> void:
 			pass
 
 
-## Screen position of every city, from its world position through the
-## current pan/zoom. Re-run whenever that changes (see _process/
-## _unhandled_input above) as well as once at startup and on resize.
+## Screen position of every *actual* city, from its world position (as
+## reported by the Rust state, keyed by real city id in
+## _city_world_positions) through the current pan/zoom. Re-run whenever that
+## changes (see _process/_unhandled_input above) as well as once at startup
+## and on resize.
+##
+## Deliberately iterates _city_world_positions/city_markers (real city ids)
+## rather than _city_positions (one entry per province, including unowned
+## ones with no city at all) - looping the latter by array index used to
+## hand marker #i the position belonging to province #i regardless of
+## whether city id i actually corresponded to it, which is what let a
+## marker drawn with one city's name sit at another city's screen position
+## and forward its click to the wrong id.
 func _project_markers() -> void:
-	for i in _city_positions.size():
-		var pos := _world_to_screen(_city_positions[i])
-		_marker_positions[i] = pos
-		if city_markers.has(i):
-			var marker: CityMarker = city_markers[i]
+	for id in _city_world_positions:
+		var pos := _world_to_screen(_city_world_positions[id])
+		_marker_positions[id] = pos
+		if city_markers.has(id):
+			var marker: CityMarker = city_markers[id]
 			marker.position = pos - marker.anchor_offset()
 	if _army_layer != null:
 		_army_layer.project()
@@ -419,7 +465,8 @@ func _ensure_city_marker(city: Dictionary) -> CityMarker:
 
 	var marker := CityMarker.new()
 	marker.setup(String(city["name"]))
-	marker.position = _marker_positions.get(id, Vector2.ZERO) - marker.anchor_offset()
+	var world_pos: Vector2 = _city_world_positions.get(id, Vector2.ZERO)
+	marker.position = _world_to_screen(world_pos) - marker.anchor_offset()
 	marker.clicked.connect(_on_city_marker_clicked.bind(id))
 	cities_root.add_child(marker)
 	city_markers[id] = marker
@@ -478,10 +525,18 @@ func _refresh() -> void:
 	var state: Dictionary = manager.get_state()
 	_apply_province_ownership(state)
 
+	# Real city id -> world position, straight from Rust (city ids are a
+	# compacted subset of province indices, so this must be keyed by id, not
+	# by position in state["cities"]). Rebuilt before _project_markers() so
+	# any new marker below is placed at the position matching its own id.
+	for city in state["cities"]:
+		_city_world_positions[int(city["id"])] = Vector2(float(city["x"]), float(city["y"]))
+
 	for city in state["cities"]:
 		var marker: CityMarker = _ensure_city_marker(city)
 		marker.set_faction_color(_faction_colors[int(city["owner"]) % _faction_colors.size()])
 
+	_project_markers()
 	_army_layer.sync(state)
 	_refresh_bottom_banner(state)
 

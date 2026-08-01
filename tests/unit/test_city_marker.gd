@@ -27,7 +27,7 @@ func test_setup_makes_the_marker_clickable() -> void:
 
 
 func test_anchor_offset_is_the_center_of_the_keep() -> void:
-	assert_eq(marker.anchor_offset(), Vector2(12, 12))
+	assert_eq(marker.anchor_offset(), Vector2(22, 22))
 
 
 func test_set_faction_color_updates_the_color() -> void:

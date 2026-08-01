@@ -349,18 +349,35 @@ static func _build_buildings_panel(ui: Node) -> void:
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.add_child(vbox)
 
+	var tab_group := ButtonGroup.new()
 	var tabs_row := HBoxContainer.new()
 	tabs_row.add_theme_constant_override("separation", 2)
 	tabs_row.custom_minimum_size = Vector2(0, 34)
 	vbox.add_child(tabs_row)
-	tabs_row.add_child(_make_tab_button("Buildings", true))
-	tabs_row.add_child(_make_tab_button("Characters", false))
-	tabs_row.add_child(_make_tab_button("Military", false))
+	var buildings_tab := _make_tab_button(ui, "Buildings", tab_group, true)
+	var military_tab := _make_tab_button(ui, "Military", tab_group, false)
+	tabs_row.add_child(buildings_tab)
+	tabs_row.add_child(military_tab)
 
+	# Content area: only one of Buildings/Military is visible at a time,
+	# toggled by _on_settlement_tab_selected() in campaign_ui.gd.
+	var content_area := Control.new()
+	content_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(content_area)
+
+	ui._buildings_content = _build_buildings_content(ui)
+	content_area.add_child(ui._buildings_content)
+
+	ui._military_content = _build_military_content(ui)
+	ui._military_content.visible = false
+	content_area.add_child(ui._military_content)
+
+
+static func _build_buildings_content(ui: Node) -> Control:
 	var cards_row := PanelContainer.new()
+	cards_row.name = "BuildingsContent"
 	cards_row.add_theme_stylebox_override("panel", style_box(ui.HUD_CREAM))
-	cards_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(cards_row)
+	cards_row.set_anchors_preset(Control.PRESET_FULL_RECT)
 
 	var cards_margin := MarginContainer.new()
 	for side in ["left", "top", "right", "bottom"]:
@@ -403,23 +420,186 @@ static func _build_buildings_panel(ui: Node) -> void:
 		icon_circle.add_child(glyph_label)
 		red_vbox.add_child(icon_circle)
 
+	return cards_row
 
-static func _make_tab_button(text: String, active: bool) -> PanelContainer:
-	var tab := PanelContainer.new()
-	tab.add_theme_stylebox_override(
-		"panel", style_box(Color(0.247, 0.353, 0.51) if active else Color(0.11, 0.15, 0.22))
-	)
+
+## Military tab content: an "Army" unit list and a "Garrison" unit list, side
+## by side, split by a vertical divider - mirrors the two-column layout of
+## the buildings tray (cards on the left, red strip on the right) so the tab
+## switch doesn't feel like a different HUD. Unit data is entirely stubbed
+## (ui.ARMY_UNITS / ui.GARRISON_UNITS in campaign_ui.gd); this only exists to
+## get the visuals right.
+static func _build_military_content(ui: Node) -> Control:
+	var panel := PanelContainer.new()
+	panel.name = "MilitaryContent"
+	panel.add_theme_stylebox_override("panel", style_box(ui.HUD_CREAM))
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+
 	var margin := MarginContainer.new()
-	for side in ["left", "right"]:
-		margin.add_theme_constant_override("margin_%s" % side, 14)
-	tab.add_child(margin)
-	var label := Label.new()
-	label.text = text
-	set_font(label, LOCAL_FONT_SEMIBOLD)
-	label.add_theme_color_override("font_color", Color.WHITE)
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	margin.add_child(label)
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_%s" % side, 6)
+	panel.add_child(margin)
+
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation", 0)
+	margin.add_child(columns)
+
+	columns.add_child(_make_unit_column(ui, "Army", "⚔", ui.ARMY_UNITS, "No army selected."))
+
+	# Visual divider between the two unit groups - a thin vertical rule with
+	# a little breathing room on either side, rather than a bare ColorRect
+	# butted up against both columns.
+	var divider_wrap := MarginContainer.new()
+	divider_wrap.add_theme_constant_override("margin_left", 10)
+	divider_wrap.add_theme_constant_override("margin_right", 10)
+	var divider := ColorRect.new()
+	divider.color = Color(0.6, 0.57, 0.48)
+	divider.custom_minimum_size = Vector2(2, 0)
+	divider_wrap.add_child(divider)
+	columns.add_child(divider_wrap)
+
+	columns.add_child(
+		_make_unit_column(ui, "Garrison", "🏰", ui.GARRISON_UNITS, "No garrison stationed.")
+	)
+
+	return panel
+
+
+static func _make_unit_column(
+	ui: Node, title: String, title_icon: String, units: Array, empty_text: String
+) -> VBoxContainer:
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 6)
+	col.add_child(header)
+
+	var icon_label := Label.new()
+	icon_label.text = title_icon
+	icon_label.add_theme_color_override("font_color", ui.HUD_BLUE)
+	header.add_child(icon_label)
+
+	var title_label := Label.new()
+	title_label.text = title
+	set_font(title_label, LOCAL_FONT_BOLD, 15)
+	title_label.add_theme_color_override("font_color", Color(0.2, 0.2, 0.2))
+	header.add_child(title_label)
+
+	var count_label := Label.new()
+	var total := 0
+	for u in units:
+		total += int(u["count"])
+	count_label.text = "%d units" % total if units.size() > 0 else ""
+	set_font(count_label, LOCAL_FONT_SEMIBOLD, 11)
+	count_label.add_theme_color_override("font_color", Color(0.45, 0.45, 0.45))
+	count_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	count_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	header.add_child(count_label)
+
+	var header_rule := ColorRect.new()
+	header_rule.color = Color(0.6, 0.57, 0.48)
+	header_rule.custom_minimum_size = Vector2(0, 1)
+	col.add_child(header_rule)
+
+	if units.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = empty_text
+		set_font(empty_label, ui.FONT_MEDIUM, 12)
+		empty_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		col.add_child(empty_label)
+		return col
+
+	for u in units:
+		col.add_child(_make_unit_row(ui, u["name"], u["icon"], int(u["count"])))
+
+	return col
+
+
+static func _make_unit_row(ui: Node, unit_name: String, icon: String, count: int) -> PanelContainer:
+	var row := PanelContainer.new()
+	row.add_theme_stylebox_override("panel", style_box(Color(1.0, 1.0, 1.0, 0.5)))
+
+	var row_margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		row_margin.add_theme_constant_override("margin_%s" % side, 4)
+	row.add_child(row_margin)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 8)
+	row_margin.add_child(hbox)
+
+	var icon_circle := PanelContainer.new()
+	var circle_sb := style_box(ui.HUD_BLUE)
+	circle_sb.corner_radius_top_left = 15
+	circle_sb.corner_radius_top_right = 15
+	circle_sb.corner_radius_bottom_left = 15
+	circle_sb.corner_radius_bottom_right = 15
+	icon_circle.add_theme_stylebox_override("panel", circle_sb)
+	icon_circle.custom_minimum_size = Vector2(30, 30)
+	var icon_label := Label.new()
+	icon_label.text = icon
+	icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	icon_label.add_theme_color_override("font_color", Color.WHITE)
+	icon_circle.add_child(icon_label)
+	hbox.add_child(icon_circle)
+
+	var name_label := Label.new()
+	name_label.text = unit_name
+	set_font(name_label, LOCAL_FONT_SEMIBOLD, 13)
+	name_label.add_theme_color_override("font_color", Color(0.15, 0.15, 0.15))
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_child(name_label)
+
+	var count_label := Label.new()
+	count_label.text = str(count)
+	set_font(count_label, LOCAL_FONT_BOLD, 14)
+	count_label.add_theme_color_override("font_color", Color(0.1, 0.1, 0.1))
+	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hbox.add_child(count_label)
+
+	return row
+
+
+static func _make_tab_button(ui: Node, text: String, group: ButtonGroup, active: bool) -> Button:
+	var tab := Button.new()
+	tab.text = text
+	tab.toggle_mode = true
+	tab.button_pressed = active
+	tab.button_group = group
+	tab.focus_mode = Control.FOCUS_NONE
+	set_font(tab, LOCAL_FONT_SEMIBOLD)
+	tab.add_theme_color_override("font_color", Color.WHITE)
+	tab.add_theme_color_override("font_hover_color", Color.WHITE)
+	tab.add_theme_color_override("font_pressed_color", Color.WHITE)
+	tab.add_theme_color_override("font_focus_color", Color.WHITE)
+	tab.add_theme_constant_override("h_separation", 0)
+	var margin_px := 14
+	tab.add_theme_stylebox_override(
+		"normal", _padded_tab_stylebox(Color(0.11, 0.15, 0.22), margin_px)
+	)
+	tab.add_theme_stylebox_override(
+		"hover", _padded_tab_stylebox(Color(0.18, 0.24, 0.34), margin_px)
+	)
+	tab.add_theme_stylebox_override(
+		"pressed", _padded_tab_stylebox(Color(0.247, 0.353, 0.51), margin_px)
+	)
+	tab.add_theme_stylebox_override(
+		"hover_pressed", _padded_tab_stylebox(Color(0.247, 0.353, 0.51), margin_px)
+	)
+	tab.pressed.connect(func(): ui._on_settlement_tab_selected(text))
 	return tab
+
+
+static func _padded_tab_stylebox(bg: Color, side_margin: int) -> StyleBoxFlat:
+	var sb := style_box(bg)
+	sb.content_margin_left = side_margin
+	sb.content_margin_right = side_margin
+	return sb
 
 
 static func _make_building_card(name: String, level: int, locked: bool) -> VBoxContainer:

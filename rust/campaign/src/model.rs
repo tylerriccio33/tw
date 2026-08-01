@@ -132,6 +132,11 @@ pub struct Army {
     /// until it sallies out (any move clears it).
     pub garrisoned: Option<CityId>,
     pub alive: bool,
+    /// Set once `move_army` succeeds for this army this turn; cleared by
+    /// `refresh_movement` when its owner's next turn starts. Each army gets
+    /// exactly one move order per turn, regardless of how much of its
+    /// `movement` pool that order actually spent.
+    pub moved_this_turn: bool,
 }
 
 /// What an army ran into at the end of a move.
@@ -408,6 +413,7 @@ impl Campaign {
             max_movement: DEFAULT_MOVE_POINTS,
             garrisoned,
             alive: true,
+            moved_this_turn: false,
         });
         id
     }
@@ -443,6 +449,13 @@ impl Campaign {
     /// travelled. Terrain is deliberately ignored - every direction costs the
     /// same and the ocean is walkable.
     ///
+    /// Each army gets exactly one move order per turn (`moved_this_turn`,
+    /// cleared by `refresh_movement` at the start of its owner's next turn) -
+    /// a second order this turn is rejected even if move points remain. When
+    /// the campaign has provinces attached, the order is also rejected unless
+    /// the target lands in the army's current province or one of its direct
+    /// neighbors (`Province::borders`) - no multi-hop moves in a single order.
+    ///
     /// If `target` is further than the army's remaining move points, the army
     /// travels as far as it can *along that heading* and stops with an empty
     /// pool rather than refusing the order. Arriving next to an enemy army or
@@ -456,14 +469,22 @@ impl Campaign {
         if self.game_over {
             return Err("game is already over".into());
         }
-        let (owner, from, movement) = {
+        let (owner, from, movement, moved_this_turn) = {
             let army = self
                 .army(army_id)
                 .ok_or_else(|| "no such army".to_string())?;
-            (army.owner, army.position, army.movement)
+            (
+                army.owner,
+                army.position,
+                army.movement,
+                army.moved_this_turn,
+            )
         };
         if owner != self.current_faction_id() {
             return Err("it is not this faction's turn".into());
+        }
+        if moved_this_turn {
+            return Err("army has already moved this turn".into());
         }
         if movement <= 0.0 {
             return Err("army has no move points left".into());
@@ -474,6 +495,21 @@ impl Campaign {
         if requested <= f32::EPSILON {
             return Err("army is already there".into());
         }
+
+        if !self.provinces.is_empty() {
+            let from_province = self.province_nearest_to(from).map(|p| p.id);
+            let to_province = self.province_nearest_to(target).map(|p| p.id);
+            if let (Some(from_id), Some(to_id)) = (from_province, to_province) {
+                let adjacent =
+                    from_id == to_id || self.province(from_id).is_some_and(|p| p.borders(to_id));
+                if !adjacent {
+                    return Err(
+                        "target province is not adjacent to the army's current province".into(),
+                    );
+                }
+            }
+        }
+
         let spent = requested.min(movement);
         let t = spent / requested;
         let to = (
@@ -485,6 +521,7 @@ impl Campaign {
             let army = self.army_mut(army_id).expect("army checked above");
             army.position = to;
             army.movement = (army.movement - spent).max(0.0);
+            army.moved_this_turn = true;
             // Any movement leaves the city walls behind; re-garrisoning is an
             // explicit order (`garrison_army`) once the army has arrived.
             army.garrisoned = None;
@@ -740,6 +777,7 @@ impl Campaign {
             .filter(|a| a.alive && a.owner == faction_id)
         {
             army.movement = army.max_movement;
+            army.moved_this_turn = false;
         }
     }
 

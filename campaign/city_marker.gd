@@ -15,18 +15,20 @@ extends Control
 signal clicked
 
 const FONT := preload("res://assets/fonts/Baloo2-SemiBold.ttf")
-const NAME_FONT_SIZE := 12
+const NAME_FONT_SIZE := 14
 
 ## The clickable plaque holding the keep. Everything else is drawn relative
 ## to it, and the control itself is wider to leave room for the crest.
-const KEEP_SIZE := Vector2(24, 24)
-const CREST_SIZE := Vector2(11, 14)
-const CREST_GAP := 3.0
-const NAME_GAP := 3.0
+## Sized to hold its own next to ArmyMarker's ~52px-diameter disc
+## (army_marker.gd) rather than reading as a minor dot beside it.
+const KEEP_SIZE := Vector2(44, 44)
+const CREST_SIZE := Vector2(20, 25)
+const CREST_GAP := 5.0
+const NAME_GAP := 4.0
 
 const PLAQUE_COLOR := Color(0.93, 0.91, 0.84)
 const INK := Color(0.10, 0.08, 0.06)
-const BORDER_WIDTH := 1.5
+const BORDER_WIDTH := 2.5
 const NAME_COLOR := Color(0.97, 0.96, 0.91)
 const NAME_OUTLINE := Color(0.06, 0.05, 0.04)
 
