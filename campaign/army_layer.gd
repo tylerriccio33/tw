@@ -253,11 +253,15 @@ func _on_marker_input(event: InputEvent, army_id: int) -> void:
 	if not (event is InputEventMouseButton and event.pressed):
 		return
 	if event.button_index == MOUSE_BUTTON_LEFT:
-		# Left-clicking our own army selects it; left-clicking an enemy piece
-		# while we have an army selected is a move order onto that ground
-		# (which resolves the same as any other march), otherwise it's just
-		# an (ignored) selection of an uncommandable piece.
-		if _selected_id != -1 and _ground.has(army_id):
+		# Left-clicking our own army always (re)selects it, even if a
+		# different friendly army was already selected - otherwise clicking
+		# army B while army A is selected would march A onto B instead of
+		# switching command to B. Left-clicking an enemy piece while we have
+		# an army selected is a move order onto that ground (which resolves
+		# the same as any other march); otherwise it's just an (ignored)
+		# selection of an uncommandable piece.
+		var is_own := int(_army_field(army_id, "owner")) == PLAYER_FACTION
+		if _selected_id != -1 and _ground.has(army_id) and not is_own:
 			order_selected_to(_ground[army_id])
 		else:
 			select(army_id)

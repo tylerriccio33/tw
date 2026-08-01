@@ -176,6 +176,88 @@ func test_order_selected_at_screen_ignores_a_click_off_the_world() -> void:
 
 
 ## ---------------------------------------------------------------------------
+## Marker clicks (_on_marker_input) - select-then-click-destination
+## ---------------------------------------------------------------------------
+
+
+func _left_click() -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.pressed = true
+	return event
+
+
+func _right_click() -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_RIGHT
+	event.pressed = true
+	return event
+
+
+func test_clicking_a_friendly_army_with_nothing_selected_selects_it() -> void:
+	manager.armies = [_army(1, 0, 10, 10)]
+	layer.sync(manager.get_state())
+
+	layer._on_marker_input(_left_click(), 1)
+
+	assert_eq(layer.selected_army_id(), 1)
+	assert_eq(manager.move_army_calls.size(), 0)
+
+
+func test_clicking_an_enemy_army_with_a_friendly_army_selected_issues_a_move_order() -> void:
+	manager.armies = [_army(1, 0, 10, 10), _army(2, 1, 40, 40)]
+	layer.sync(manager.get_state())
+	layer.select(1)
+
+	layer._on_marker_input(_left_click(), 2)
+
+	assert_eq(manager.move_army_calls, [[1, 40.0, 40.0]])
+	# The order is aimed at army 1 (still selected), not a reselection onto 2.
+	assert_eq(layer.selected_army_id(), 1)
+
+
+func test_clicking_a_different_friendly_army_reselects_instead_of_marching_onto_it() -> void:
+	# Regression: army A selected, then clicking army B (also ours) used to
+	# be read as a move order marching A onto B instead of switching command
+	# to B - clicking your own army should always select it.
+	manager.armies = [_army(1, 0, 10, 10), _army(2, 0, 40, 40)]
+	layer.sync(manager.get_state())
+	layer.select(1)
+
+	layer._on_marker_input(_left_click(), 2)
+
+	assert_eq(layer.selected_army_id(), 2)
+	assert_eq(manager.move_army_calls.size(), 0)
+
+
+func test_right_clicking_any_army_while_selected_issues_an_attack_order() -> void:
+	manager.armies = [_army(1, 0, 10, 10), _army(2, 1, 40, 40)]
+	layer.sync(manager.get_state())
+	layer.select(1)
+
+	layer._on_marker_input(_right_click(), 2)
+
+	assert_eq(manager.move_army_calls, [[1, 40.0, 40.0]])
+
+
+func test_select_then_click_destination_dispatches_a_move_order_to_the_engine() -> void:
+	# The full select -> click-destination interaction: select a friendly
+	# army via its marker, then click an off-map destination (as
+	# campaign_ui.gd's ground-miss handler would), and confirm the order
+	# actually reaches the engine/sim layer (manager.move_army), not just a
+	# visual-only change.
+	manager.armies = [_army(1, 0, 10, 10)]
+	layer.sync(manager.get_state())
+
+	layer._on_marker_input(_left_click(), 1)
+	assert_eq(layer.selected_army_id(), 1)
+
+	layer.order_selected_at_screen(Vector2(200, 200))
+
+	assert_eq(manager.move_army_calls, [[1, 200.0, 200.0]])
+
+
+## ---------------------------------------------------------------------------
 ## Province highlighting (_update_highlighted_provinces)
 ## ---------------------------------------------------------------------------
 
