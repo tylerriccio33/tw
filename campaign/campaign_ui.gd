@@ -112,6 +112,14 @@ var _city_panel_owner_tab: ColorRect
 var _city_panel_perk_label: Label
 var _city_stat_value_labels: Dictionary = {}
 
+# The settlement panel (city info + buildings/military tray) is the
+# selection-dependent half of the bottom banner - hidden whenever no
+# settlement is selected so only the core/persistent HUD (top bar, end-turn
+# ribbon) shows. Refs stored here so _refresh_bottom_banner/
+# _on_settlement_panel_close_pressed can toggle both halves together.
+var _city_panel: Control
+var _buildings_panel: Control
+
 # Settlement-panel tab content (Buildings/Military) - built once by
 # HudBuilder.build_bottom_banner(), swapped in/out by _on_settlement_tab.
 var _buildings_content: Control
@@ -176,6 +184,15 @@ var _log_panel: Control
 func _on_settlement_tab_selected(tab_name: String) -> void:
 	_buildings_content.visible = tab_name == "Buildings"
 	_military_content.visible = tab_name == "Military"
+
+
+## Closes the settlement panel (back button in the city panel header):
+## clears the selection and re-runs the banner refresh, which hides the
+## city/buildings panels and leaves only the core HUD visible - see
+## _refresh_bottom_banner.
+func _on_settlement_panel_close_pressed() -> void:
+	_selected_city_id = -1
+	_refresh_bottom_banner(manager.get_state())
 
 
 func _fail_to_start(message: String) -> void:
@@ -625,26 +642,35 @@ func _run_ai_factions() -> void:
 	_refresh()
 
 
-## Picks which city's data the banner shows: the first city owned by whoever
-## is acting this turn, falling back to city 0 if that faction somehow holds
-## none (shouldn't happen - a faction with no cities is eliminated).
+## Refreshes the core HUD (always) and the settlement panel (only while a
+## city is selected). The settlement panel - CityPanel + BuildingsPanel,
+## built by HudBuilder - only ever shows a city the player explicitly
+## clicked; with nothing selected it's hidden entirely rather than falling
+## back to some "current" city, so the baseline HUD after closing/deselecting
+## is just the persistent top bar/end-turn ribbon with no settlement info
+## lingering.
 func _refresh_bottom_banner(state: Dictionary) -> void:
-	var current_faction: int = state["current_faction"]
+	end_turn_button.text = "END TURN %d" % int(state["turn"])
+	end_turn_button.disabled = bool(state["game_over"]) or _ai_running
+
 	var shown_city: Dictionary = {}
 	if _selected_city_id != -1:
 		for city in state["cities"]:
 			if int(city["id"]) == _selected_city_id:
 				shown_city = city
 				break
+		# The selected city no longer exists (e.g. captured/eliminated) -
+		# clear the stale selection rather than silently showing nothing.
+		if shown_city.is_empty():
+			_selected_city_id = -1
+
 	if shown_city.is_empty():
-		for city in state["cities"]:
-			if int(city["owner"]) == current_faction:
-				shown_city = city
-				break
-	if shown_city.is_empty() and not state["cities"].is_empty():
-		shown_city = state["cities"][0]
-	if shown_city.is_empty():
+		_city_panel.visible = false
+		_buildings_panel.visible = false
 		return
+
+	_city_panel.visible = true
+	_buildings_panel.visible = true
 
 	_city_panel_name_label.text = shown_city["name"]
 	_city_panel_owner_tab.color = _faction_colors[int(shown_city["owner"]) % _faction_colors.size()]
@@ -654,6 +680,3 @@ func _refresh_bottom_banner(state: Dictionary) -> void:
 		var key: String = row_def[0]
 		var multiplier: int = row_def[3]
 		_city_stat_value_labels[key].text = HudBuilder.format_stat(income * multiplier)
-
-	end_turn_button.text = "END TURN %d" % int(state["turn"])
-	end_turn_button.disabled = bool(state["game_over"]) or _ai_running
