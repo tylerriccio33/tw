@@ -116,3 +116,47 @@ func test_set_highlight_to_its_current_value_is_a_noop() -> void:
 	region.set_highlight(false)
 
 	assert_eq(poly.color, Color.MAGENTA)
+
+
+func test_add_highlight_border_starts_hidden() -> void:
+	var polygon := PackedVector2Array([Vector2(0, 0), Vector2(10, 0), Vector2(10, 10)])
+	region.add_highlight_border(polygon)
+
+	var line := region.get_child(0)
+	assert_true(line is Line2D)
+	assert_false(line.visible)
+
+
+func test_set_highlight_true_shows_the_thick_green_border() -> void:
+	var polygon := PackedVector2Array([Vector2(0, 0), Vector2(10, 0), Vector2(10, 10)])
+	region.add_highlight_border(polygon)
+
+	region.set_highlight(true)
+
+	var line: Line2D = region.get_child(0)
+	assert_true(line.visible)
+	assert_eq(line.default_color, RegionArea.HIGHLIGHT_BORDER_COLOR)
+	assert_eq(line.width, RegionArea.HIGHLIGHT_BORDER_WIDTH)
+	assert_true(
+		line.width > 1.1, "must be noticeably thicker than the 1.1px province hairline"
+	)
+
+
+func test_set_highlight_false_hides_the_thick_green_border_again() -> void:
+	var polygon := PackedVector2Array([Vector2(0, 0), Vector2(10, 0), Vector2(10, 10)])
+	region.add_highlight_border(polygon)
+	region.set_highlight(true)
+
+	region.set_highlight(false)
+
+	var line: Line2D = region.get_child(0)
+	assert_false(line.visible)
+
+
+func test_highlight_border_traces_the_given_polygon_as_a_closed_loop() -> void:
+	var polygon := PackedVector2Array([Vector2(0, 0), Vector2(10, 0), Vector2(10, 10)])
+	region.add_highlight_border(polygon)
+
+	var line: Line2D = region.get_child(0)
+	assert_eq(line.points.size(), 4, "closed loop repeats the first point")
+	assert_eq(line.points[0], line.points[3])

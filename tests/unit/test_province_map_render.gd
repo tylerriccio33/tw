@@ -11,6 +11,7 @@ extends GutTest
 ## CampaignManager needed - so this runs standalone like test_army_marker.gd.
 
 const ProvinceMap := preload("res://campaign/province_map.gd")
+const RegionArea := preload("res://campaign/region_area.gd")
 const WATER_SHADER := preload("res://campaign/water.gdshader")
 const COASTLINE_KEY_SHADER := preload("res://campaign/coastline_key.gdshader")
 
@@ -83,3 +84,42 @@ func test_apply_ownership_draws_no_borders_when_nobody_owns_anything() -> void:
 	map.apply_ownership({}, [])
 	var borders_root: Node2D = map.get_node("FactionBorders")
 	assert_eq(borders_root.get_child_count(), 0)
+
+
+## Counts each province's thick highlight-border Line2D children that are
+## actually visible right now - see region_area.add_highlight_border.
+func _visible_highlight_border_count(area: Node) -> int:
+	var count := 0
+	for child in area.get_children():
+		if child is Line2D and child.default_color == RegionArea.HIGHLIGHT_BORDER_COLOR:
+			if child.visible:
+				count += 1
+	return count
+
+
+func test_set_highlighted_provinces_shows_a_thick_green_border_on_reachable_provinces() -> void:
+	map.setup()
+	var provinces_root: Node2D = map.get_node("Provinces")
+	var target_id: int = map.package.provinces[0]["id"]
+
+	map.set_highlighted_provinces([target_id])
+
+	for area in provinces_root.get_children():
+		var expected := 1 if int(area.province_id) == target_id else 0
+		assert_eq(
+			_visible_highlight_border_count(area) > 0,
+			expected > 0,
+			"%s highlight border visibility mismatch" % area.name
+		)
+
+
+func test_set_highlighted_provinces_of_empty_hides_every_thick_border() -> void:
+	map.setup()
+	var provinces_root: Node2D = map.get_node("Provinces")
+	var target_id: int = map.package.provinces[0]["id"]
+	map.set_highlighted_provinces([target_id])
+
+	map.set_highlighted_provinces([])
+
+	for area in provinces_root.get_children():
+		assert_eq(_visible_highlight_border_count(area), 0, "%s still shows a highlight border" % area.name)
