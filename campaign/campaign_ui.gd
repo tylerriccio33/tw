@@ -52,6 +52,15 @@ const DEFAULT_FACTION_COLORS: Array[Color] = [
 const PLAYER_FACTION := 0
 const AI_STEP_SECONDS := 0.35  # pause between AI factions, so turns stay legible
 
+# Total War-style "watch the AI move" camera: while an AI faction's turn is
+# resolving, the camera pans/zooms in on each army_moved signal it produces in
+# turn, rather than sitting still while enemy armies teleport around
+# off-screen. AI_CAMERA_ZOOM is a _cam_zoom value (inverse magnification, see
+# the comment above _cam_zoom below) - lower than MAX_ZOOM (1.0) but not as
+# tight as MIN_ZOOM, so the move is legible without losing surrounding context.
+const AI_CAMERA_ZOOM := 0.6
+const AI_CAMERA_PAN_SECONDS := 0.45
+
 # Total War-style HUD palette, sampled off the reference reveal-stream
 # screenshot: a mid steel-blue header/tab color, cream parchment panels, and
 # a maroon building tray - kept as named constants since they're reused
@@ -104,6 +113,16 @@ var _selected_city_id: int = -1
 
 var _army_layer: Control
 var _ai_running := false
+
+# AI-turn camera watch. `_watching_ai_moves` is true only for the duration of
+# a single `manager.run_ai_turn()` call (see _run_ai_factions); the
+# `army_moved` signal fires for player moves too (order_selected_to), so this
+# flag - rather than checking the mover's faction - is what keeps the camera
+# from hijacking the player's own orders. `_ai_moves` collects every move
+# `run_ai_turn()` reports (it plays every army the faction owns in one call,
+# so several can land before the signal handler's caller gets control back).
+var _watching_ai_moves := false
+var _ai_moves: Array = []
 
 # Bottom-banner widgets that get new data every _refresh(); built once in
 # _build_bottom_banner() and then just written into on each turn/battle event.
@@ -268,6 +287,7 @@ func _ready() -> void:
 	manager.turn_started.connect(_on_turn_started)
 	manager.battle_resolved.connect(_on_battle_resolved)
 	manager.game_over.connect(_on_game_over)
+	manager.army_moved.connect(_on_army_moved_for_camera)
 	log_button.pressed.connect(_on_log_button_pressed)
 
 	# Armies are clamped to the map extent, so a random AI walk can't march
@@ -615,14 +635,75 @@ func _run_ai_factions() -> void:
 	end_turn_button.disabled = true
 
 	while not manager.is_game_over() and manager.current_faction_id() != PLAYER_FACTION:
+		_ai_moves.clear()
+		_watching_ai_moves = true
 		manager.run_ai_turn()
+		_watching_ai_moves = false
 		_refresh()
-		await get_tree().create_timer(ArmyLayer.MOVE_SECONDS + AI_STEP_SECONDS).timeout
+		await _focus_camera_on_ai_moves(_ai_moves)
+		await get_tree().create_timer(AI_STEP_SECONDS).timeout
 		manager.end_turn()
 
 	_ai_running = false
 	_army_layer.set_orders_locked(false)
 	_refresh()
+
+
+## Collects every army_moved signal fired while `_watching_ai_moves` is set -
+## i.e. only the moves `run_ai_turn()` itself issues, never a player order
+## (order_selected_to's move_army call happens outside that window). Signal
+## handler, so its argument shape must match `army_moved`'s.
+func _on_army_moved_for_camera(
+	_army_id: int, from: Vector2, to: Vector2, _spent: float, _movement_left: float
+) -> void:
+	if not _watching_ai_moves:
+		return
+	_ai_moves.append({"from": from, "to": to})
+
+
+## Pans/zooms the camera onto each AI move in turn (Total War-style "watch the
+## enemy turn"), pausing on each long enough for army_layer's own move tween
+## (ArmyLayer.MOVE_SECONDS) to actually land, then eases back to wherever the
+## camera was sitting before this faction's turn started. A no-op if the
+## faction made no moves (e.g. every army was already immobile).
+func _focus_camera_on_ai_moves(moves: Array) -> void:
+	if moves.is_empty():
+		return
+	var start_focus := _cam_focus
+	var start_zoom := _cam_zoom
+
+	for move in moves:
+		var from: Vector2 = move["from"]
+		var to: Vector2 = move["to"]
+		await _tween_camera_to((from + to) / 2.0, AI_CAMERA_ZOOM, AI_CAMERA_PAN_SECONDS)
+		await get_tree().create_timer(ArmyLayer.MOVE_SECONDS).timeout
+
+	await _tween_camera_to(start_focus, start_zoom, AI_CAMERA_PAN_SECONDS)
+
+
+## Eases _cam_focus/_cam_zoom to the given values over `duration` seconds,
+## re-deriving the world transform and re-projecting markers every step so the
+## pan/zoom is actually visible rather than just a value change. Awaiting the
+## returned value blocks until the tween completes.
+func _tween_camera_to(focus: Vector2, zoom: float, duration: float) -> void:
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.set_parallel(true)
+	tween.tween_method(_set_cam_focus, _cam_focus, focus, duration)
+	tween.tween_method(_set_cam_zoom, _cam_zoom, zoom, duration)
+	await tween.finished
+
+
+func _set_cam_focus(focus: Vector2) -> void:
+	_cam_focus = focus
+	_update_camera_transform()
+	_project_markers()
+
+
+func _set_cam_zoom(zoom: float) -> void:
+	_cam_zoom = zoom
+	_update_camera_transform()
+	_project_markers()
 
 
 ## Picks which city's data the banner shows: the first city owned by whoever

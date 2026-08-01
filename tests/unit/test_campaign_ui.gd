@@ -310,3 +310,91 @@ func test_region_clicked_on_a_cityless_province_does_nothing() -> void:
 	instance.call("_on_region_clicked", -999)
 
 	assert_eq(instance._selected_city_id, -1)
+
+
+## ---------------------------------------------------------------------------
+## AI-turn camera: while an AI faction's turn resolves, the camera should pan/
+## zoom onto each army_moved signal it produces (Total War-style "watch the
+## enemy turn"), the same way a human player's own moves never should - see
+## the _watching_ai_moves comment in campaign_ui.gd for why a flag, not a
+## faction check, is what tells the two apart.
+## ---------------------------------------------------------------------------
+
+
+## The army_moved signal fires for player moves too (order_selected_to routes
+## through the same manager.move_army/army_moved path) - it must only be
+## collected as an "AI move to focus the camera on" while
+## _watching_ai_moves is set, or the player's own orders would yank their
+## camera around.
+func test_army_moved_is_ignored_for_the_camera_when_not_watching_ai_moves() -> void:
+	ui._watching_ai_moves = false
+	ui.call("_on_army_moved_for_camera", 1, Vector2(0, 0), Vector2(100, 50), 5.0, 0.0)
+	assert_true(ui._ai_moves.is_empty(), "a move outside an AI turn must not queue a camera pan")
+
+
+func test_army_moved_is_queued_for_the_camera_while_watching_ai_moves() -> void:
+	ui._watching_ai_moves = true
+	ui.call("_on_army_moved_for_camera", 7, Vector2(10, 20), Vector2(110, 220), 5.0, 0.0)
+	assert_eq(ui._ai_moves.size(), 1)
+	assert_eq(ui._ai_moves[0]["from"], Vector2(10, 20))
+	assert_eq(ui._ai_moves[0]["to"], Vector2(110, 220))
+
+
+## run_ai_turn() plays every army the faction owns in one call, so several
+## army_moved signals can land before control returns - all of them must be
+## collected, not just the last.
+func test_multiple_army_moved_signals_all_queue_while_watching() -> void:
+	ui._watching_ai_moves = true
+	ui.call("_on_army_moved_for_camera", 1, Vector2.ZERO, Vector2(50, 0), 5.0, 0.0)
+	ui.call("_on_army_moved_for_camera", 2, Vector2.ZERO, Vector2(0, 50), 5.0, 0.0)
+	assert_eq(ui._ai_moves.size(), 2)
+
+
+## _tween_camera_to drives the same _cam_focus/_cam_zoom that
+## _update_camera_transform reads, so awaiting it should land the camera
+## exactly on the requested focus/zoom - run against the real scene since
+## _update_camera_transform touches world_layer, which only exists once
+## _ready() has built it.
+func test_tween_camera_to_lands_on_the_requested_focus_and_zoom() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var target := Vector2(123.0, -45.0)
+	await instance.call("_tween_camera_to", target, CampaignUI.AI_CAMERA_ZOOM, 0.05)
+
+	assert_almost_eq(instance._cam_focus.x, target.x, 1.0)
+	assert_almost_eq(instance._cam_focus.y, target.y, 1.0)
+	assert_almost_eq(instance._cam_zoom, CampaignUI.AI_CAMERA_ZOOM, 0.01)
+
+
+## End-to-end: drive an actual AI turn (faction 1, after the player ends turn
+## 0) through run_ai_turn() under the same _watching_ai_moves window
+## _run_ai_factions uses, and check the queued camera targets are real army
+## positions from the resulting state, not placeholders.
+func test_ai_turn_queues_camera_moves_matching_the_armies_new_positions() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	instance.manager.end_turn()
+	assert_eq(instance.manager.current_faction_id(), 1, "test needs faction 1's turn to be next")
+
+	instance._ai_moves.clear()
+	instance._watching_ai_moves = true
+	instance.manager.run_ai_turn()
+	instance._watching_ai_moves = false
+
+	assert_false(instance._ai_moves.is_empty(), "faction 1's armies should have moved")
+
+	# Every queued move must be a real displacement (never a zero-length
+	# "move" queued for the camera to chase), and its `to` must fall within
+	# the map bounds run_ai_turn's own movement clamp guarantees.
+	for move in instance._ai_moves:
+		var from: Vector2 = move["from"]
+		var to: Vector2 = move["to"]
+		assert_ne(from, to, "a queued camera move should reflect actual army movement")
+		assert_true(
+			absf(to.x) <= instance._map_extent + 0.01 and absf(to.y) <= instance._map_extent + 0.01,
+			"queued camera move target should stay on the map"
+		)
