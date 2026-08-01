@@ -240,6 +240,78 @@ func test_append_log_writes_into_the_log_panel_label() -> void:
 
 
 ## ---------------------------------------------------------------------------
+## Turn indicator: a small top-middle widget (Total War-style) showing an
+## empty-circle placeholder plus the acting faction's name below it. Rewritten
+## every _refresh() off state["current_faction"], so it must track both a
+## brand new turn and each faction-to-faction handoff within one turn.
+## ---------------------------------------------------------------------------
+
+
+static func _faction_name(instance: Node2D, faction_id: int) -> String:
+	for faction in instance.manager.get_state()["factions"]:
+		if int(faction["id"]) == faction_id:
+			return faction["name"]
+	return ""
+
+
+## After the scene loads, the indicator should already reflect whichever
+## faction is acting first (state["current_faction"]), not a placeholder.
+func test_turn_indicator_shows_the_starting_factions_name() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var state: Dictionary = instance.manager.get_state()
+	var expected_name: String = _faction_name(instance, int(state["current_faction"]))
+
+	assert_not_null(instance._turn_indicator_name_label)
+	assert_eq(instance._turn_indicator_name_label.text, expected_name)
+
+
+## Ending the turn advances state["current_faction"] in the Rust sim; the
+## indicator's label must be rewritten to the new faction's name rather than
+## staying stuck on whoever went first.
+func test_turn_indicator_updates_when_the_active_faction_advances() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var starting_name: String = instance._turn_indicator_name_label.text
+
+	instance.manager.end_turn()
+	instance.call("_refresh")
+
+	var state: Dictionary = instance.manager.get_state()
+	var expected_name: String = _faction_name(instance, int(state["current_faction"]))
+
+	assert_eq(instance._turn_indicator_name_label.text, expected_name)
+	assert_ne(
+		instance._turn_indicator_name_label.text,
+		starting_name,
+		"indicator should move on from the first faction once the turn advances"
+	)
+
+
+## Multi-faction sequence: end_turn() cycles current_faction round the whole
+## roster (see rust/campaign/src/model.rs advance_turn), so the indicator has
+## to keep matching state["current_faction"] across several consecutive
+## advances, not just the first one.
+func test_turn_indicator_tracks_multiple_consecutive_turn_advances() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	for _i in range(4):
+		instance.manager.end_turn()
+		instance.call("_refresh")
+		var state: Dictionary = instance.manager.get_state()
+		if bool(state["game_over"]):
+			break
+		var expected_name: String = _faction_name(instance, int(state["current_faction"]))
+		assert_eq(instance._turn_indicator_name_label.text, expected_name)
+
+
+## ---------------------------------------------------------------------------
 ## Region clicks: on the real scene (not a bare CampaignUI.new()), since
 ## _on_region_clicked reads from the real manager/_army_layer that _ready()
 ## wires up - a click has to behave differently depending on whether an army

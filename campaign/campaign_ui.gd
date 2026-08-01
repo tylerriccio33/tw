@@ -69,6 +69,7 @@ const FONT_BOLD := preload("res://assets/fonts/Baloo2-Bold.ttf")
 @onready var world_layer: Node2D = $WorldLayer
 @onready var bottom_banner: Control = $UI/BottomBanner
 @onready var _top_bar: Control = $UI/TopBar
+@onready var _turn_indicator: Control = $UI/TurnIndicator
 @onready var cities_root: Control = $CityMarkers
 
 var end_turn_button: Button
@@ -170,6 +171,12 @@ var log_button: Button
 var log_label: RichTextLabel
 var _log_panel: Control
 
+# Turn indicator (top-middle of screen): a circular placeholder icon with
+# the current faction's name below it, built once by
+# HudBuilder.build_turn_indicator() and rewritten every _refresh() to track
+# state["current_faction"].
+var _turn_indicator_name_label: Label
+
 
 ## Swaps which settlement-panel tab content is visible (Buildings/Military).
 ## Wired to each tab button's `toggled` signal by HudBuilder.
@@ -209,6 +216,7 @@ func _ready() -> void:
 	_sync_ui_root_size()
 	HudBuilder.build_top_bar(self)
 	HudBuilder.build_bottom_banner(self)
+	HudBuilder.build_turn_indicator(self)
 
 	_province_map = ProvinceMap.new()
 	_province_map.name = "ProvinceMap"
@@ -360,6 +368,8 @@ func _sync_ui_root_size() -> void:
 	bottom_banner.set_deferred("size", viewport_size)
 	if _top_bar != null:
 		_top_bar.set_deferred("size", viewport_size)
+	if _turn_indicator != null:
+		_turn_indicator.set_deferred("size", viewport_size)
 	cities_root.set_deferred("size", viewport_size)
 
 
@@ -549,6 +559,7 @@ func _refresh() -> void:
 	_project_markers()
 	_army_layer.sync(state)
 	_refresh_bottom_banner(state)
+	_refresh_turn_indicator(state)
 
 	if state["game_over"]:
 		end_turn_button.disabled = true
@@ -657,3 +668,19 @@ func _refresh_bottom_banner(state: Dictionary) -> void:
 
 	end_turn_button.text = "END TURN %d" % int(state["turn"])
 	end_turn_button.disabled = bool(state["game_over"]) or _ai_running
+
+
+## Top-middle turn-order indicator: shows whichever faction is acting this
+## turn (state["current_faction"]), so it updates both on a new turn and on
+## every faction-to-faction handoff within _run_ai_factions()'s sequence, not
+## just once per turn number.
+func _refresh_turn_indicator(state: Dictionary) -> void:
+	if _turn_indicator_name_label == null:
+		return
+	var current_faction: int = state["current_faction"]
+	var faction_name := "Faction %d" % current_faction
+	for faction in state["factions"]:
+		if int(faction["id"]) == current_faction:
+			faction_name = faction["name"]
+			break
+	_turn_indicator_name_label.text = faction_name
