@@ -237,3 +237,76 @@ func test_append_log_writes_into_the_log_panel_label() -> void:
 
 	instance.call("_append_log", "Turn 1: faction 0 begins.")
 	assert_true(instance.log_label.get_parsed_text().contains("Turn 1: faction 0 begins."))
+
+
+## ---------------------------------------------------------------------------
+## Region clicks: on the real scene (not a bare CampaignUI.new()), since
+## _on_region_clicked reads from the real manager/_army_layer that _ready()
+## wires up - a click has to behave differently depending on whether an army
+## is currently selected.
+## ---------------------------------------------------------------------------
+
+
+func _player_army_id(instance: Node2D) -> int:
+	for army in instance.manager.get_state().get("armies", []):
+		if int(army["owner"]) == 0:
+			return int(army["id"])
+	return -1
+
+
+## No army selected: a province click falls back to the old behavior of
+## selecting whichever city stands in it, exactly like clicking its marker.
+func test_region_clicked_selects_the_citys_province_when_no_army_is_selected() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var city: Dictionary = instance.manager.get_state()["cities"][0]
+	instance.call("_on_region_clicked", int(city["province"]))
+
+	assert_eq(instance._selected_city_id, int(city["id"]))
+
+
+## With an army selected, a click on a reachable province's land is a move
+## order onto that province's city - the whole point of the highlight this
+## covers: there's no marker to click directly on a bordering province that
+## has no army/city marker sitting under the mouse.
+func test_region_clicked_orders_the_selected_army_onto_the_clicked_provinces_city() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var army_id := _player_army_id(instance)
+	instance._army_layer.select(army_id)
+	var reachable: Array = instance.manager.reachable_provinces(army_id)
+	assert_false(reachable.is_empty(), "test needs an army with somewhere to go")
+	var target_province: int = reachable[0]
+
+	var target_city: Dictionary
+	for city in instance.manager.get_state()["cities"]:
+		if int(city.get("province", -1)) == target_province:
+			target_city = city
+			break
+
+	instance.call("_on_region_clicked", target_province)
+
+	var after: Dictionary
+	for army in instance.manager.get_state()["armies"]:
+		if int(army["id"]) == army_id:
+			after = army
+			break
+	assert_almost_eq(float(after["x"]), float(target_city["x"]), 0.5)
+	assert_almost_eq(float(after["y"]), float(target_city["y"]), 0.5)
+
+
+## A click on a province with no city standing in it (unowned/cityless) must
+## not crash and must not select anything, army-selected or not - there is
+## nothing in campaign_ui's `state["cities"]` for it to match.
+func test_region_clicked_on_a_cityless_province_does_nothing() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	instance.call("_on_region_clicked", -999)
+
+	assert_eq(instance._selected_city_id, -1)

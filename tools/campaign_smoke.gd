@@ -77,6 +77,59 @@ func _sample_provinces(positions: PackedVector2Array) -> Array:
 	return rows
 
 
+## A province table for _check_armies only: a 1-2-3-4 chain all owned by Red
+## (so hops between them never risk a coin-flip siege), plus three isolated,
+## neighborless provinces - one each for Blue/Green/Yellow, just so every
+## faction still gets the one starting army spawn_starting_armies gives
+## whoever owns a city, without those armies bordering Red's chain.
+func _army_test_provinces() -> Array:
+	var rows: Array = []
+	var chain_positions := _default_positions()
+	for i in chain_positions.size():
+		var neighbors: Array = []
+		if i > 0:
+			neighbors.append(i)
+		if i < chain_positions.size() - 1:
+			neighbors.append(i + 2)
+		(
+			rows
+			. append(
+				{
+					"id": i + 1,
+					"key": "province_%d" % (i + 1),
+					"name": "Province %d" % (i + 1),
+					"centroid": [chain_positions[i].x, chain_positions[i].y],
+					"city_position": [chain_positions[i].x + 5, chain_positions[i].y + 5],
+					"area_px": 1000,
+					"neighbors": neighbors,
+					"starting_owner": "red",
+					"tags": {"terrain": "plains", "resources": ["iron"]},
+				}
+			)
+		)
+
+	var outsiders := ["blue", "green", "yellow"]
+	for i in outsiders.size():
+		var n := chain_positions.size() + i
+		(
+			rows
+			. append(
+				{
+					"id": n + 1,
+					"key": "province_%d" % (n + 1),
+					"name": "Province %d" % (n + 1),
+					"centroid": [1000.0 + n * 100.0, 1000.0],
+					"city_position": [1005.0 + n * 100.0, 1005.0],
+					"area_px": 1000,
+					"neighbors": [],
+					"starting_owner": outsiders[i],
+					"tags": {"terrain": "plains", "resources": ["iron"]},
+				}
+			)
+		)
+	return rows
+
+
 func _start_from_provinces(manager: Object, positions: PackedVector2Array, max_turns: int) -> void:
 	manager.load_factions(_sample_factions())
 	manager.load_provinces(_sample_provinces(positions))
@@ -275,9 +328,10 @@ func _initialize() -> void:
 
 
 ## Exercises the army half of the API on a fresh game: every faction should
-## start with one garrisoned army, a player-issued move should spend points and
-## emit army_moved, an over-long order should still move (capped at the pool),
-## and a few AI turns should keep armies inside the map and eventually fight.
+## start with one garrisoned army, moves are discrete province-to-province
+## hops (reject a non-neighbor, land exactly on a neighbor's city, chain hops
+## while the budget lasts, refuse once it's spent), and a few AI turns should
+## keep armies inside the map and eventually fight.
 func _check_armies() -> Array[String]:
 	var failures: Array[String] = []
 
@@ -291,7 +345,9 @@ func _check_armies() -> Array[String]:
 	manager.army_battle.connect(_on_army_battle)
 
 	manager.set_map_extent(2048.0)
-	_start_from_provinces(manager, _default_positions(), 10)
+	manager.load_factions(_sample_factions())
+	manager.load_provinces(_army_test_provinces())
+	manager.start_game_from_provinces(10)
 
 	var state: Dictionary = manager.get_state()
 	if state["armies"].size() != 4:
@@ -300,35 +356,51 @@ func _check_armies() -> Array[String]:
 		if int(army["garrisoned"]) == -1:
 			failures.append("armies: army %d should start garrisoned" % int(army["id"]))
 		if float(army["movement"]) != float(army["max_movement"]):
-			failures.append("armies: army %d should start with a full move pool" % int(army["id"]))
+			failures.append(
+				"armies: army %d should start with a full move budget" % int(army["id"])
+			)
 
-	# The first faction's army marches somewhere harmless and should spend
-	# exactly the distance it covered.
+	# Red owns a 1-2-3-4 chain (_army_test_provinces) and its army starts in
+	# province 1 - a neighbor of province 2 only, so province 3 is two hops
+	# away and every hop in this test lands on Red's own soil, with no
+	# coin-flip siege to derail the bookkeeping being checked here.
 	var first: Dictionary = state["armies"][0]
-	var move_points: float = float(first["max_movement"])
-	var start := Vector2(float(first["x"]), float(first["y"]))
-	if not manager.move_army(int(first["id"]), start.x, start.y - 50.0):
-		failures.append("armies: a short move order was rejected")
+	var max_moves: float = float(first["max_movement"])
+	var province2_city := _city_position_in_province(state, 2)
+	var province3_city := _city_position_in_province(state, 3)
+
+	if manager.move_army(int(first["id"]), province3_city.x, province3_city.y):
+		failures.append("armies: a move into a non-adjacent province should be rejected")
+
+	if not manager.move_army(int(first["id"]), province2_city.x, province2_city.y):
+		failures.append("armies: a move into an adjacent province was rejected")
 	var after: Dictionary = _find_army(manager.get_state(), int(first["id"]))
 	if after.is_empty():
 		failures.append("armies: army vanished after a harmless move")
-	elif not is_equal_approx(float(after["movement"]), move_points - 50.0):
+	elif Vector2(float(after["x"]), float(after["y"])).distance_to(province2_city) > 0.01:
+		failures.append("armies: a hop should land exactly on the target province's city")
+	elif not is_equal_approx(float(after["movement"]), max_moves - 1.0):
 		failures.append(
 			(
-				"armies: a 50-unit move should cost 50 points, left %.2f of %.2f"
-				% [float(after["movement"]), move_points]
+				"armies: one hop should spend exactly one move, left %.2f of %.2f"
+				% [float(after["movement"]), max_moves]
 			)
 		)
 	if army_moved_count == 0:
 		failures.append("armies: army_moved never fired")
 
-	# Ordering past the remaining pool must still move, capped, rather than
-	# failing outright.
-	if not manager.move_army(int(first["id"]), start.x, start.y - 99999.0):
-		failures.append("armies: an over-long move order should be capped, not rejected")
+	# Chain a second hop, from province 2 into its other neighbor, province 3.
+	if not manager.move_army(int(first["id"]), province3_city.x, province3_city.y):
+		failures.append("armies: a second hop with moves left was rejected")
 	after = _find_army(manager.get_state(), int(first["id"]))
-	if not after.is_empty() and float(after["movement"]) > 0.001:
-		failures.append("armies: an over-long move should drain the whole pool")
+	if not after.is_empty() and float(after["movement"]) != 0.0:
+		failures.append("armies: two hops on a 2-move budget should empty it")
+
+	# Budget spent - a third hop this turn must be refused even though
+	# province 3 has further neighbors to hop to.
+	var province4_city := _city_position_in_province(state, 4)
+	if manager.move_army(int(first["id"]), province4_city.x, province4_city.y):
+		failures.append("armies: a move with no moves left should be rejected")
 
 	# Let the random AI run the rest of the campaign out.
 	manager.end_turn()
@@ -364,6 +436,13 @@ func _find_army(state: Dictionary, army_id: int) -> Dictionary:
 		if int(army["id"]) == army_id:
 			return army
 	return {}
+
+
+func _city_position_in_province(state: Dictionary, province_id: int) -> Vector2:
+	for city in state["cities"]:
+		if int(city.get("province", -1)) == province_id:
+			return Vector2(float(city["x"]), float(city["y"]))
+	return Vector2.INF
 
 
 func _finish(failures: Array[String]) -> void:

@@ -62,6 +62,27 @@ func test_apply_ownership_defaults_unowned_to_gray() -> void:
 	assert_eq(double.owner_color_calls, [Color(0.6, 0.6, 0.6)])
 
 
+func test_set_highlighted_provinces_highlights_only_the_given_ids() -> void:
+	var a := _make_stub()
+	var b := _make_stub()
+	map._areas = {1: a, 2: b}
+
+	map.set_highlighted_provinces([2])
+
+	assert_eq(a.highlight_calls, [false])
+	assert_eq(b.highlight_calls, [true])
+
+
+func test_set_highlighted_provinces_of_empty_clears_every_province() -> void:
+	var a := _make_stub()
+	map._areas = {1: a}
+	map.set_highlighted_provinces([1])
+
+	map.set_highlighted_provinces([])
+
+	assert_eq(a.highlight_calls, [true, false])
+
+
 func _square(x: float, y: float, side: float) -> PackedVector2Array:
 	return PackedVector2Array(
 		[Vector2(x, y), Vector2(x + side, y), Vector2(x + side, y + side), Vector2(x, y + side)]

@@ -3,17 +3,18 @@ extends Control
 ## them along the moves the Rust model reports, and turns player clicks into
 ## move orders.
 ##
-## Movement is continuous rather than tile-based. An army has a pool of move
-## points and spends one per world unit of straight-line distance, with no
-## terrain modifier at all - mountains, roads and open ocean all cost the same,
-## and an order past the pool marches as far as it reaches along that heading.
-## Every rule of that lives in Rust (`Campaign::move_army`); this script only
-## draws pieces and forwards orders.
+## Movement is province-to-province, not continuous: a selected army can hop
+## into its current province's neighbors (and further, neighbors-of-
+## neighbors, while its move budget lasts), landing on the target province's
+## city regardless of where in it the click actually fell. Every rule of that
+## lives in Rust (`Campaign::move_army`/`reachable_provinces`); this script
+## only draws pieces, highlights reachable land, and forwards orders.
 ##
-## The parent (campaign_ui.gd) owns the manager and the world<->screen
-## projection (plain 2D pan/zoom, no camera object) and hands them over in
-## setup(); this node reports back through `log_message` and `state_changed`
-## rather than reaching up into its parent.
+## The parent (campaign_ui.gd) owns the manager, the province map (for
+## highlighting reachable provinces) and the world<->screen projection (plain
+## 2D pan/zoom, no camera object), and hands them over in setup(); this node
+## reports back through `log_message` and `state_changed` rather than
+## reaching up into its parent.
 
 signal log_message(text: String)
 ## Emitted when an order this node issued changed the campaign, so the parent
@@ -22,10 +23,18 @@ signal state_changed
 
 const ArmyMarker := preload("res://campaign/army_marker.gd")
 
+## Order cursor shown while an army is selected, and its green "this would
+## move you" variant for when the mouse sits over a reachable city. Both from
+## Kenney's CC0 Cursor Pack - see assets/ui/cursors/LICENSE.txt.
+const CURSOR_ORDER := preload("res://assets/ui/cursors/tool_sword_a.png")
+const CURSOR_ORDER_REACHABLE := preload("res://assets/ui/cursors/tool_sword_a_noop.png")
+const CURSOR_HOTSPOT := Vector2(4.0, 4.0)
+## How close the mouse has to sit to a reachable city's marker, in screen
+## pixels, to count as "hovering a valid move target" for the cursor.
+const REACHABLE_HOVER_RADIUS := ArmyMarker.DISC_RADIUS * 2.0
+
 const PLAYER_FACTION := 0
 const MOVE_SECONDS := 0.7  # how long one army's move animation takes
-const RANGE_RING_POINTS := 48
-const RANGE_RING_COLOR := Color(1.0, 1.0, 1.0, 0.55)
 ## A same-owner army starts standing exactly on its capital's city marker
 ## (see godot_api::spawn_starting_armies), so the piece is nudged this far
 ## from its true ground position purely for the draw - it would otherwise sit
@@ -37,8 +46,12 @@ var _manager: Node
 var _world_to_screen: Callable
 var _screen_to_world: Callable
 var _faction_colors: Array[Color] = []
+## The 2D province polygons, so a selected army's reachable provinces can be
+## tinted - see province_map.set_highlighted_provinces. Null is fine (no
+## highlighting) so tests/tools that build this node without a province map
+## still work.
+var _province_map: Node
 
-var _range_ring: Line2D
 var _markers: Dictionary = {}
 ## Animated source of truth for where each piece is *drawn*, as world (x, z).
 ## The tween writes into this and project() turns it into screen space, so
@@ -49,32 +62,30 @@ var _tweens: Dictionary = {}
 var _selected_id: int = -1
 var _orders_locked := false
 
+## Tracks which custom cursor (if any) is currently applied, so we only call
+## Input.set_custom_mouse_cursor when the state actually changes.
+enum CursorState { NONE, ORDER, ORDER_REACHABLE }
+var _cursor_state: CursorState = CursorState.NONE
+
 
 func setup(
 	manager: Node,
 	world_to_screen: Callable,
 	screen_to_world: Callable,
-	faction_colors: Array[Color]
+	faction_colors: Array[Color],
+	province_map: Node = null
 ) -> void:
 	_manager = manager
 	_world_to_screen = world_to_screen
 	_screen_to_world = screen_to_world
 	_faction_colors = faction_colors
+	_province_map = province_map
 
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	# IGNORE on the container only - the markers themselves still take clicks,
 	# and anything that misses one falls through to the parent's
 	# _unhandled_input, which is where move orders and deselection land.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	# Added first so it draws underneath the pieces.
-	_range_ring = Line2D.new()
-	_range_ring.name = "RangeRing"
-	_range_ring.width = 2.0
-	_range_ring.default_color = RANGE_RING_COLOR
-	_range_ring.closed = true
-	_range_ring.visible = false
-	add_child(_range_ring)
 
 	_manager.army_moved.connect(_on_army_moved)
 	_manager.army_battle.connect(_on_army_battle)
@@ -85,8 +96,66 @@ func set_orders_locked(locked: bool) -> void:
 	_orders_locked = locked
 
 
+## Swaps in the order cursor whenever an army is selected, and its green
+## variant when the mouse is over a city the army could actually move to this
+## turn. Runs every frame since it depends on live mouse position, not on
+## state that changes through sync().
+func _process(_delta: float) -> void:
+	_set_cursor(_cursor_state_for(get_global_mouse_position()))
+
+
+## Pure decision behind _process, split out so a test can drive it with an
+## arbitrary mouse position instead of the real (unit-test-hostile) one.
+func _cursor_state_for(mouse: Vector2) -> CursorState:
+	if _selected_id == -1 or _orders_locked:
+		return CursorState.NONE
+
+	var reachable: Array = _manager.reachable_provinces(_selected_id)
+	for city in _manager.get_state().get("cities", []):
+		if not reachable.has(int(city.get("province", -1))):
+			continue
+		var screen: Vector2 = _world_to_screen.call(Vector2(float(city["x"]), float(city["y"])))
+		if mouse.distance_to(screen) <= REACHABLE_HOVER_RADIUS:
+			return CursorState.ORDER_REACHABLE
+
+	return CursorState.ORDER
+
+
+func _set_cursor(state: CursorState) -> void:
+	if state == _cursor_state:
+		return
+	_cursor_state = state
+	match state:
+		CursorState.NONE:
+			Input.set_custom_mouse_cursor(null)
+		CursorState.ORDER:
+			Input.set_custom_mouse_cursor(CURSOR_ORDER, Input.CURSOR_ARROW, CURSOR_HOTSPOT)
+		CursorState.ORDER_REACHABLE:
+			Input.set_custom_mouse_cursor(
+				CURSOR_ORDER_REACHABLE, Input.CURSOR_ARROW, CURSOR_HOTSPOT
+			)
+
+
+## Tints the selected army's reachable provinces on the 2D map, or clears
+## every highlight when nothing's selected. Called from select() and sync(),
+## since moves_left (and so what's reachable) can change without a reselect.
+func _update_highlighted_provinces() -> void:
+	if _province_map == null:
+		return
+	if _selected_id == -1:
+		_province_map.set_highlighted_provinces([])
+	else:
+		_province_map.set_highlighted_provinces(_manager.reachable_provinces(_selected_id))
+
+
 func selected_army_id() -> int:
 	return _selected_id
+
+
+func _exit_tree() -> void:
+	Input.set_custom_mouse_cursor(null)
+	if _province_map != null:
+		_province_map.set_highlighted_provinces([])
 
 
 ## ---------------------------------------------------------------------------
@@ -120,7 +189,7 @@ func sync(state: Dictionary) -> void:
 		marker.set_faction_color(_faction_colors[int(army["owner"]) % _faction_colors.size()])
 		marker.set_selected(id == _selected_id)
 		marker.tooltip_text = (
-			"%s\n%d / %d move points%s"
+			"%s\n%d / %d moves%s"
 			% [
 				army["name"],
 				int(army["movement"]),
@@ -139,6 +208,7 @@ func sync(state: Dictionary) -> void:
 		_selected_id = -1
 
 	project()
+	_update_highlighted_provinces()
 
 
 func _remove_marker(id: int) -> void:
@@ -154,8 +224,8 @@ func _remove_marker(id: int) -> void:
 	_ground.erase(id)
 
 
-## Screen-projects every piece and the selection ring from the current camera.
-## Called on any camera change, and every frame while a piece is animating.
+## Screen-projects every piece from the current camera. Called on any camera
+## change, and every frame while a piece is animating.
 func project() -> void:
 	for id: int in _markers.keys():
 		var marker: ArmyMarker = _markers[id]
@@ -163,25 +233,6 @@ func project() -> void:
 		marker.position = (
 			_world_to_screen.call(_ground[id]) + DRAW_OFFSET - marker.anchor_offset()
 		)
-	_project_range_ring()
-
-
-## The selected army's remaining reach, as a world-space circle projected
-## point by point.
-func _project_range_ring() -> void:
-	var radius := _army_field(_selected_id, "movement")
-	if _selected_id == -1 or not _ground.has(_selected_id) or radius <= 0.0:
-		_range_ring.visible = false
-		return
-
-	var centre: Vector2 = _ground[_selected_id]
-	var points := PackedVector2Array()
-	for i in RANGE_RING_POINTS:
-		var angle := TAU * float(i) / float(RANGE_RING_POINTS)
-		var world := centre + Vector2(cos(angle), sin(angle)) * radius
-		points.append(_world_to_screen.call(world))
-	_range_ring.points = points
-	_range_ring.visible = true
 
 
 func _army_field(army_id: int, key: String) -> float:

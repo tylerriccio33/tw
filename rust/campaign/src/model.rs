@@ -14,6 +14,13 @@ pub type ProvinceId = u32;
 /// the ocean is walkable. See `Campaign::move_army`.
 pub const DEFAULT_MOVE_POINTS: f32 = 450.0;
 
+/// Provinces a garrisoned-or-marching army can hop across in one of its
+/// owner's turns, once the campaign has territory attached
+/// (`Campaign::with_provinces`). Each hop is a whole move onto an adjacent
+/// province - see `Campaign::move_army`'s province branch - so with the
+/// default of 2 an army can push two provinces deep in a single turn.
+pub const DEFAULT_MOVES: u32 = 2;
+
 /// How close two opposing armies must end up before they fight a field battle.
 const ENGAGE_RADIUS: f32 = 60.0;
 
@@ -127,6 +134,12 @@ pub struct Army {
     /// turn starts.
     pub movement: f32,
     pub max_movement: f32,
+    /// Provinces this army can still hop across this turn, when the campaign
+    /// has territory attached. Refilled to `max_moves` alongside `movement`.
+    /// Unused (stays at `max_moves`) on a campaign built without provinces,
+    /// which keeps the continuous `movement` pool as its only move rule.
+    pub moves_left: u32,
+    pub max_moves: u32,
     /// `Some(city)` while the army sits inside a friendly city. Purely a state
     /// flag: a garrisoned army defends that city against sieges and cannot move
     /// until it sallies out (any move clears it).
@@ -411,6 +424,8 @@ impl Campaign {
             position: self.clamp_to_map(position),
             movement: DEFAULT_MOVE_POINTS,
             max_movement: DEFAULT_MOVE_POINTS,
+            moves_left: DEFAULT_MOVES,
+            max_moves: DEFAULT_MOVES,
             garrisoned,
             alive: true,
             moved_this_turn: false,
@@ -445,21 +460,26 @@ impl Campaign {
         (p.0.clamp(-e, e), p.1.clamp(-e, e))
     }
 
-    /// Moves `army_id` toward `target`, spending one move point per world unit
-    /// travelled. Terrain is deliberately ignored - every direction costs the
-    /// same and the ocean is walkable.
+    /// Orders `army_id` toward `target`. Behaviour depends on whether the
+    /// campaign has provinces attached (`Campaign::with_provinces`):
     ///
-    /// Each army gets exactly one move order per turn (`moved_this_turn`,
-    /// cleared by `refresh_movement` at the start of its owner's next turn) -
-    /// a second order this turn is rejected even if move points remain. When
-    /// the campaign has provinces attached, the order is also rejected unless
-    /// the target lands in the army's current province or one of its direct
-    /// neighbors (`Province::borders`) - no multi-hop moves in a single order.
+    /// - **With provinces** (the real game): this is a discrete hop. The
+    ///   order is rejected unless `target` lands in the army's current
+    ///   province or one of its direct neighbors (`Province::borders`), and
+    ///   costs exactly one of the army's `moves_left` regardless of the
+    ///   distance actually covered - the army lands on the target province's
+    ///   city (or its centroid, if it has none) rather than stopping
+    ///   partway. `moves_left` lets an army spend more than one hop in a
+    ///   turn, chained through separate orders.
+    /// - **Without provinces** (bare-position campaigns, used by tests): the
+    ///   old continuous rule - one move point spent per world unit of
+    ///   straight-line distance, terrain ignored, and exactly one order
+    ///   allowed per turn (`moved_this_turn`). An order past the remaining
+    ///   pool travels as far as it can along that heading rather than
+    ///   failing outright.
     ///
-    /// If `target` is further than the army's remaining move points, the army
-    /// travels as far as it can *along that heading* and stops with an empty
-    /// pool rather than refusing the order. Arriving next to an enemy army or
-    /// on an enemy city resolves a battle immediately (see `resolve_battle`).
+    /// Either way, arriving next to an enemy army or on an enemy city
+    /// resolves a battle immediately (see `resolve_arrival`).
     pub fn move_army(
         &mut self,
         army_id: ArmyId,
@@ -469,20 +489,40 @@ impl Campaign {
         if self.game_over {
             return Err("game is already over".into());
         }
-        let (owner, from, movement, moved_this_turn) = {
+        let (owner, from) = {
             let army = self
                 .army(army_id)
                 .ok_or_else(|| "no such army".to_string())?;
-            (
-                army.owner,
-                army.position,
-                army.movement,
-                army.moved_this_turn,
-            )
+            (army.owner, army.position)
         };
         if owner != self.current_faction_id() {
             return Err("it is not this faction's turn".into());
         }
+
+        let target = self.clamp_to_map(target);
+        if distance(from, target) <= f32::EPSILON {
+            return Err("army is already there".into());
+        }
+
+        if self.provinces.is_empty() {
+            self.move_army_continuous(army_id, from, target, rng)
+        } else {
+            self.move_army_by_province(army_id, from, target, rng)
+        }
+    }
+
+    /// The old free-roam rule, kept for campaigns with no territory attached.
+    fn move_army_continuous(
+        &mut self,
+        army_id: ArmyId,
+        from: (f32, f32),
+        target: (f32, f32),
+        rng: &mut impl Rng,
+    ) -> Result<MoveReport, String> {
+        let (movement, moved_this_turn) = {
+            let army = self.army(army_id).expect("army checked by move_army");
+            (army.movement, army.moved_this_turn)
+        };
         if moved_this_turn {
             return Err("army has already moved this turn".into());
         }
@@ -490,26 +530,7 @@ impl Campaign {
             return Err("army has no move points left".into());
         }
 
-        let target = self.clamp_to_map(target);
         let requested = distance(from, target);
-        if requested <= f32::EPSILON {
-            return Err("army is already there".into());
-        }
-
-        if !self.provinces.is_empty() {
-            let from_province = self.province_nearest_to(from).map(|p| p.id);
-            let to_province = self.province_nearest_to(target).map(|p| p.id);
-            if let (Some(from_id), Some(to_id)) = (from_province, to_province) {
-                let adjacent =
-                    from_id == to_id || self.province(from_id).is_some_and(|p| p.borders(to_id));
-                if !adjacent {
-                    return Err(
-                        "target province is not adjacent to the army's current province".into(),
-                    );
-                }
-            }
-        }
-
         let spent = requested.min(movement);
         let t = spent / requested;
         let to = (
@@ -538,6 +559,108 @@ impl Campaign {
             movement_left,
             battle,
         })
+    }
+
+    /// The discrete province-hop rule used once a campaign has territory
+    /// attached. One order = one hop onto the current-or-neighboring
+    /// province, landing on that province's city (or its centroid, if it has
+    /// none) regardless of where in it `target` actually pointed - clicking
+    /// anywhere on a reachable province marches the army all the way there.
+    fn move_army_by_province(
+        &mut self,
+        army_id: ArmyId,
+        from: (f32, f32),
+        target: (f32, f32),
+        rng: &mut impl Rng,
+    ) -> Result<MoveReport, String> {
+        let moves_left = self
+            .army(army_id)
+            .expect("army checked by move_army")
+            .moves_left;
+        if moves_left == 0 {
+            return Err("army has no moves left".into());
+        }
+
+        let from_id = self
+            .province_nearest_to(from)
+            .map(|p| p.id)
+            .ok_or_else(|| "army is not standing in any province".to_string())?;
+        let to_id = self
+            .province_nearest_to(target)
+            .map(|p| p.id)
+            .ok_or_else(|| "target is not in any province".to_string())?;
+        let adjacent = from_id == to_id || self.province(from_id).is_some_and(|p| p.borders(to_id));
+        if !adjacent {
+            return Err("target province is not adjacent to the army's current province".into());
+        }
+
+        let to = self.province_landing_point(to_id).unwrap_or(target);
+
+        {
+            let army = self.army_mut(army_id).expect("army checked above");
+            army.position = to;
+            army.moves_left -= 1;
+            // Any movement leaves the city walls behind; re-garrisoning is an
+            // explicit order (`garrison_army`) once the army has arrived.
+            army.garrisoned = None;
+        }
+
+        let battle = self.resolve_arrival(army_id, rng);
+        let moves_left = self.army(army_id).map_or(0, |a| a.moves_left);
+
+        Ok(MoveReport {
+            army_id,
+            from,
+            to,
+            spent: distance(from, to),
+            movement_left: moves_left as f32,
+            battle,
+        })
+    }
+
+    /// Where an army lands when it hops into `province_id`: that province's
+    /// city if it has one, else its centroid.
+    fn province_landing_point(&self, province_id: ProvinceId) -> Option<(f32, f32)> {
+        self.cities
+            .iter()
+            .find(|c| c.province == Some(province_id))
+            .map(|c| c.position)
+            .or_else(|| self.province(province_id).map(|p| p.centroid))
+    }
+
+    /// Every province `army_id` could hop into with its remaining moves, up
+    /// to `moves_left` hops deep through the neighbor graph (breadth-first,
+    /// so a 2-hop budget reaches neighbors-of-neighbors too). Empty for a
+    /// campaign with no provinces attached, an unknown army, or an army with
+    /// no moves left. Used purely for highlighting - `move_army` is the
+    /// source of truth for what a click actually resolves to.
+    pub fn reachable_provinces(&self, army_id: ArmyId) -> Vec<ProvinceId> {
+        let Some(army) = self.army(army_id) else {
+            return Vec::new();
+        };
+        if army.moves_left == 0 {
+            return Vec::new();
+        }
+        let Some(start) = self.province_nearest_to(army.position).map(|p| p.id) else {
+            return Vec::new();
+        };
+
+        let mut visited: Vec<ProvinceId> = vec![start];
+        let mut frontier: Vec<ProvinceId> = vec![start];
+        for _ in 0..army.moves_left {
+            let mut next_frontier = Vec::new();
+            for id in &frontier {
+                for neighbor in self.neighbors_of(*id) {
+                    if !visited.contains(&neighbor.id) {
+                        visited.push(neighbor.id);
+                        next_frontier.push(neighbor.id);
+                    }
+                }
+            }
+            frontier = next_frontier;
+        }
+        visited.retain(|id| *id != start);
+        visited
     }
 
     /// Garrisons `army_id` in whichever friendly city it is standing in.
@@ -709,37 +832,119 @@ impl Campaign {
 
     /// Plays the current faction's armies for it. Movement is deliberately
     /// random for now: each army either charges the nearest enemy city/army it
-    /// could actually reach this turn, or wanders off on a random heading,
-    /// decided by a coin flip. Returns one report per army that moved.
+    /// could actually reach, or wanders off randomly, decided by a coin flip
+    /// - once per hop when the campaign has provinces attached (so an army
+    ///   can spend its whole `moves_left` budget in one AI turn), once total
+    ///   otherwise. Returns one report per successful move.
     pub fn run_ai_turn(&mut self, rng: &mut impl Rng) -> Vec<MoveReport> {
         let faction = self.current_faction_id();
         let mut reports = Vec::new();
         let ids: Vec<ArmyId> = self.armies_owned_by(faction).iter().map(|a| a.id).collect();
+        let by_province = !self.provinces.is_empty();
 
         for id in ids {
             if self.game_over {
                 break;
             }
-            let Some(army) = self.army(id) else { continue };
-            let (from, range) = (army.position, army.movement);
-            if range <= 0.0 {
-                continue;
-            }
-
-            let aggressive = rng.gen_bool(0.5);
-            let target = self
-                .nearest_reachable_target(faction, from, range)
-                .filter(|_| aggressive)
-                .unwrap_or_else(|| {
-                    let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-                    (from.0 + angle.cos() * range, from.1 + angle.sin() * range)
-                });
-
-            if let Ok(report) = self.move_army(id, target, rng) {
-                reports.push(report);
+            if by_province {
+                self.ai_wander_by_province(id, faction, rng, &mut reports);
+            } else {
+                self.ai_wander_continuous(id, faction, rng, &mut reports);
             }
         }
         reports
+    }
+
+    /// One AI move for a bare-position campaign: charge the nearest reachable
+    /// enemy, or wander a random heading, spending the whole continuous
+    /// `movement` pool.
+    fn ai_wander_continuous(
+        &mut self,
+        id: ArmyId,
+        faction: FactionId,
+        rng: &mut impl Rng,
+        reports: &mut Vec<MoveReport>,
+    ) {
+        let Some(army) = self.army(id) else { return };
+        let (from, range) = (army.position, army.movement);
+        if range <= 0.0 {
+            return;
+        }
+
+        let aggressive = rng.gen_bool(0.5);
+        let target = self
+            .nearest_reachable_target(faction, from, range)
+            .filter(|_| aggressive)
+            .unwrap_or_else(|| {
+                let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+                (from.0 + angle.cos() * range, from.1 + angle.sin() * range)
+            });
+
+        if let Ok(report) = self.move_army(id, target, rng) {
+            reports.push(report);
+        }
+    }
+
+    /// Repeatedly hops `id` into a neighboring province - toward the nearest
+    /// enemy-held one if aggressive and one borders it, otherwise a random
+    /// neighbor - until its `moves_left` budget runs out or it has nowhere
+    /// left to go.
+    fn ai_wander_by_province(
+        &mut self,
+        id: ArmyId,
+        faction: FactionId,
+        rng: &mut impl Rng,
+        reports: &mut Vec<MoveReport>,
+    ) {
+        loop {
+            if self.game_over {
+                break;
+            }
+            let Some(army) = self.army(id) else { break };
+            if army.moves_left == 0 {
+                break;
+            }
+            let Some(from_id) = self.province_nearest_to(army.position).map(|p| p.id) else {
+                break;
+            };
+            let neighbor_ids: Vec<ProvinceId> = self
+                .neighbors_of(from_id)
+                .into_iter()
+                .map(|p| p.id)
+                .collect();
+            if neighbor_ids.is_empty() {
+                break;
+            }
+
+            let aggressive = rng.gen_bool(0.5);
+            let enemy_held = |province_id: ProvinceId| -> bool {
+                self.cities
+                    .iter()
+                    .any(|c| c.owner != faction && c.province == Some(province_id))
+                    || self.armies.iter().any(|a| {
+                        a.alive
+                            && a.owner != faction
+                            && self
+                                .province_nearest_to(a.position)
+                                .is_some_and(|p| p.id == province_id)
+                    })
+            };
+            let target_id = neighbor_ids
+                .iter()
+                .copied()
+                .find(|id| enemy_held(*id))
+                .filter(|_| aggressive)
+                .unwrap_or(neighbor_ids[rng.gen_range(0..neighbor_ids.len())]);
+
+            let Some(target) = self.province_landing_point(target_id) else {
+                break;
+            };
+
+            match self.move_army(id, target, rng) {
+                Ok(report) => reports.push(report),
+                Err(_) => break,
+            }
+        }
     }
 
     /// Closest enemy city or army within `range` of `from`, as a move target.
@@ -778,6 +983,7 @@ impl Campaign {
         {
             army.movement = army.max_movement;
             army.moved_this_turn = false;
+            army.moves_left = army.max_moves;
         }
     }
 
@@ -1357,6 +1563,125 @@ mod tests {
         assert_eq!(neighbors[0].id, 2);
         assert!(c.province(1).unwrap().borders(2));
         assert!(!c.province(1).unwrap().borders(99));
+    }
+
+    #[test]
+    fn hopping_onto_an_adjacent_enemy_city_besieges_it() {
+        // The siege itself is a coin flip (see attack_until_won), so this
+        // only pins down the parts that don't depend on who wins: the click
+        // snapped to Bluehold rather than stopping short of it, and the
+        // arrival triggered a siege rather than free movement.
+        let mut c = province_campaign();
+        let army_id = c.spawn_army(0, "A".into(), (0.0, 0.0));
+        let mut rng = SmallRng::seed_from_u64(1);
+
+        // A click anywhere past Bluehold still lands exactly on it - hops
+        // snap to the target province's city rather than stopping short.
+        let report = c.move_army(army_id, (250.0, 40.0), &mut rng).unwrap();
+
+        assert_eq!(report.to, (100.0, 0.0), "landed on Bluehold, not the click");
+        assert!(matches!(
+            report.battle.unwrap().kind,
+            BattleKind::Siege { city: 1, .. }
+        ));
+    }
+
+    /// A 1-2-3 chain: province 2 sits between the other two and has no city
+    /// of its own, so a hop into it has to fall back to its centroid. A
+    /// second, cityless faction just keeps the game from ending on the spot
+    /// (alive_count <= 1 is a win condition) - these tests never touch it.
+    fn chain_provinces_campaign() -> Campaign {
+        let factions = vec![
+            Faction {
+                id: 0,
+                name: "Red".into(),
+                money: 0,
+                alive: true,
+            },
+            Faction {
+                id: 1,
+                name: "Blue".into(),
+                money: 0,
+                alive: true,
+            },
+        ];
+        let cities = vec![City {
+            id: 0,
+            name: "Redhold".into(),
+            income: 10,
+            position: (0.0, 0.0),
+            owner: 0,
+            province: Some(1),
+        }];
+        Campaign::new(factions, cities, 10).with_provinces(vec![
+            province(1, Some(0), vec![2]),
+            province(2, None, vec![1, 3]),
+            province(3, None, vec![2]),
+        ])
+    }
+
+    #[test]
+    fn move_army_rejects_a_non_adjacent_province_in_one_hop() {
+        let mut c = chain_provinces_campaign();
+        let army_id = c.spawn_army(0, "A".into(), (0.0, 0.0));
+        let mut rng = SmallRng::seed_from_u64(1);
+        // Province 3 borders province 2, not province 1 - not reachable in a
+        // single order even though the army has moves to spare.
+        assert!(c.move_army(army_id, (300.0, 0.0), &mut rng).is_err());
+    }
+
+    #[test]
+    fn move_army_chains_hops_across_the_same_turn() {
+        let mut c = chain_provinces_campaign();
+        let army_id = c.spawn_army(0, "A".into(), (0.0, 0.0));
+        let mut rng = SmallRng::seed_from_u64(1);
+
+        let hop1 = c.move_army(army_id, (200.0, 0.0), &mut rng).unwrap();
+        assert_eq!(
+            hop1.to,
+            (200.0, 0.0),
+            "province 2 has no city, so it lands on its centroid"
+        );
+        assert_eq!(c.army(army_id).unwrap().moves_left, DEFAULT_MOVES - 1);
+
+        let hop2 = c.move_army(army_id, (300.0, 0.0), &mut rng).unwrap();
+        assert_eq!(hop2.to, (300.0, 0.0));
+        assert_eq!(c.army(army_id).unwrap().moves_left, 0);
+
+        // Budget spent - a third order this turn is refused.
+        assert!(c.move_army(army_id, (300.0, 0.0), &mut rng).is_err());
+    }
+
+    #[test]
+    fn reachable_provinces_grows_with_moves_left() {
+        let mut c = chain_provinces_campaign();
+        let army_id = c.spawn_army(0, "A".into(), (0.0, 0.0));
+
+        let reachable = c.reachable_provinces(army_id);
+        assert_eq!(
+            reachable.len(),
+            2,
+            "2 moves reaches province 2, and through it, province 3"
+        );
+        assert!(reachable.contains(&2));
+        assert!(reachable.contains(&3));
+
+        let mut rng = SmallRng::seed_from_u64(1);
+        c.move_army(army_id, (200.0, 0.0), &mut rng).unwrap();
+        let reachable = c.reachable_provinces(army_id);
+        assert_eq!(
+            reachable.len(),
+            2,
+            "standing in province 2 with 1 move left reaches provinces 1 and 3"
+        );
+        assert!(reachable.contains(&1));
+        assert!(reachable.contains(&3));
+
+        c.move_army(army_id, (300.0, 0.0), &mut rng).unwrap();
+        assert!(
+            c.reachable_provinces(army_id).is_empty(),
+            "no moves left, nothing is reachable"
+        );
     }
 
     #[test]

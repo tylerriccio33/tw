@@ -247,7 +247,7 @@ func _ready() -> void:
 	_army_layer = ArmyLayer.new()
 	_army_layer.name = "ArmyMarkers"
 	add_child(_army_layer)
-	_army_layer.setup(manager, _world_to_screen, _screen_to_world, _faction_colors)
+	_army_layer.setup(manager, _world_to_screen, _screen_to_world, _faction_colors, _province_map)
 	_army_layer.log_message.connect(_append_log)
 	_army_layer.state_changed.connect(_refresh)
 
@@ -480,16 +480,26 @@ func _on_city_marker_clicked(city_id: int) -> void:
 	_refresh_bottom_banner(manager.get_state())
 
 
-## Clicking a province polygon mirrors _on_city_marker_input: selects the city
-## standing in that province, exactly as clicking its marker would. Matched by
-## province id rather than by name, so two places can share a name.
+## Clicking a province polygon while an army is selected is a move order onto
+## whichever city stands in it - the same order a click on that city's marker
+## would give, just aimed at the land instead. This is the only way to reach
+## a bordering province that has no marker of its own under the mouse.
+## Otherwise it mirrors _on_city_marker_input: selects the city standing in
+## that province. Matched by province id rather than by name, so two places
+## can share a name.
 func _on_region_clicked(province_id: int) -> void:
 	var state: Dictionary = manager.get_state()
 	for city in state["cities"]:
-		if int(city.get("province", -1)) == province_id:
-			_selected_city_id = int(city["id"])
-			_refresh_bottom_banner(state)
+		if int(city.get("province", -1)) != province_id:
+			continue
+		if _army_layer.selected_army_id() != -1:
+			var world_pos: Vector2 = _city_world_positions.get(int(city["id"]), Vector2.INF)
+			if world_pos != Vector2.INF:
+				_army_layer.order_selected_to(world_pos)
 			return
+		_selected_city_id = int(city["id"])
+		_refresh_bottom_banner(state)
+		return
 
 
 ## The province table as the simulation wants it: same rows the map package

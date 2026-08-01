@@ -449,8 +449,14 @@ impl CampaignManager {
             ad.set("owner", army.owner as i64);
             ad.set("x", army.position.0 as f64);
             ad.set("y", army.position.1 as f64);
-            ad.set("movement", army.movement as f64);
-            ad.set("max_movement", army.max_movement as f64);
+            // Real games always run through start_game_from_provinces, so
+            // this always reflects the discrete hop budget (moves_left/
+            // max_moves), not the continuous movement/max_movement pool -
+            // that pool only exists for bare-position campaigns, which never
+            // reach GDScript. Key names kept as "movement"/"max_movement" so
+            // nothing downstream (tooltip, cursor logic) needs a rename.
+            ad.set("movement", army.moves_left as f64);
+            ad.set("max_movement", army.max_moves as f64);
             ad.set("garrisoned", army.garrisoned.map_or(-1, |g| g as i64));
             ad.set("moved_this_turn", army.moved_this_turn);
             armies.push(&ad.to_variant());
@@ -510,12 +516,14 @@ impl CampaignManager {
         outcome.attacker_won
     }
 
-    /// Orders `army_id` toward `(x, y)` in world coordinates. Distance costs one
-    /// move point per unit with no terrain modifier; an order past the army's
-    /// remaining points moves it as far as it can along that heading instead of
-    /// failing. Emits `army_moved`, then `army_battle` if the arrival started a
-    /// fight, then `game_over` if that ended the campaign. Returns false if the
-    /// order was rejected (wrong faction's turn, no points left, no such army).
+    /// Orders `army_id` toward `(x, y)` in world coordinates - any point inside
+    /// the target province works, since the army snaps onto that province's
+    /// city. Rejected unless the province is the army's current one or a
+    /// direct neighbor, and costs one of its `moves_left` (see
+    /// `Campaign::move_army`). Emits `army_moved`, then `army_battle` if the
+    /// arrival started a fight, then `game_over` if that ended the campaign.
+    /// Returns false if the order was rejected (wrong faction's turn, no moves
+    /// left, not adjacent, no such army).
     #[func]
     fn move_army(&mut self, army_id: i64, x: f32, y: f32) -> bool {
         let Some(campaign) = self.campaign.as_mut() else {
@@ -528,6 +536,21 @@ impl CampaignManager {
         self.emit_move(&report);
         self.emit_game_over_if_ended();
         true
+    }
+
+    /// Every province `army_id` could still hop into this turn, for
+    /// highlighting - see `Campaign::reachable_provinces`. Empty if the army
+    /// is unknown, has no moves left, or the campaign has no provinces.
+    #[func]
+    fn reachable_provinces(&self, army_id: i64) -> PackedInt32Array {
+        let Some(campaign) = self.campaign.as_ref() else {
+            return PackedInt32Array::new();
+        };
+        campaign
+            .reachable_provinces(army_id as ArmyId)
+            .into_iter()
+            .map(|id| id as i32)
+            .collect()
     }
 
     /// Garrisons `army_id` in the friendly city it is standing in. Returns the

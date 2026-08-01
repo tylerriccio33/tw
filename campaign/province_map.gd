@@ -256,6 +256,15 @@ func apply_ownership(owner_by_province: Dictionary, faction_colors: Array) -> vo
 		_rebuild_faction_borders(owner_by_province)
 
 
+## Tints exactly the given provinces as legal move targets and clears the
+## highlight everywhere else - see region_area.set_highlight. `ids` holds
+## whatever the manager's reachable_provinces() returned, so an empty array
+## (no army selected, or it has no moves left) clears every highlight.
+func set_highlighted_provinces(ids: Array) -> void:
+	for province_id in _areas:
+		_areas[province_id].set_highlight(province_id in ids)
+
+
 ## Outlines each realm as one shape rather than outlining its provinces
 ## separately, so an internal border between two provinces of the same faction
 ## carries only the province hairline and the heavy line follows the frontier.

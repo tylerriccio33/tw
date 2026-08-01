@@ -75,3 +75,44 @@ func test_clicked_signal_does_not_fire_on_right_click() -> void:
 	region._on_input_event(null, event, 0)
 
 	assert_signal_not_emitted(region, "clicked")
+
+
+func test_set_highlight_overrides_the_owner_tint_with_the_highlight_color() -> void:
+	var poly := _add_polygon()
+	region.set_owner_color(Color.RED)
+
+	region.set_highlight(true)
+
+	assert_eq(poly.color, Color(RegionArea.HIGHLIGHT_COLOR, RegionArea.HIGHLIGHT_ALPHA))
+
+
+func test_set_highlight_false_restores_the_owner_tint() -> void:
+	var poly := _add_polygon()
+	region.set_owner_color(Color.RED)
+	region.set_highlight(true)
+
+	region.set_highlight(false)
+
+	assert_eq(poly.color, Color(Color.RED, 0.55))
+
+
+func test_hovering_a_highlighted_province_uses_the_highlight_hover_alpha() -> void:
+	var poly := _add_polygon()
+	region.set_owner_color(Color.RED)
+	region.set_highlight(true)
+
+	region._on_mouse_entered()
+
+	assert_eq(poly.color, Color(RegionArea.HIGHLIGHT_COLOR, RegionArea.HIGHLIGHT_HOVER_ALPHA))
+
+
+func test_set_highlight_to_its_current_value_is_a_noop() -> void:
+	var poly := _add_polygon()
+	region.set_owner_color(Color.RED)
+	# Distinguishable from a real repaint: if set_highlight(false) skipped its
+	# early-return guard it would still call _repaint and clobber this.
+	poly.color = Color.MAGENTA
+
+	region.set_highlight(false)
+
+	assert_eq(poly.color, Color.MAGENTA)

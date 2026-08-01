@@ -7,16 +7,25 @@ signal army_moved(army_id: int, from: Vector2, to: Vector2, spent: float, moveme
 signal army_battle(report: Dictionary)
 
 var armies: Array = []
+var cities: Array = []
 var faction_id: int = 0
 var game_over: bool = false
 var move_army_result: bool = true
 var garrison_result: int = -1
+## army_id -> Array[int] of province ids, read by army_layer's cursor logic
+## and province-highlight update. Defaults to empty so a test that never
+## touches provinces doesn't have to set this up.
+var reachable_by_army: Dictionary = {}
 
 var move_army_calls: Array = []
 
 
 func get_state() -> Dictionary:
-	return {"armies": armies}
+	return {"armies": armies, "cities": cities}
+
+
+func reachable_provinces(army_id: int) -> Array:
+	return reachable_by_army.get(army_id, [])
 
 
 func current_faction_id() -> int:

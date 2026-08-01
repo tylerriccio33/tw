@@ -1,3 +1,4 @@
 disable:
   - class-definitions-order
 max-returns: 12
+max-public-methods: 30

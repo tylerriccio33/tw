@@ -1,0 +1,7 @@
+Cursor icons (pointer_a.png, tool_sword_a.png) sourced from Kenney's "Cursor Pack" (1.1)
+https://kenney.nl/assets/cursor-pack
+
+License: Creative Commons Zero (CC0)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+tool_sword_a_noop.png is a green-tinted derivative of tool_sword_a.png, generated locally.
