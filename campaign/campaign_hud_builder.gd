@@ -116,6 +116,54 @@ static func _build_log_panel(ui: Node) -> void:
 	margin.add_child(ui.log_label)
 
 
+## ---------------------------------------------------------------------------
+## Turn indicator: a small, centred, top-middle widget (classic Total War
+## turn-order style) showing whichever faction is acting this turn - an
+## empty circle placeholder (no faction icon assets yet) with the faction's
+## name below it. Built once here; campaign_ui._refresh_turn_indicator()
+## rewrites the label text on every turn/faction change.
+## ---------------------------------------------------------------------------
+
+
+static func build_turn_indicator(ui: Node) -> void:
+	ui._turn_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var wrapper := VBoxContainer.new()
+	wrapper.name = "TurnIndicator"
+	wrapper.alignment = BoxContainer.ALIGNMENT_CENTER
+	wrapper.add_theme_constant_override("separation", 4)
+	# Centred just under the top bar, straddling the viewport's horizontal
+	# midpoint so it stays centred at any window size.
+	anchor_rect(wrapper, 0.42, 0.07, 0.58, 0.16)
+	ui._turn_indicator.add_child(wrapper)
+
+	var circle := PanelContainer.new()
+	circle.custom_minimum_size = Vector2(44, 44)
+	circle.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var circle_sb := StyleBoxFlat.new()
+	circle_sb.bg_color = Color.TRANSPARENT
+	circle_sb.border_color = ui.HUD_CREAM
+	circle_sb.set_border_width_all(3)
+	circle_sb.corner_radius_top_left = 22
+	circle_sb.corner_radius_top_right = 22
+	circle_sb.corner_radius_bottom_left = 22
+	circle_sb.corner_radius_bottom_right = 22
+	circle.add_theme_stylebox_override("panel", circle_sb)
+	wrapper.add_child(circle)
+
+	var name_label := Label.new()
+	name_label.text = "Faction"
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	set_font(name_label, ui.FONT_SEMIBOLD, 15)
+	name_label.add_theme_color_override("font_color", Color.WHITE)
+	name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	name_label.add_theme_constant_override("shadow_offset_x", 1)
+	name_label.add_theme_constant_override("shadow_offset_y", 1)
+	wrapper.add_child(name_label)
+	ui._turn_indicator_name_label = name_label
+
+
 static func _make_top_bar_stat(
 	ui: Node, icon: String, label_text: String, value_text: String
 ) -> HBoxContainer:
