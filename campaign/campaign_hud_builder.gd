@@ -201,7 +201,9 @@ static func _build_city_panel(ui: Node) -> void:
 	var panel := Control.new()
 	panel.name = "CityPanel"
 	anchor_rect(panel, 0.017, 0.617, 0.187, 0.99)
+	panel.visible = false
 	ui.bottom_banner.add_child(panel)
+	ui._city_panel = panel
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 0)
@@ -234,6 +236,22 @@ static func _build_city_panel(ui: Node) -> void:
 	ui._city_panel_owner_tab.custom_minimum_size = Vector2(36, 40)
 	ui._city_panel_owner_tab.color = Color.INDIAN_RED
 	header_row.add_child(ui._city_panel_owner_tab)
+
+	# Back/close button - collapses the settlement panel back to the core
+	# HUD and clears the selection, so it doesn't linger on the next click.
+	var close_button := Button.new()
+	close_button.name = "CloseButton"
+	close_button.text = "✕"
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.custom_minimum_size = Vector2(32, 40)
+	set_font(close_button, ui.FONT_BOLD, 16)
+	close_button.add_theme_color_override("font_color", Color.WHITE)
+	close_button.add_theme_color_override("font_hover_color", Color.WHITE)
+	close_button.add_theme_stylebox_override("normal", style_box(ui.HUD_BLUE))
+	close_button.add_theme_stylebox_override("hover", style_box(Color(0.35, 0.46, 0.62)))
+	close_button.add_theme_stylebox_override("pressed", style_box(ui.HUD_BLUE_DARK))
+	close_button.pressed.connect(ui._on_settlement_panel_close_pressed)
+	header_row.add_child(close_button)
 
 	# Body: parchment background holding the governor row and stat list.
 	var body := PanelContainer.new()
@@ -342,7 +360,9 @@ static func _build_buildings_panel(ui: Node) -> void:
 	var panel := Control.new()
 	panel.name = "BuildingsPanel"
 	anchor_rect(panel, 0.19, 0.824, 0.762, 0.99)
+	panel.visible = false
 	ui.bottom_banner.add_child(panel)
+	ui._buildings_panel = panel
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 0)

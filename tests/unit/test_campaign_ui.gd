@@ -310,3 +310,80 @@ func test_region_clicked_on_a_cityless_province_does_nothing() -> void:
 	instance.call("_on_region_clicked", -999)
 
 	assert_eq(instance._selected_city_id, -1)
+
+
+## ---------------------------------------------------------------------------
+## Settlement panel show/hide: the city panel + buildings tray are the
+## selection-dependent half of the bottom banner (see _refresh_bottom_banner
+## in campaign_ui.gd). They must start hidden, appear only once a settlement
+## is actually clicked, and disappear again - along with clearing the
+## selection - when the panel's back/close button is pressed, leaving only
+## the persistent core HUD (top bar, end-turn button) on screen.
+## ---------------------------------------------------------------------------
+
+
+func test_settlement_panel_hidden_before_any_selection() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	assert_eq(instance._selected_city_id, -1)
+	assert_false(instance._city_panel.visible, "city panel should start hidden")
+	assert_false(instance._buildings_panel.visible, "buildings panel should start hidden")
+	# Core HUD stays up regardless of selection state.
+	assert_true(instance.end_turn_button.visible)
+	assert_true(instance.get_node("UI/TopBar").visible)
+
+
+func test_settlement_panel_appears_on_marker_click() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var city: Dictionary = instance.manager.get_state()["cities"][0]
+	instance.call("_on_city_marker_clicked", int(city["id"]))
+
+	assert_eq(instance._selected_city_id, int(city["id"]))
+	assert_true(instance._city_panel.visible, "city panel should show after selecting a settlement")
+	assert_true(
+		instance._buildings_panel.visible, "buildings panel should show after selecting a settlement"
+	)
+	assert_eq(instance._city_panel_name_label.text, String(city["name"]))
+
+
+func test_settlement_panel_closes_and_clears_selection_on_back_button() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var city: Dictionary = instance.manager.get_state()["cities"][0]
+	instance.call("_on_city_marker_clicked", int(city["id"]))
+	assert_true(instance._city_panel.visible)
+
+	instance.call("_on_settlement_panel_close_pressed")
+
+	assert_eq(instance._selected_city_id, -1, "closing the panel must clear the selection")
+	assert_false(instance._city_panel.visible, "city panel should hide after closing")
+	assert_false(instance._buildings_panel.visible, "buildings panel should hide after closing")
+	# Core HUD is untouched by closing the settlement panel.
+	assert_true(instance.end_turn_button.visible)
+	assert_true(instance.get_node("UI/TopBar").visible)
+
+
+func test_settlement_panel_close_button_is_wired_to_the_close_handler() -> void:
+	var instance: Node2D = (CampaignScene as PackedScene).instantiate()
+	add_child_autofree(instance)
+	await wait_process_frames(3)
+
+	var city: Dictionary = instance.manager.get_state()["cities"][0]
+	instance.call("_on_city_marker_clicked", int(city["id"]))
+	assert_true(instance._city_panel.visible)
+
+	var close_button: Button = instance.get_node("UI/BottomBanner/CityPanel").find_child(
+		"CloseButton", true, false
+	)
+	assert_not_null(close_button, "settlement panel should have a close/back button")
+	close_button.pressed.emit()
+
+	assert_eq(instance._selected_city_id, -1)
+	assert_false(instance._city_panel.visible)
