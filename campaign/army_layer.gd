@@ -17,6 +17,10 @@ extends Control
 ## reaching up into its parent.
 
 signal log_message(text: String)
+## Fired whenever selection changes (army_id == -1 means deselected), so the
+## HUD owner (campaign_ui.gd) can refresh its bottom info panel to match -
+## army_layer has no HUD of its own, it only owns the 2D markers/input.
+signal army_selected(army_id: int)
 ## Emitted when an order this node issued changed the campaign, so the parent
 ## can re-render the rest of the HUD.
 signal state_changed
@@ -278,6 +282,7 @@ func select(army_id: int) -> void:
 		army_id = -1
 	_selected_id = army_id
 	sync(_manager.get_state())
+	army_selected.emit(_selected_id)
 
 
 ## Turns a screen click into a march order for the selected army.
@@ -291,6 +296,12 @@ func order_selected_to(ground: Vector2) -> void:
 	if _selected_id == -1 or _orders_locked:
 		return
 	if _manager.current_faction_id() != PLAYER_FACTION or _manager.is_game_over():
+		push_warning(
+			(
+				"order_selected_to rejected: current_faction_id=%d, PLAYER_FACTION=%d, game_over=%s"
+				% [_manager.current_faction_id(), PLAYER_FACTION, _manager.is_game_over()]
+			)
+		)
 		return
 	if not _manager.move_army(_selected_id, ground.x, ground.y):
 		# The engine rejected the order (e.g. the target isn't one of this

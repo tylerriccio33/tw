@@ -206,6 +206,15 @@ pub struct Campaign {
     /// Count of individual faction-turns played so far, starting at 1 for the
     /// first faction's first turn. The game ends once this exceeds `max_turns`.
     pub turn: u32,
+    /// Count of full cycles through every alive faction, starting at 1.
+    /// Increments once per `end_turn()` call that wraps back around to the
+    /// start of the faction order, i.e. once per "round" of play regardless
+    /// of how many factions are in the game. This is what the UI should
+    /// display as the round/turn number, since `turn` itself increments once
+    /// per faction-turn (so with 4 factions, one player "End Turn" press —
+    /// which internally calls `end_turn()` once for the player and once per
+    /// AI faction — advances `turn` by 4 but `round` by exactly 1).
+    pub round: u32,
     pub max_turns: u32,
     /// Index into `factions` for whoever acts next.
     pub current_faction: usize,
@@ -224,6 +233,7 @@ impl Campaign {
             map_extent: 2048.0,
             next_army_id: 0,
             turn: 1,
+            round: 1,
             max_turns,
             current_faction: 0,
             game_over: false,
@@ -1001,6 +1011,14 @@ impl Campaign {
             if self.factions[self.current_faction].alive || self.current_faction == start {
                 break;
             }
+        }
+        // A "round" completes whenever advancing wraps back around to (or
+        // past) the faction we started this end_turn() from, rather than
+        // strictly continuing forward through the order. With one alive
+        // faction the loop always lands back on `start`, so every end_turn()
+        // is correctly its own round.
+        if self.current_faction <= start {
+            self.round += 1;
         }
         let next = self.current_faction_id();
         self.collect_income(next);

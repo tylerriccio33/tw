@@ -356,6 +356,17 @@ impl CampaignManager {
         self.campaign.as_ref().map_or(0, |c| c.turn as i64)
     }
 
+    /// The round number: increments once per full cycle through every alive
+    /// faction, unlike `current_turn()` which increments once per individual
+    /// faction-turn. This is what the UI should display as "the turn number"
+    /// (e.g. on the End Turn button), since a single player "End Turn" press
+    /// advances `current_turn()` by one per faction in the game but `round`
+    /// by exactly 1.
+    #[func]
+    fn current_round(&self) -> i64 {
+        self.campaign.as_ref().map_or(0, |c| c.round as i64)
+    }
+
     #[func]
     fn max_turns(&self) -> i64 {
         self.campaign.as_ref().map_or(0, |c| c.max_turns as i64)
@@ -375,7 +386,7 @@ impl CampaignManager {
     }
 
     /// Snapshot for GDScript to render:
-    /// `{turn, max_turns, current_faction, game_over, winner,
+    /// `{turn, round, max_turns, current_faction, game_over, winner,
     ///   factions: [{id, name, money, alive, cities}, ...],
     ///   cities: [{id, name, income, owner, x, y}, ...]}`
     #[func]
@@ -465,6 +476,7 @@ impl CampaignManager {
         state.set("armies", &armies.to_variant());
         state.set("map_extent", c.map_extent as f64);
         state.set("turn", c.turn as i64);
+        state.set("round", c.round as i64);
         state.set("max_turns", c.max_turns as i64);
         state.set("current_faction", c.current_faction_id() as i64);
         state.set("game_over", c.game_over);

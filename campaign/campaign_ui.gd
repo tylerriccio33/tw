@@ -59,7 +59,7 @@ const AI_STEP_SECONDS := 0.35  # pause between AI factions, so turns stay legibl
 # the comment above _cam_zoom below) - lower than MAX_ZOOM (1.0) but not as
 # tight as MIN_ZOOM, so the move is legible without losing surrounding context.
 const AI_CAMERA_ZOOM := 0.6
-const AI_CAMERA_PAN_SECONDS := 0.45
+const AI_CAMERA_PAN_SECONDS := 1.2
 
 # Total War-style HUD palette, sampled off the reference reveal-stream
 # screenshot: a mid steel-blue header/tab color, cream parchment panels, and
@@ -116,6 +116,12 @@ var _selected_city_id: int = -1
 ## _refresh_bottom_banner. Mutually exclusive with _selected_city_id; whoever
 ## sets one clears the other.
 var _selected_province_id: int = -1
+
+## Army currently shown in the bottom info panel. Mutually exclusive with
+## _selected_city_id/_selected_province_id, mirrored from army_layer.gd's own
+## _selected_id via the army_selected signal (army_layer owns the marker/
+## input state; this is just the HUD's copy of "which one to display").
+var _selected_army_id: int = -1
 
 var _army_layer: Control
 var _ai_running := false
@@ -195,8 +201,9 @@ const LOCKED_BUILDINGS := ["Castle", "Castle", "City"]
 # placeholders, [icon glyph, label, display value] - not wired to any real
 # economy state yet. "Year" is the exception: its display value here is only
 # the initial label text (before the first _refresh()); the live value is
-# computed from state["turn"] by _refresh_bottom_banner() below, since Rust
-# has no year concept, only a faction-turn counter.
+# computed from state["round"] by _refresh_bottom_banner() below, since Rust
+# has no year concept, only a round counter (one full cycle through every
+# alive faction).
 const TOP_BAR_STATS := [
 	["🪙", "Treasury", "10,000"],
 	["📉", "Deficit", "-250"],
@@ -206,11 +213,10 @@ const TOP_BAR_STATS := [
 ]
 const TOP_BAR_PLACEHOLDER_ICON_COUNT := 3
 
-# Calendar year shown in the top bar is derived from state["turn"] rather
-# than tracked separately in Rust: START_YEAR is the year at turn 1, and each
-# faction-turn advances the calendar by YEARS_PER_TURN. Kept as a whole year
-# per turn (not per round) to match how the "END TURN %d" counter already
-# reads state["turn"] directly (see _refresh_bottom_banner).
+# Calendar year shown in the top bar is derived from state["round"] rather
+# than tracked separately in Rust: START_YEAR is the year at round 1, and each
+# round advances the calendar by YEARS_PER_TURN, matching the "END TURN %d"
+# counter which also reads state["round"] directly (see _refresh_bottom_banner).
 const START_YEAR := 1200
 const YEARS_PER_TURN := 1
 
@@ -244,6 +250,7 @@ func _on_settlement_tab_selected(tab_name: String) -> void:
 func _on_settlement_panel_close_pressed() -> void:
 	_selected_city_id = -1
 	_selected_province_id = -1
+	_army_layer.select(-1)
 	_refresh_bottom_banner(manager.get_state())
 
 
@@ -320,6 +327,7 @@ func _ready() -> void:
 	_army_layer.setup(manager, _world_to_screen, _screen_to_world, _faction_colors, _province_map)
 	_army_layer.log_message.connect(_append_log)
 	_army_layer.state_changed.connect(_refresh)
+	_army_layer.army_selected.connect(_on_army_selected)
 
 	# City markers must not swallow the clicks that become move orders; their
 	# own child markers keep taking clicks regardless of the container filter.
@@ -557,6 +565,21 @@ func _ensure_city_marker(city: Dictionary) -> CityMarker:
 func _on_city_marker_clicked(city_id: int) -> void:
 	_selected_city_id = city_id
 	_selected_province_id = -1
+	_selected_army_id = -1
+	_army_layer.select(-1)
+	_refresh_bottom_banner(manager.get_state())
+
+
+## Mirrors army_layer.gd's selection into the HUD's own state and refreshes
+## the bottom banner, so clicking an army pops up its info panel the same way
+## clicking a city or province already does (see _refresh_bottom_banner).
+## Selecting an army clears any city/province selection, matching the
+## existing mutual-exclusion between those two.
+func _on_army_selected(army_id: int) -> void:
+	_selected_army_id = army_id
+	if army_id != -1:
+		_selected_city_id = -1
+		_selected_province_id = -1
 	_refresh_bottom_banner(manager.get_state())
 
 
@@ -839,12 +862,12 @@ func _set_cam_zoom(zoom: float) -> void:
 ## is just the persistent top bar/end-turn ribbon with no settlement info
 ## lingering.
 func _refresh_bottom_banner(state: Dictionary) -> void:
-	end_turn_button.text = "END TURN %d" % int(state["turn"])
+	end_turn_button.text = "END TURN %d" % int(state["round"])
 	end_turn_button.disabled = bool(state["game_over"]) or _ai_running or _player_defeated
 
 	var year_label: Label = _top_bar_stat_value_labels.get("Year")
 	if year_label != null:
-		var year: int = START_YEAR + (int(state["turn"]) - 1) * YEARS_PER_TURN
+		var year: int = START_YEAR + (int(state["round"]) - 1) * YEARS_PER_TURN
 		year_label.text = "%d AD" % year
 
 	var shown_city: Dictionary = {}
@@ -872,6 +895,48 @@ func _refresh_bottom_banner(state: Dictionary) -> void:
 			var key: String = row_def[0]
 			var multiplier: int = row_def[3]
 			_city_stat_value_labels[key].text = HudBuilder.format_stat(income * multiplier)
+		return
+
+	# An army marker was clicked: show its owner/movement/position in the same
+	# panel. Reuses the settlement panel's name label + owner tab + stat rows
+	# rather than adding new widgets, since there's no dedicated army panel;
+	# the stat rows don't semantically match army fields, so their labels are
+	# just repurposed to carry movement/position text.
+	var shown_army: Dictionary = {}
+	if _selected_army_id != -1:
+		for army in state.get("armies", []):
+			if int(army["id"]) == _selected_army_id:
+				shown_army = army
+				break
+		if shown_army.is_empty():
+			_selected_army_id = -1
+			_army_layer.select(-1)
+
+	if not shown_army.is_empty():
+		_city_panel.visible = true
+		_buildings_panel.visible = false
+
+		var owner_id: int = int(shown_army["owner"])
+		var faction_name := "Faction %d" % owner_id
+		for faction in state.get("factions", []):
+			if int(faction["id"]) == owner_id:
+				faction_name = String(faction["name"])
+				break
+
+		_city_panel_name_label.text = "%s (%s)" % [shown_army["name"], faction_name]
+		_city_panel_owner_tab.color = _faction_colors[owner_id % _faction_colors.size()]
+
+		for row_def in STAT_ROWS:
+			_city_stat_value_labels[row_def[0]].text = "-"
+		_city_stat_value_labels["income"].text = (
+			"%.1f / %.1f" % [float(shown_army["movement"]), float(shown_army["max_movement"])]
+		)
+		_city_stat_value_labels["food"].text = (
+			"(%.0f, %.0f)" % [float(shown_army["x"]), float(shown_army["y"])]
+		)
+		_city_stat_value_labels["region_wealth"].text = (
+			"Garrisoned" if bool(shown_army["garrisoned"]) else "In the field"
+		)
 		return
 
 	# A province with no city of its own was clicked: show its name/owner in
