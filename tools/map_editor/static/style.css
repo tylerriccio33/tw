@@ -127,6 +127,11 @@ button.icon:disabled { opacity: 0.25; }
 .poly-fill.clickable { pointer-events: auto; cursor: pointer; }
 .poly-fill.clickable:hover { fill-opacity: 0.65; }
 
+.hover-label {
+  fill: #fff; paint-order: stroke; stroke: #000; stroke-width: 3px;
+  pointer-events: none; font-weight: 600;
+}
+
 .vertex { r: 4; fill: #fff; stroke: #000; stroke-width: 1; cursor: grab; }
 .vertex.mid { r: 3; fill: #ffcc55; opacity: 0.85; cursor: copy; }
 

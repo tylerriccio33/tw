@@ -478,9 +478,8 @@ def _validate_points(project: dict, package: mapfmt.Package) -> list[str]:
                 )
                 continue
             if pid not in province_ids:
-                problems.append(
-                    f"{name} has a point for province {pid}, which doesn't exist"
-                )
+                # prune_orphan_points drops these before this ever runs.
+                continue
             if len(xy) != 2 or not (0 <= xy[0] <= width and 0 <= xy[1] <= height):
                 problems.append(
                     f"{name} point for province {pid} at {xy} is outside the "
@@ -492,6 +491,35 @@ def _validate_points(project: dict, package: mapfmt.Package) -> list[str]:
             problems.append(f"{name} has no authored point for province {pid}")
 
     return problems
+
+
+def prune_orphan_points(project: dict, package: mapfmt.Package) -> list[str]:
+    """Drop any point-layer entry whose province id no longer exists.
+
+    That province going away already means "delete its city" - there's
+    nowhere reasonable to move the point to. Mutates project in place;
+    returns what got dropped so the caller can tell the user.
+    """
+    province_ids = {
+        int(f["id"])
+        for f in mapfmt.project_features(project, package.province_layer.name)
+        if "id" in f
+    }
+    dropped: list[str] = []
+    for name in package.layer_order:
+        cfg = package.layers[name]
+        if cfg.input != "point":
+            continue
+        points = mapfmt.project_points(project, name)
+        for pid_str in list(points):
+            try:
+                pid = int(pid_str)
+            except (TypeError, ValueError):
+                continue
+            if pid not in province_ids:
+                del points[pid_str]
+                dropped.append(f"{name}: province {pid} no longer exists")
+    return dropped
 
 
 def validate_package(project: dict, package: mapfmt.Package) -> list[str]:
@@ -700,6 +728,9 @@ def build_province_table(
 
 def export_package(project: dict, package: mapfmt.Package) -> dict:
     size = package.size
+    dropped_points = prune_orphan_points(project, package)
+    if dropped_points:
+        mapfmt.save_project(package.root, project)
     problems = validate_package(project, package)
     if problems:
         raise ExportBlocked(
@@ -769,6 +800,7 @@ def export_package(project: dict, package: mapfmt.Package) -> dict:
         "table": str(table_path),
         "geo": str(geo_path),
         "province_count": len(table),
+        "dropped_points": dropped_points,
     }
 
 

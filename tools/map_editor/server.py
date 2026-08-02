@@ -237,6 +237,35 @@ def fill_gaps(project: dict, package: mapfmt.Package, layer_name: str) -> dict:
     }
 
 
+def clean_shapes(project: dict, package: mapfmt.Package, layer_name: str) -> dict:
+    """Resolve self-crossing and overlapping province polygons.
+
+    Rasterizes the layer as export would - later features win contested
+    pixels, same as export does silently. Then re-traces clean polygons
+    from that raster. A traced contour can't be self-crossing or repeat
+    a point. One id per pixel resolves the overlaps. Returns editable
+    polygons rather than saving, so this is a preview you can inspect
+    before keeping.
+    """
+    cfg = package.layers.get(layer_name)
+    if cfg is None:
+        raise ApiError(f"no layer named '{layer_name}'")
+    if cfg.input != "polygon":
+        raise ApiError(
+            f"'{layer_name}' is a {cfg.input} layer - this only applies to "
+            "traced layers"
+        )
+
+    size = package.size
+    before = export.rasterize_polygon_layer(project, cfg, size)
+    features = revectorize(before, cfg, project)
+    after_project = {"layers": {layer_name: {"features": features}}}
+    after = export.rasterize_polygon_layer(after_project, cfg, size)
+    changed = int(np.any(before != after, axis=-1).sum())
+
+    return {"features": features, "changed_px": changed}
+
+
 FACTION_KEY_RE = re.compile(r"[a-z0-9_]+")
 
 
@@ -457,6 +486,16 @@ def make_handler(package_dir: Path):
                     # autosave - otherwise the fill runs against stale
                     # geometry and silently undoes recent edits.
                     result = fill_gaps(
+                        payload.get("project") or project,
+                        package,
+                        payload.get("layer", ""),
+                    )
+                    self._send_json({"ok": True, **result})
+
+                elif path == "/api/cleanshapes":
+                    package, project = load()
+                    payload = self._json_body()
+                    result = clean_shapes(
                         payload.get("project") or project,
                         package,
                         payload.get("layer", ""),

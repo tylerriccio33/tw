@@ -331,6 +331,7 @@ function renderTools() {
     );
     if (cfg.kind === "mask") addButton("Autotrace from backdrop", runAutotrace);
     if (cfg.gapfill || cfg.clip_to) addButton("Fill Gaps", runFillGaps);
+    addButton("Fix Crossings & Overlaps", runCleanShapes);
   } else if (cfg.input === "brush") {
     addButton("Brush", () => setTool("brush"), state.tool === "brush");
     addButton("Bucket", () => setTool("bucket"), state.tool === "bucket");
@@ -789,6 +790,20 @@ function render() {
   if (state.editMode) renderVertexHandles(svg);
   renderDrawing(svg);
   renderTracePreview(svg);
+  renderHoverLabel(svg);
+}
+
+function renderHoverLabel(svg) {
+  const cfg = activeCfg();
+  if (!cfg || cfg.input !== "point" || !state.hoverLabel) return;
+  const [x, y] = state.hoverLabel.at;
+  const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  text.setAttribute("x", x + 10 / state.zoom);
+  text.setAttribute("y", y - 10 / state.zoom);
+  text.setAttribute("class", "hover-label");
+  text.setAttribute("font-size", 14 / state.zoom);
+  text.textContent = state.hoverLabel.text;
+  svg.appendChild(text);
 }
 
 function renderPolygonLayer(svg, name, cfg) {
@@ -1003,6 +1018,27 @@ function svgPoint(event) {
   ];
 }
 
+function pointInRing(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function provinceAt(x, y) {
+  for (const feature of features(state.manifest.province_layer)) {
+    for (const polygon of feature.polygons || []) {
+      if (polygon.length >= 3 && pointInRing(x, y, polygon)) return feature;
+    }
+  }
+  return null;
+}
+
 function onCanvasClick(event) {
   const cfg = activeCfg();
   if (cfg && cfg.input === "point") {
@@ -1012,6 +1048,18 @@ function onCanvasClick(event) {
       return;
     }
     const at = svgPoint(event);
+    const under = provinceAt(at[0], at[1]);
+    const target = features(state.manifest.province_layer).find(
+      (f) => String(f.id) === String(pid)
+    );
+    if (under && target && under.id !== target.id) {
+      setStatus(
+        `That spot is inside "${under.name}", not "${target.name}" - placed anyway`,
+        true
+      );
+    } else {
+      setStatus(`Placed in "${target ? target.name : pid}"`);
+    }
     points(state.activeLayer)[String(pid)] = at;
     scheduleAutosave();
     renderFeatureList();
@@ -1082,6 +1130,13 @@ function onTraceClick(at, longWay) {
 
 function onCanvasMove(event) {
   const cfg = activeCfg();
+  if (cfg && cfg.input === "point") {
+    const at = svgPoint(event);
+    const under = provinceAt(at[0], at[1]);
+    state.hoverLabel = under ? { at, text: under.name } : null;
+    render();
+    return;
+  }
   if (!cfg || cfg.input !== "polygon") return;
   if (state.tool !== "trace" || !state.traceAnchor || !state.snapIndex) return;
 
@@ -1234,6 +1289,32 @@ async function runFillGaps() {
   setStatus(`Filled ${result.changed_px}px.${residual}`, !!result.residual_px);
 }
 
+async function runCleanShapes() {
+  const layer = state.activeLayer;
+  setStatus("Resolving overlaps and crossings...");
+  await flushRasters();
+  const response = await fetch("/api/cleanshapes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ layer, project: state.project }),
+  });
+  const result = await response.json();
+  if (!result.ok) return setStatus(result.error, true);
+
+  state.project.layers[layer].features = result.features;
+  state.snapIndex = null;
+  scheduleAutosave();
+  renderSidebar();
+  render();
+  setStatus(
+    result.changed_px
+      ? `Redrew ${result.changed_px}px of overlapping or crossed borders. ` +
+        "Later-drawn provinces kept the contested land - reorder or " +
+        "retrace if that's not who should own it."
+      : "No crossings or overlaps to fix."
+  );
+}
+
 async function runAutotrace() {
   showConfirm("Replace this layer's shapes with a fresh autotrace?", async () => {
     const response = await fetch(`/api/autotrace/${state.activeLayer}`, {
@@ -1260,8 +1341,15 @@ async function runExport() {
   });
   const result = await response.json();
   if (!result.ok) return setStatus(result.error, true);
+  let dropped = "";
+  if (result.dropped_points?.length) {
+    dropped = ` Dropped ${result.dropped_points.length} city point(s) for provinces that no longer exist.`;
+    state.project = await (await fetch("/api/project")).json();
+    renderFeatureList();
+    render();
+  }
   setStatus(
-    `Exported ${result.province_count} provinces. Run make promote-map to ship it.`
+    `Exported ${result.province_count} provinces. Run make promote-map to ship it.${dropped}`
   );
 }
 
@@ -1301,8 +1389,8 @@ function panZoomTick(now) {
   if (held.has("d")) el.viewport.scrollLeft += step;
   if (held.has("w")) el.viewport.scrollTop -= step;
   if (held.has("s")) el.viewport.scrollTop += step;
-  if (held.has("z")) setZoom(state.zoom * Math.exp(-ZOOM_SPEED * dt));
-  if (held.has("x")) setZoom(state.zoom * Math.exp(ZOOM_SPEED * dt));
+  if (held.has("z")) setZoom(state.zoom * Math.exp(ZOOM_SPEED * dt));
+  if (held.has("x")) setZoom(state.zoom * Math.exp(-ZOOM_SPEED * dt));
 
   requestAnimationFrame(panZoomTick);
 }
@@ -1314,6 +1402,12 @@ function panZoomTick(now) {
 function bindEvents() {
   el.overlay.addEventListener("click", onCanvasClick);
   el.overlay.addEventListener("pointermove", onCanvasMove);
+  el.overlay.addEventListener("pointerleave", () => {
+    if (state.hoverLabel) {
+      state.hoverLabel = null;
+      render();
+    }
+  });
   el.overlay.addEventListener("dblclick", (e) => {
     e.preventDefault();
     finishShape();
@@ -1341,7 +1435,7 @@ function bindEvents() {
   );
 
   window.addEventListener("keydown", (event) => {
-    if (event.target.tagName === "INPUT") return;
+    if (event.target.tagName === "INPUT" || event.target.tagName === "BUTTON") return;
     const key = event.key.toLowerCase();
 
     if (key === "enter") return finishShape();

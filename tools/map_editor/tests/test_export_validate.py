@@ -186,11 +186,22 @@ def test_a_point_keyed_by_a_non_integer_string_is_flagged(package):
     assert any("not a province id" in p for p in problems)
 
 
-def test_a_point_for_a_nonexistent_province_is_flagged(package):
+def test_a_point_for_a_nonexistent_province_is_silently_ignored(package):
+    """Not flagged - prune_orphan_points drops these before validation."""
     project = project_with(package, provinces=two_provinces())
     project["layers"]["cities"]["points"]["99"] = [20, 20]
     problems = export._validate_points(project, package)
-    assert any("which doesn't exist" in p for p in problems)
+    assert not any("which doesn't exist" in p for p in problems)
+
+
+def test_prune_orphan_points_drops_points_for_missing_provinces(package):
+    project = project_with(package, provinces=two_provinces())
+    project["layers"]["cities"]["points"]["99"] = [20, 20]
+    project["layers"]["cities"]["points"]["1"] = [20, 20]
+    dropped = export.prune_orphan_points(project, package)
+    assert any("99" in d for d in dropped)
+    assert "99" not in project["layers"]["cities"]["points"]
+    assert "1" in project["layers"]["cities"]["points"]
 
 
 def test_a_point_outside_the_map_bounds_is_flagged(package):
