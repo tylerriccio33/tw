@@ -70,6 +70,27 @@ function points(name) {
   return layer.points;
 }
 
+// Free-point layers (army starts, ...) aren't coupled to a province, so
+// each point needs its own generated id.
+function nextPointId(name) {
+  const existing = points(name);
+  let n = 1;
+  while (existing[`p${n}`]) n++;
+  return `p${n}`;
+}
+
+function defaultPointPayload(cfg) {
+  const payload = {};
+  for (const [fieldName, fieldCfg] of Object.entries(cfg.point_fields || {})) {
+    if (fieldCfg.type === "faction") {
+      payload[fieldName] = state.manifest.factions?.[0]?.key ?? null;
+    } else if (fieldCfg.type === "counts") {
+      payload[fieldName] = Object.fromEntries((fieldCfg.keys || []).map((k) => [k, 0]));
+    }
+  }
+  return payload;
+}
+
 function legendEntries(cfg) {
   return Object.entries(cfg.legend || {}).map(([color, entry]) => ({
     color,
@@ -352,6 +373,13 @@ function renderTools() {
     };
     wrap.append(label, slider);
     el.tools.appendChild(wrap);
+  } else if (cfg.input === "point" && cfg.point_coupling === "free") {
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent =
+      "Click the map to place a new point. Click an existing point to " +
+      "select and edit it below, drag to move it.";
+    el.tools.appendChild(hint);
   } else if (cfg.input === "point") {
     const hint = document.createElement("div");
     hint.className = "hint";
@@ -426,6 +454,11 @@ function renderFeatureList() {
     return;
   }
 
+  if (cfg.input === "point" && cfg.point_coupling === "free") {
+    renderFreePointList(cfg);
+    return;
+  }
+
   if (cfg.input === "point") {
     // Coupled to the province layer: pick a province here, then click the
     // map to place (or replace) that province's point.
@@ -454,6 +487,100 @@ function renderFeatureList() {
     }
     el.featureList.appendChild(legendRow(cfg, entry));
   }
+}
+
+function renderFreePointList(cfg) {
+  const name = cfg.name;
+  const pts = points(name);
+  const ids = Object.keys(pts).sort();
+
+  if (!ids.length) {
+    const empty = document.createElement("div");
+    empty.className = "hint";
+    empty.textContent = "No points yet - click the map to place one.";
+    el.featureList.appendChild(empty);
+    return;
+  }
+
+  for (const pointId of ids) {
+    const payload = pts[pointId];
+    const row = document.createElement("div");
+    const isActive = String(pointId) === String(state.selected[name]);
+    row.className = "feature-row" + (isActive ? " active" : "");
+    const ownerField = Object.entries(cfg.point_fields || {}).find(
+      ([, fc]) => fc.type === "faction"
+    )?.[0];
+    const owner = ownerField ? payload[ownerField] : null;
+    row.textContent = `${pointId}${owner ? " - " + owner : ""}`;
+    row.onclick = () => {
+      state.selected[name] = pointId;
+      renderFeatureList();
+      render();
+    };
+    el.featureList.appendChild(row);
+    if (isActive) el.featureList.appendChild(freePointForm(cfg, pointId, payload));
+  }
+}
+
+function freePointForm(cfg, pointId, payload) {
+  const form = document.createElement("div");
+  form.className = "point-form";
+
+  for (const [fieldName, fieldCfg] of Object.entries(cfg.point_fields || {})) {
+    if (fieldCfg.type === "faction") {
+      const label = document.createElement("label");
+      label.textContent = fieldName;
+      const select = document.createElement("select");
+      for (const faction of state.manifest.factions || []) {
+        const option = document.createElement("option");
+        option.value = faction.key;
+        option.textContent = faction.name || faction.key;
+        if (payload[fieldName] === faction.key) option.selected = true;
+        select.appendChild(option);
+      }
+      select.onchange = () => {
+        payload[fieldName] = select.value;
+        scheduleAutosave();
+        render();
+      };
+      label.appendChild(select);
+      form.appendChild(label);
+    } else if (fieldCfg.type === "counts") {
+      if (!payload[fieldName]) payload[fieldName] = {};
+      for (const countKey of fieldCfg.keys || []) {
+        const label = document.createElement("label");
+        label.textContent = countKey;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = fieldCfg.min ?? 0;
+        input.value = payload[fieldName][countKey] ?? 0;
+        input.oninput = () => {
+          payload[fieldName][countKey] = Math.max(
+            fieldCfg.min ?? 0,
+            Number(input.value) || 0
+          );
+          scheduleAutosave();
+        };
+        label.appendChild(input);
+        form.appendChild(label);
+      }
+    }
+  }
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.textContent = "Delete point";
+  deleteBtn.onclick = () => {
+    delete points(cfg.name)[pointId];
+    if (String(state.selected[cfg.name]) === String(pointId)) {
+      delete state.selected[cfg.name];
+    }
+    scheduleAutosave();
+    renderFeatureList();
+    render();
+  };
+  form.appendChild(deleteBtn);
+
+  return form;
 }
 
 function identityRow(feature, index) {
@@ -890,17 +1017,62 @@ function renderPointsOverlay(svg) {
     const cfg = layerCfg(name);
     if (cfg.input !== "point" || !state.visible[name]) continue;
     const pts = points(name);
-    for (const [pid, xy] of Object.entries(pts)) {
+    const isFree = cfg.point_coupling === "free";
+
+    for (const [pid, value] of Object.entries(pts)) {
+      const [x, y] = isFree ? [value.x, value.y] : value;
       const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      dot.setAttribute("cx", xy[0]);
-      dot.setAttribute("cy", xy[1]);
-      dot.setAttribute("class", "vertex point-marker");
+      dot.setAttribute("cx", x);
+      dot.setAttribute("cy", y);
+      let cls = "vertex point-marker";
       if (name === state.activeLayer && String(pid) === String(state.selected[name])) {
-        dot.setAttribute("class", "vertex point-marker active");
+        cls += " active";
+      }
+      dot.setAttribute("class", cls);
+      if (isFree) {
+        const ownerField = Object.entries(cfg.point_fields || {}).find(
+          ([, fc]) => fc.type === "faction"
+        )?.[0];
+        const owner = ownerField ? value[ownerField] : null;
+        if (owner) dot.setAttribute("fill", colorForKey(cfg, owner));
+        if (name === state.activeLayer) {
+          dot.onpointerdown = (e) => beginFreePointDrag(e, name, pid, value);
+        }
       }
       svg.appendChild(dot);
     }
   }
+}
+
+function beginFreePointDrag(event, name, pointId, value) {
+  event.stopPropagation();
+  event.preventDefault();
+  const start = svgPoint(event);
+  let moved = false;
+
+  const onMove = (e) => {
+    const at = svgPoint(e);
+    if (!moved && Math.hypot(at[0] - start[0], at[1] - start[1]) < 3 / state.zoom) return;
+    moved = true;
+    value.x = at[0];
+    value.y = at[1];
+    render();
+  };
+
+  const onUp = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    if (!moved) {
+      // A click without a drag just selects it for editing.
+      state.selected[name] = pointId;
+      renderFeatureList();
+    }
+    scheduleAutosave();
+    render();
+  };
+
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
 }
 
 function renderVertexHandles(svg) {
@@ -1041,6 +1213,16 @@ function provinceAt(x, y) {
 
 function onCanvasClick(event) {
   const cfg = activeCfg();
+  if (cfg && cfg.input === "point" && cfg.point_coupling === "free") {
+    const at = svgPoint(event);
+    const id = nextPointId(cfg.name);
+    points(cfg.name)[id] = { x: at[0], y: at[1], ...defaultPointPayload(cfg) };
+    state.selected[cfg.name] = id;
+    scheduleAutosave();
+    renderFeatureList();
+    render();
+    return;
+  }
   if (cfg && cfg.input === "point") {
     const pid = state.selected[state.activeLayer];
     if (pid === undefined || pid === null) {

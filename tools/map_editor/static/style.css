@@ -92,6 +92,23 @@ button.icon:disabled { opacity: 0.25; }
 
 .footer-actions { margin-top: 10px; }
 
+/* --- free-point edit form ------------------------------------------------ */
+
+.point-form {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px; margin: -2px 0 6px; border-radius: 6px;
+  background: #23252a; border: 1px solid #444;
+}
+.point-form label {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; font-size: 12px; color: #ccc;
+}
+.point-form select, .point-form input[type=number] {
+  background: #2b2e34; color: #eee; border: 1px solid #444; border-radius: 4px;
+  padding: 2px 4px; width: 100px;
+}
+.point-form button { margin-top: 4px; }
+
 #status { font-size: 11px; color: #8ecf8e; min-height: 14px; margin-top: 6px; }
 #status.error { color: #e08585; }
 

@@ -470,6 +470,10 @@ impl CampaignManager {
             ad.set("max_movement", army.max_moves as f64);
             ad.set("garrisoned", army.garrisoned.map_or(-1, |g| g as i64));
             ad.set("moved_this_turn", army.moved_this_turn);
+            ad.set("archers", army.archers as i64);
+            ad.set("melee", army.melee as i64);
+            ad.set("cavalry", army.cavalry as i64);
+            ad.set("points", army.points() as i64);
             armies.push(&ad.to_variant());
         }
 
@@ -577,6 +581,21 @@ impl CampaignManager {
             .map_or(-1, |city_id| city_id as i64)
     }
 
+    /// Recruits a small batch (1-3 units, randomly split across archers/
+    /// melee/cavalry) into the friendly army garrisoned at `city_id`. Not
+    /// wired into turn-advance yet - purely a callable scaffold. Returns
+    /// false if no friendly army is garrisoned there.
+    #[func]
+    fn recruit(&mut self, city_id: i64) -> bool {
+        let Some(campaign) = self.campaign.as_mut() else {
+            return false;
+        };
+        let mut rng = thread_rng();
+        campaign
+            .recruit_at_city(city_id as CityId, &mut rng)
+            .is_ok()
+    }
+
     /// Plays the current faction's armies with the built-in (random) AI,
     /// emitting `army_moved`/`army_battle` for each one so the UI can animate
     /// the whole turn. Returns how many armies moved.
@@ -632,7 +651,14 @@ impl CampaignManager {
             })
             .collect();
         for (owner, name, position) in starts {
-            campaign.spawn_army(owner, name, position);
+            let id = campaign.spawn_army(owner, name, position);
+            // Fixed reasonable starting stack until recruitment is wired
+            // into turn-advance - see `recruit_at_city`.
+            if let Some(army) = campaign.armies.iter_mut().find(|a| a.id == id) {
+                army.archers = 4;
+                army.melee = 6;
+                army.cavalry = 2;
+            }
         }
     }
 
@@ -677,6 +703,24 @@ impl CampaignManager {
         report.set("attacker_won", battle.attacker_won);
         report.set("loser_army", loser_army);
         report.set("defender_eliminated", battle.defender_eliminated);
+        // Points totals at the moment of battle, for HUD/log display -
+        // additive fields, safe for existing listeners that bind by key.
+        if let Some(campaign) = self.campaign.as_ref() {
+            report.set(
+                "attacker_points",
+                campaign
+                    .army(battle.attacker_army)
+                    .map_or(0, |a| a.points() as i64),
+            );
+            report.set(
+                "defender_points",
+                defender_army
+                    .try_into()
+                    .ok()
+                    .and_then(|id: u32| campaign.army(id))
+                    .map_or(0, |a| a.points() as i64),
+            );
+        }
         self.signals().army_battle().emit(&report);
     }
 

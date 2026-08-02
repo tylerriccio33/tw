@@ -164,19 +164,52 @@ def rasterize_assign_layer(
 POINT_RADIUS_PX = 4
 
 
+def _owner_field_name(cfg: mapfmt.LayerConfig) -> str | None:
+    for field_name, field_cfg in cfg.point_fields.items():
+        if field_cfg.get("type") == "faction":
+            return field_name
+    return None
+
+
 def rasterize_point_layer(
     project: dict,
     cfg: mapfmt.LayerConfig,
     size: tuple[int, int],
     id_buf: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Draw one filled dot per authored point, in its own province's
-    identity color. A point-input layer is kind=identity, coupled 1:1 to
-    the province layer by province id. There is no legend to look up.
-    The color comes straight from the province id itself."""
+    """Draw one filled dot per authored point.
+
+    point_coupling == "province" (cities): the province's own identity
+    color fills the dot directly. There is no legend to look up -
+    the color comes straight from the province id.
+
+    point_coupling == "free" (army starts, ...): the layer's legend
+    supplies the color, keyed by the point's "faction" payload field.
+    A brush/class layer colors a key the same way.
+    """
     canvas = _blank(size, cfg.nodata_rgb)
     image = Image.fromarray(canvas)
     draw = ImageDraw.Draw(image)
+
+    if cfg.point_coupling == "free":
+        owner_field = _owner_field_name(cfg)
+        for payload in mapfmt.project_points(project, cfg.name).values():
+            x, y = payload["x"], payload["y"]
+            owner = payload.get(owner_field) if owner_field else None
+            rgb = (
+                mapfmt.hex_to_rgb(cfg.color_for_key(owner)) if owner else cfg.nodata_rgb
+            )
+            draw.ellipse(
+                [
+                    x - POINT_RADIUS_PX,
+                    y - POINT_RADIUS_PX,
+                    x + POINT_RADIUS_PX,
+                    y + POINT_RADIUS_PX,
+                ],
+                fill=rgb,
+            )
+        return np.array(image)
+
     for pid_str, (x, y) in mapfmt.project_points(project, cfg.name).items():
         rgb = mapfmt.id_to_color(int(pid_str))
         draw.ellipse(
@@ -465,7 +498,7 @@ def _validate_points(project: dict, package: mapfmt.Package) -> list[str]:
 
     for name in package.layer_order:
         cfg = package.layers[name]
-        if cfg.input != "point":
+        if cfg.input != "point" or cfg.point_coupling != "province":
             continue
         points = mapfmt.project_points(project, name)
 
@@ -493,6 +526,100 @@ def _validate_points(project: dict, package: mapfmt.Package) -> list[str]:
     return problems
 
 
+def _mask_bool(package: mapfmt.Package, project: dict, ref: str) -> np.ndarray:
+    """Rasterize just the one layer a mask reference names, and return the
+    boolean coverage for its key. Used by free-point validation, which
+    runs before the main export loop has any rasters to reuse."""
+    layer_name, key = ref.split(":", 1)
+    cfg = package.layers[layer_name]
+    raster = rasterize_layer(project, package, cfg, package.size, None)
+    rgb = np.array(mapfmt.hex_to_rgb(cfg.color_for_key(key)), dtype=np.uint8)
+    return np.all(raster == rgb, axis=-1)
+
+
+def _validate_free_points(project: dict, package: mapfmt.Package) -> list[str]:
+    """Free points (army starts, ...) aren't coupled to a province.
+    Only the config itself gets checked: bounds and the declared
+    payload schema. A layer that names a clip_to mask also requires
+    the point to sit on it (e.g. "on land")."""
+    problems: list[str] = []
+    width, height = package.size
+    faction_keys = set(package.faction_keys())
+
+    for name in package.layer_order:
+        cfg = package.layers[name]
+        if cfg.input != "point" or cfg.point_coupling != "free":
+            continue
+        points = mapfmt.project_points(project, name)
+
+        mask = _mask_bool(package, project, cfg.clip_to) if cfg.clip_to else None
+
+        for point_id, payload in points.items():
+            if (
+                not isinstance(payload, dict)
+                or "x" not in payload
+                or "y" not in payload
+            ):
+                problems.append(f"{name} point '{point_id}' has no x/y position")
+                continue
+            x, y = payload["x"], payload["y"]
+            if not (0 <= x <= width and 0 <= y <= height):
+                problems.append(
+                    f"{name} point '{point_id}' at ({x}, {y}) is outside the "
+                    f"{width}x{height} map"
+                )
+            elif mask is not None and not mask[int(y), int(x)]:
+                problems.append(
+                    f"{name} point '{point_id}' at ({x}, {y}) is not on '{cfg.clip_to}'"
+                )
+
+            for field_name, field_cfg in cfg.point_fields.items():
+                value = payload.get(field_name)
+                if field_cfg["type"] == "faction":
+                    if value not in faction_keys:
+                        problems.append(
+                            f"{name} point '{point_id}' has {field_name}="
+                            f"{value!r}, not a known faction"
+                        )
+                    elif value not in cfg.keys:
+                        problems.append(
+                            f"{name} point '{point_id}' has {field_name}="
+                            f"{value!r}, which is a known faction but has no "
+                            f"legend color in '{name}' - add it so the layer "
+                            "can be rasterized"
+                        )
+                elif field_cfg["type"] == "counts":
+                    keys = field_cfg["keys"]
+                    minimum = field_cfg.get("min", 0)
+                    if not isinstance(value, dict):
+                        problems.append(
+                            f"{name} point '{point_id}' has no {field_name} composition"
+                        )
+                        continue
+                    for count_key in keys:
+                        count = value.get(count_key, 0)
+                        if not isinstance(count, int) or isinstance(count, bool):
+                            problems.append(
+                                f"{name} point '{point_id}' {field_name}."
+                                f"{count_key}={count!r} isn't an integer"
+                            )
+                        elif count < minimum:
+                            problems.append(
+                                f"{name} point '{point_id}' {field_name}."
+                                f"{count_key}={count} is below the minimum "
+                                f"of {minimum}"
+                            )
+                    extra = set(value) - set(keys)
+                    if extra:
+                        problems.append(
+                            f"{name} point '{point_id}' {field_name} has "
+                            f"unknown key(s) {sorted(extra)}, expected one of "
+                            f"{keys}"
+                        )
+
+    return problems
+
+
 def prune_orphan_points(project: dict, package: mapfmt.Package) -> list[str]:
     """Drop any point-layer entry whose province id no longer exists.
 
@@ -508,7 +635,7 @@ def prune_orphan_points(project: dict, package: mapfmt.Package) -> list[str]:
     dropped: list[str] = []
     for name in package.layer_order:
         cfg = package.layers[name]
-        if cfg.input != "point":
+        if cfg.input != "point" or cfg.point_coupling != "province":
             continue
         points = mapfmt.project_points(project, name)
         for pid_str in list(points):
@@ -532,6 +659,7 @@ def validate_package(project: dict, package: mapfmt.Package) -> list[str]:
         + _validate_keys(project, package)
         + _validate_overlap(project, package)
         + _validate_points(project, package)
+        + _validate_free_points(project, package)
     )
 
 
@@ -721,6 +849,25 @@ def build_province_table(
     return table, geo
 
 
+def build_points_file(project: dict, package: mapfmt.Package) -> dict[str, list[dict]]:
+    """Every point_coupling=free layer's authored points, keyed by layer
+    name and sorted by id for a stable diff. Godot-side loading code
+    would read this to spawn things at campaign start.
+
+    An "army_starts" entry: {"id", "x", "y", "owner", "composition":
+    {"archers", "melee", "cavalry"}}."""
+    out: dict[str, list[dict]] = {}
+    for name in package.layer_order:
+        cfg = package.layers[name]
+        if cfg.input != "point" or cfg.point_coupling != "free":
+            continue
+        points = mapfmt.project_points(project, name)
+        out[name] = [
+            {"id": point_id, **payload} for point_id, payload in sorted(points.items())
+        ]
+    return out
+
+
 # --------------------------------------------------------------------------
 # the pipeline
 # --------------------------------------------------------------------------
@@ -794,11 +941,14 @@ def export_package(project: dict, package: mapfmt.Package) -> dict:
     table, geo = build_province_table(project, package, rasters, id_buf)
     table_path = mapfmt.write_province_table(package.root, table)
     geo_path = mapfmt.write_province_geo(package.root, size, geo)
+    points_by_layer = build_points_file(project, package)
+    points_path = mapfmt.write_points_file(package.root, points_by_layer)
 
     return {
         "layers": written,
         "table": str(table_path),
         "geo": str(geo_path),
+        "points": str(points_path),
         "province_count": len(table),
         "dropped_points": dropped_points,
     }

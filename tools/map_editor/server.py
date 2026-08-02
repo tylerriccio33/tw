@@ -78,6 +78,8 @@ def manifest_payload(package: mapfmt.Package) -> dict:
                 "snap_source": cfg.snap_source,
                 "clip_to": cfg.clip_to,
                 "gapfill": cfg.gapfill,
+                "point_coupling": cfg.point_coupling,
+                "point_fields": cfg.point_fields,
                 # Which layers this one may snap to: everything drawn
                 # before it, since that's what already exists when you
                 # start drawing on this one.

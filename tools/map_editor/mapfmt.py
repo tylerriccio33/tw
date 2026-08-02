@@ -38,6 +38,7 @@ MANIFEST_NAME = "map.json"
 LAYERS_DIRNAME = "layers"
 TABLE_NAME = "provinces.table.json"
 GEO_NAME = "provinces.geo.json"
+POINTS_NAME = "points.json"
 PROJECT_NAME = "project.json"
 
 FORMAT_VERSION = 1
@@ -55,6 +56,8 @@ DEFAULT_MIN_FRACTION = 0.02
 VALID_INPUTS = ("polygon", "brush", "assign", "point")
 VALID_KINDS = ("mask", "identity", "class")
 VALID_REDUCE_MODES = ("majority", "any")
+VALID_POINT_COUPLINGS = ("province", "free")
+VALID_POINT_FIELD_TYPES = ("faction", "counts")
 
 
 class PackageError(Exception):
@@ -142,10 +145,30 @@ class LayerConfig:
     legend      hex -> {"key": ..., plus whatever else that layer cares
                 about, e.g. "move_cost"}. Extra fields flow through to
                 the province table untouched.
-    clip_to     "<layer>:<key>" - pixels outside that mask get erased.
+    clip_to     "<layer>:<key>" - pixels outside that mask get erased. For
+                a point/free layer this also gates validation: an
+                authored point must land inside that mask (e.g. "on
+                land"), not just inside the canvas.
     gapfill     {"max_gap_px": N, "within": "<layer>:<key>"}.
     reduce      {"into": <tag name>, "mode": majority|any} or None.
     snap_source whether the editor offers it as a snap target by default.
+    point_coupling  only meaningful when input == "point".
+                "province" (default) - one point per province, keyed by
+                province id, color is the province's identity color
+                (see rasterize_point_layer). This is how cities work.
+                "free" - any number of points, keyed by an arbitrary
+                authored id, each carrying its own payload described by
+                point_fields. Rasterizes in kind=class: the legend picks
+                a color per payload field named by point_fields'
+                "faction" entry (its own owner/faction). This is how
+                army starting positions work.
+    point_fields    only meaningful when point_coupling == "free". Maps
+                payload field name -> {"type": "faction"|"counts", ...}.
+                "faction" means the value must be one of the package's
+                faction keys. "counts" means the value is a dict of
+                small-integer fields, e.g. {"keys": [...], "min": 0}.
+                Nothing here knows the word "army" - a "naval_starts"
+                layer could reuse the exact same machinery.
 
     `input` is about the editing gesture, `kind` about the meaning.
 
@@ -154,6 +177,10 @@ class LayerConfig:
       brush/class      terrain, resources - painted, many pixels a key.
       assign/class     ownership - nobody paints it; a province -> key
                        map, rasterized at export purely for preview.
+      point/identity   province-coupled points (cities) - one per
+                       province, color is the province id.
+      point/class      free points (army starts, ...) - any number,
+                       colored by their "faction" payload field.
     """
 
     name: str
@@ -169,6 +196,8 @@ class LayerConfig:
     gapfill: dict | None = None
     reduce: dict | None = None
     id_encoding: str | None = None
+    point_coupling: str = "province"
+    point_fields: dict[str, dict] = field(default_factory=dict)
     raw: dict = field(default_factory=dict)
 
     @property
@@ -236,6 +265,48 @@ def parse_layer_config(data: dict, name_hint: str = "") -> LayerConfig:
         if not reduce_cfg.get("into"):
             raise PackageError(f"layer '{name}' has a reduce with no 'into' tag name")
 
+    point_coupling = data.get("point_coupling") or "province"
+    point_fields = dict(data.get("point_fields") or {})
+    if input_mode == "point":
+        if point_coupling not in VALID_POINT_COUPLINGS:
+            raise PackageError(
+                f"layer '{name}' has point_coupling={point_coupling!r}, "
+                f"expected one of {VALID_POINT_COUPLINGS}"
+            )
+        if point_coupling == "province":
+            if kind != "identity":
+                raise PackageError(
+                    f"layer '{name}' has point_coupling=province, so it must be "
+                    f"kind=identity (province-coupled points aren't a legend), "
+                    f"got kind={kind}"
+                )
+            if point_fields:
+                raise PackageError(
+                    f"layer '{name}' has point_coupling=province, which carries "
+                    "no payload - point_fields belongs on a point_coupling=free layer"
+                )
+        else:  # free
+            if kind != "class":
+                raise PackageError(
+                    f"layer '{name}' has point_coupling=free, so it must be "
+                    f"kind=class (colored by its faction field), got kind={kind}"
+                )
+            for field_name, field_cfg in point_fields.items():
+                field_type = field_cfg.get("type")
+                if field_type not in VALID_POINT_FIELD_TYPES:
+                    raise PackageError(
+                        f"layer '{name}' point_fields.{field_name} has "
+                        f"type={field_type!r}, expected one of "
+                        f"{VALID_POINT_FIELD_TYPES}"
+                    )
+                if field_type == "counts" and not field_cfg.get("keys"):
+                    raise PackageError(
+                        f"layer '{name}' point_fields.{field_name} is type=counts "
+                        "but declares no 'keys'"
+                    )
+    elif point_fields:
+        raise PackageError(f"layer '{name}' has point_fields but input != 'point'")
+
     return LayerConfig(
         name=name,
         title=data.get("title") or name.replace("_", " ").title(),
@@ -250,6 +321,8 @@ def parse_layer_config(data: dict, name_hint: str = "") -> LayerConfig:
         gapfill=data.get("gapfill"),
         reduce=reduce_cfg,
         id_encoding=data.get("id_encoding"),
+        point_coupling=point_coupling,
+        point_fields=point_fields,
         raw=dict(data),
     )
 
@@ -416,6 +489,21 @@ def write_province_geo(root: Path, size: tuple[int, int], geo: list[dict]) -> Pa
 
 def read_province_geo(root: Path) -> dict:
     return _read_json(Path(root) / GEO_NAME)
+
+
+def write_points_file(root: Path, points_by_layer: dict[str, list[dict]]) -> Path:
+    """Derived file for every point_coupling=free layer's authored points,
+    e.g. {"army_starts": [{"id": ..., "x": ..., "y": ..., "owner": ...,
+    "composition": {...}}, ...]}. Nothing here knows the word "army".
+    The key is just the layer's own name. A second free-point layer
+    (say "naval_starts") shows up next to it with zero code changes."""
+    path = Path(root) / POINTS_NAME
+    _write_json(path, {"format_version": FORMAT_VERSION, "layers": points_by_layer})
+    return path
+
+
+def read_points_file(root: Path) -> dict[str, list[dict]]:
+    return _read_json(Path(root) / POINTS_NAME)["layers"]
 
 
 # --------------------------------------------------------------------------

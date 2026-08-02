@@ -726,6 +726,74 @@ static func _build_end_turn_banner(ui: Node) -> void:
 	ui.end_turn_button.pressed.connect(ui._on_end_turn_pressed)
 
 
+## ---------------------------------------------------------------------------
+## Battle result modal: a centred popup shown after the battle-clash
+## animation (campaign/battle_animation.gd) finishes, announcing the winning
+## faction. Built once, hidden by default; campaign_ui._show_battle_result_
+## modal() writes the text and toggles visibility, awaiting the OK button's
+## `pressed` signal so turn advancement blocks until the player acknowledges
+## it (see campaign_ui.gd's battle queue).
+## ---------------------------------------------------------------------------
+
+
+static func build_battle_modal(ui: Node) -> void:
+	var backdrop := ColorRect.new()
+	backdrop.name = "BattleModalBackdrop"
+	backdrop.color = Color(0, 0, 0, 0.55)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	anchor_rect(backdrop, 0.0, 0.0, 1.0, 1.0)
+	backdrop.visible = false
+	ui._ui.add_child(backdrop)
+	ui._battle_modal = backdrop
+
+	var panel := PanelContainer.new()
+	panel.name = "BattleResultPanel"
+	panel.add_theme_stylebox_override("panel", style_box(ui.HUD_BLUE_DARK, ui.HUD_CREAM, 3))
+	anchor_rect(panel, 0.34, 0.36, 0.66, 0.62)
+	backdrop.add_child(panel)
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_%s" % side, 18)
+	panel.add_child(margin)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	margin.add_child(box)
+
+	ui._battle_modal_title_label = Label.new()
+	set_font(ui._battle_modal_title_label, LOCAL_FONT_BOLD, 22)
+	ui._battle_modal_title_label.add_theme_color_override("font_color", ui.HUD_CREAM)
+	ui._battle_modal_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(ui._battle_modal_title_label)
+
+	ui._battle_modal_message_label = Label.new()
+	set_font(ui._battle_modal_message_label, LOCAL_FONT_SEMIBOLD, 15)
+	ui._battle_modal_message_label.add_theme_color_override("font_color", ui.HUD_CREAM)
+	ui._battle_modal_message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ui._battle_modal_message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(ui._battle_modal_message_label)
+
+	var ok_wrap := CenterContainer.new()
+	box.add_child(ok_wrap)
+
+	ui._battle_modal_ok_button = Button.new()
+	ui._battle_modal_ok_button.text = "OK"
+	ui._battle_modal_ok_button.custom_minimum_size = Vector2(90, 32)
+	ui._battle_modal_ok_button.add_theme_color_override("font_color", Color.WHITE)
+	set_font(ui._battle_modal_ok_button, LOCAL_FONT_BOLD, 15)
+	ui._battle_modal_ok_button.add_theme_stylebox_override(
+		"normal", style_box(Color(0.55, 0.13, 0.05), Color(0.85, 0.45, 0.1), 2)
+	)
+	ui._battle_modal_ok_button.add_theme_stylebox_override(
+		"hover", style_box(Color(0.65, 0.18, 0.07), Color(0.85, 0.45, 0.1), 2)
+	)
+	ui._battle_modal_ok_button.add_theme_stylebox_override(
+		"pressed", style_box(Color(0.45, 0.1, 0.04), Color(0.85, 0.45, 0.1), 2)
+	)
+	ok_wrap.add_child(ui._battle_modal_ok_button)
+
+
 static func format_stat(n: int) -> String:
 	if n >= 1000:
 		return "%.1fK" % (n / 1000.0)

@@ -98,7 +98,7 @@ def project_with(
     # so seed every point layer with a point that's guaranteed to sit
     # inside its province.
     for name, cfg in package.layers.items():
-        if cfg.input != "point":
+        if cfg.input != "point" or cfg.point_coupling != "province":
             continue
         project["layers"][name]["points"] = {
             str(p["id"]): _centroid(p["polygons"][0])

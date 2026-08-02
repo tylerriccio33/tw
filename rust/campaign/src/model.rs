@@ -150,6 +150,25 @@ pub struct Army {
     /// exactly one move order per turn, regardless of how much of its
     /// `movement` pool that order actually spent.
     pub moved_this_turn: bool,
+    /// Unit composition. No casualties/attrition model yet - these counts
+    /// only feed `points()`, which decides who wins a battle.
+    pub archers: u32,
+    pub melee: u32,
+    pub cavalry: u32,
+}
+
+/// Point value of a single unit of each type, used by `Army::points`.
+pub const ARCHER_POINTS: u32 = 1;
+pub const MELEE_POINTS: u32 = 2;
+pub const CAVALRY_POINTS: u32 = 3;
+
+impl Army {
+    /// Total battle strength: archers*1 + melee*2 + cavalry*3. Used to decide
+    /// field battles and sieges (see `resolve_field_battle`/`resolve_siege`)
+    /// instead of a pure coin flip.
+    pub fn points(&self) -> u32 {
+        self.archers * ARCHER_POINTS + self.melee * MELEE_POINTS + self.cavalry * CAVALRY_POINTS
+    }
 }
 
 /// What an army ran into at the end of a move.
@@ -439,8 +458,34 @@ impl Campaign {
             garrisoned,
             alive: true,
             moved_this_turn: false,
+            archers: 0,
+            melee: 0,
+            cavalry: 0,
         });
         id
+    }
+
+    /// Recruits a small, randomly-split batch of units (1-3 total) into the
+    /// friendly army currently garrisoned at `city_id`. Fails if no friendly
+    /// army is garrisoned there. Doesn't need balancing or cost - just a
+    /// scaffold for a future recruitment system.
+    pub fn recruit_at_city(&mut self, city_id: CityId, rng: &mut impl Rng) -> Result<(), String> {
+        let army_id = self
+            .garrison_of(city_id)
+            .map(|a| a.id)
+            .ok_or_else(|| "no friendly army garrisoned at that city".to_string())?;
+        let total = rng.gen_range(1..=3u32);
+        let army = self
+            .army_mut(army_id)
+            .expect("garrison_of returned a living army");
+        for _ in 0..total {
+            match rng.gen_range(0..3u32) {
+                0 => army.archers += 1,
+                1 => army.melee += 1,
+                _ => army.cavalry += 1,
+            }
+        }
+        Ok(())
     }
 
     pub fn army(&self, id: ArmyId) -> Option<&Army> {
@@ -752,9 +797,16 @@ impl Campaign {
         defender_army: ArmyId,
         rng: &mut impl Rng,
     ) -> BattleReport {
-        let attacker_faction = self.army(attacker_army).expect("attacker alive").owner;
-        let defender_faction = self.army(defender_army).expect("defender alive").owner;
-        let attacker_won = rng.gen_bool(0.5);
+        let attacker = self.army(attacker_army).expect("attacker alive");
+        let defender = self.army(defender_army).expect("defender alive");
+        let attacker_faction = attacker.owner;
+        let defender_faction = defender.owner;
+        let (attacker_points, defender_points) = (attacker.points(), defender.points());
+        let attacker_won = match attacker_points.cmp(&defender_points) {
+            std::cmp::Ordering::Greater => true,
+            std::cmp::Ordering::Less => false,
+            std::cmp::Ordering::Equal => rng.gen_bool(0.5),
+        };
 
         let loser = if attacker_won {
             defender_army
@@ -791,7 +843,21 @@ impl Campaign {
         let defender_faction = self.cities.iter().find(|c| c.id == city_id)?.owner;
         let defender_army = self.garrison_of(city_id).map(|a| a.id);
 
-        let attacker_won = rng.gen_bool(0.5);
+        // Only compare points when there's an actual defending army to
+        // compare against; an ungarrisoned city has no defender points, so
+        // keep the coin flip in that case (existing behavior).
+        let attacker_won = match defender_army.and_then(|id| self.army(id)) {
+            Some(defender) => {
+                let attacker_points = self.army(attacker_army)?.points();
+                let defender_points = defender.points();
+                match attacker_points.cmp(&defender_points) {
+                    std::cmp::Ordering::Greater => true,
+                    std::cmp::Ordering::Less => false,
+                    std::cmp::Ordering::Equal => rng.gen_bool(0.5),
+                }
+            }
+            None => rng.gen_bool(0.5),
+        };
         let mut defender_eliminated = false;
 
         if attacker_won {
@@ -1945,5 +2011,116 @@ mod tests {
         assert!(c.provinces.is_empty());
         assert!(c.province(1).is_none());
         assert!(c.provinces_owned_by(0).is_empty());
+    }
+
+    // -------------------------------------------------------------------
+    // Unit composition / points-based battles / recruitment
+    // -------------------------------------------------------------------
+
+    fn army_with(archers: u32, melee: u32, cavalry: u32) -> Army {
+        Army {
+            id: 0,
+            name: "Test".into(),
+            owner: 0,
+            position: (0.0, 0.0),
+            movement: DEFAULT_MOVE_POINTS,
+            max_movement: DEFAULT_MOVE_POINTS,
+            moves_left: DEFAULT_MOVES,
+            max_moves: DEFAULT_MOVES,
+            garrisoned: None,
+            alive: true,
+            moved_this_turn: false,
+            archers,
+            melee,
+            cavalry,
+        }
+    }
+
+    #[test]
+    fn points_are_weighted_by_unit_type() {
+        assert_eq!(army_with(0, 0, 0).points(), 0);
+        assert_eq!(army_with(3, 0, 0).points(), 3); // 3 archers * 1
+        assert_eq!(army_with(0, 3, 0).points(), 6); // 3 melee * 2
+        assert_eq!(army_with(0, 0, 3).points(), 9); // 3 cavalry * 3
+        assert_eq!(army_with(2, 1, 1).points(), 7); // 2 archers + 1 melee*2 + 1 cav*3
+    }
+
+    #[test]
+    fn higher_points_army_wins_field_battle_deterministically() {
+        // Any seed works: with unequal points the coin flip is never reached.
+        for seed in 0..10u64 {
+            // Both armies start out of their cities and one step apart, as in
+            // `armies_that_meet_fight_a_field_battle_and_one_dies`.
+            let mut trial = sample_campaign_with_positions((-2000.0, 0.0), (2000.0, 0.0));
+            let attacker_id = trial.spawn_army(0, "Red Host".into(), (0.0, 0.0));
+            let defender_id = trial.spawn_army(1, "Blue Host".into(), (100.0, 0.0));
+            // Give the attacker overwhelming points so the outcome never
+            // rolls rng - if it did, this test would be flaky across seeds.
+            trial.army_mut(attacker_id).unwrap().cavalry = 10; // 30 points
+            trial.army_mut(defender_id).unwrap().archers = 1; // 1 point
+
+            let mut rng = SmallRng::seed_from_u64(seed);
+            let report = trial
+                .move_army(attacker_id, (100.0, 0.0), &mut rng)
+                .unwrap();
+            let battle = report.battle.expect("meeting an enemy army must fight");
+            assert!(
+                battle.attacker_won,
+                "attacker has far more points and must win regardless of rng seed {seed}"
+            );
+            assert!(trial.army(defender_id).is_none(), "defender destroyed");
+            assert!(trial.army(attacker_id).is_some(), "attacker survives");
+        }
+    }
+
+    #[test]
+    fn lower_points_army_loses_field_battle_deterministically() {
+        let mut c = sample_campaign_with_positions((-2000.0, 0.0), (2000.0, 0.0));
+        let attacker_id = c.spawn_army(0, "Red Host".into(), (0.0, 0.0));
+        let defender_id = c.spawn_army(1, "Blue Host".into(), (100.0, 0.0));
+        c.army_mut(attacker_id).unwrap().archers = 1; // 1 point
+        c.army_mut(defender_id).unwrap().cavalry = 10; // 30 points
+
+        let mut rng = SmallRng::seed_from_u64(42);
+        let report = c.move_army(attacker_id, (100.0, 0.0), &mut rng).unwrap();
+        let battle = report.battle.expect("meeting an enemy army must fight");
+        assert!(!battle.attacker_won, "attacker is far weaker and must lose");
+        assert!(c.army(attacker_id).is_none(), "attacker destroyed");
+        assert!(c.army(defender_id).is_some(), "defender survives");
+    }
+
+    #[test]
+    fn recruit_at_city_adds_units_to_the_garrison() {
+        let mut c = army_campaign();
+        let mut rng = SmallRng::seed_from_u64(9);
+        let before = c.army(0).unwrap().points();
+        c.recruit_at_city(0, &mut rng).unwrap();
+        let after = c.army(0).unwrap().points();
+        assert!(
+            after > before,
+            "recruiting must add at least one unit's worth of points"
+        );
+        let total_units = {
+            let a = c.army(0).unwrap();
+            a.archers + a.melee + a.cavalry
+        };
+        assert!((1..=3).contains(&total_units), "adds between 1 and 3 units");
+    }
+
+    #[test]
+    fn recruit_at_city_fails_without_a_garrisoned_army() {
+        let mut c = sample_campaign();
+        let mut rng = SmallRng::seed_from_u64(9);
+        // sample_campaign has cities but no armies at all.
+        assert!(c.recruit_at_city(0, &mut rng).is_err());
+    }
+
+    #[test]
+    fn recruit_at_city_fails_when_garrison_left() {
+        let mut c = army_campaign();
+        let mut rng = SmallRng::seed_from_u64(1);
+        // March the garrison out of its city.
+        c.move_army(0, (200.0, 0.0), &mut rng).unwrap();
+        assert!(c.recruit_at_city(0, &mut rng).is_err());
     }
 }

@@ -7,6 +7,7 @@ extends Node2D
 ## unchanged from before this script also owned world/camera setup.
 
 const ArmyLayer := preload("res://campaign/army_layer.gd")
+const BattleUiController := preload("res://campaign/battle_ui_controller.gd")
 const HudBuilder := preload("res://campaign/campaign_hud_builder.gd")
 const ProvinceMap := preload("res://campaign/province_map.gd")
 const CityMarker := preload("res://campaign/city_marker.gd")
@@ -145,6 +146,7 @@ var _player_defeated := false
 # so several can land before the signal handler's caller gets control back).
 var _watching_ai_moves := false
 var _ai_moves: Array = []
+var _battle_ui: BattleUiController
 
 # Bottom-banner widgets that get new data every _refresh(); built once in
 # _build_bottom_banner() and then just written into on each turn/battle event.
@@ -351,10 +353,15 @@ func _ready() -> void:
 	_cam_zoom = 1.0
 	_update_camera_transform()
 
+	_battle_ui = BattleUiController.new()
+	add_child(_battle_ui)
+	_battle_ui.setup(self)
 	manager.turn_started.connect(_on_turn_started)
 	manager.battle_resolved.connect(_on_battle_resolved)
 	manager.game_over.connect(_on_game_over)
 	manager.army_moved.connect(_on_army_moved_for_camera)
+	manager.army_moved.connect(_battle_ui.on_army_moved)
+	manager.army_battle.connect(_battle_ui.on_army_battle)
 	log_button.pressed.connect(_on_log_button_pressed)
 
 	# Armies are clamped to the map extent, so a random AI walk can't march
@@ -717,7 +724,7 @@ func _on_log_button_pressed() -> void:
 
 
 func _on_end_turn_pressed() -> void:
-	if _ai_running or _player_defeated:
+	if _ai_running or _player_defeated or _battle_ui.is_pending():
 		return
 	_army_layer.select(-1)
 	manager.end_turn()
@@ -762,14 +769,11 @@ func _append_log(text: String) -> void:
 ## pausing between them so a whole round of army moves is watchable instead of
 ## resolving in a single frame. Player orders are locked out for the duration.
 ##
-## Terminates on is_game_over() (last-faction-standing elimination or turn
-## limit) OR on the round-robin coming back around to PLAYER_FACTION OR on
-## PLAYER_FACTION itself having been eliminated. That third condition is not
-## redundant with is_game_over(): Campaign::end_turn's round-robin
-## permanently skips dead factions, so once PLAYER_FACTION is dead its index
-## can never come up again - without this check, and with 2+ AI factions
-## still alive (so is_game_over() stays false), this loop would spin forever
-## and the player would never get control back.
+## Terminates on is_game_over() OR the round-robin returning to
+## PLAYER_FACTION OR PLAYER_FACTION itself having been eliminated - the third
+## matters because Campaign::end_turn's round-robin permanently skips dead
+## factions, so a dead PLAYER_FACTION's index never comes up again; without
+## this check the loop would spin forever with 2+ AI factions still alive.
 func _run_ai_factions() -> void:
 	_ai_running = true
 	_army_layer.set_orders_locked(true)
@@ -786,6 +790,7 @@ func _run_ai_factions() -> void:
 		_watching_ai_moves = false
 		_refresh()
 		await _focus_camera_on_ai_moves(_ai_moves)
+		await _battle_ui.wait_for_queue()
 		await get_tree().create_timer(AI_STEP_SECONDS).timeout
 		manager.end_turn()
 
@@ -865,16 +870,13 @@ func _set_cam_zoom(zoom: float) -> void:
 	_project_markers()
 
 
-## Refreshes the core HUD (always) and the settlement panel (only while a
-## city is selected). The settlement panel - CityPanel + BuildingsPanel,
-## built by HudBuilder - only ever shows a city the player explicitly
-## clicked; with nothing selected it's hidden entirely rather than falling
-## back to some "current" city, so the baseline HUD after closing/deselecting
-## is just the persistent top bar/end-turn ribbon with no settlement info
-## lingering.
+## Refreshes the core HUD (always) and the settlement panel (only while a city
+## is selected - hidden entirely otherwise, never falling back to a "current" city).
 func _refresh_bottom_banner(state: Dictionary) -> void:
 	end_turn_button.text = "END TURN %d" % int(state["round"])
-	end_turn_button.disabled = bool(state["game_over"]) or _ai_running or _player_defeated
+	end_turn_button.disabled = (
+		bool(state["game_over"]) or _ai_running or _player_defeated or _battle_ui.is_pending()
+	)
 
 	var year_label: Label = _top_bar_stat_value_labels.get("Year")
 	if year_label != null:
