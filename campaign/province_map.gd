@@ -269,6 +269,24 @@ func set_highlighted_provinces(ids: Array) -> void:
 		_areas[province_id].set_highlight(province_id in ids)
 
 
+## Which province (if any) contains `local_pos`, in this node's own local
+## space (i.e. map pixels, same as the polygons in _outer_rings - convert a
+## world/screen point into this space before calling). Used by campaign_ui's
+## _unhandled_input to resolve a click synchronously: province clicks are
+## normally routed through region_area's Area2D (see `clicked`/
+## `region_clicked`), but 2D physics picking is deferred to the next physics
+## step rather than resolved immediately like Control input, so relying on
+## that signal alone lets campaign_ui's "click missed everything" fallback
+## win the race and deselect before the province click ever arrives. This
+## gives campaign_ui a same-frame answer instead of depending on that timing.
+func province_at_local_point(local_pos: Vector2) -> int:
+	for province_id in _outer_rings:
+		for ring in _outer_rings[province_id]:
+			if Geometry2D.is_point_in_polygon(local_pos, ring):
+				return province_id
+	return -1
+
+
 ## Outlines each realm as one shape rather than outlining its provinces
 ## separately, so an internal border between two provinces of the same faction
 ## carries only the province hairline and the heavy line follows the frontier.

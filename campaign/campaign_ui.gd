@@ -76,6 +76,7 @@ const FONT_BOLD := preload("res://assets/fonts/Baloo2-Bold.ttf")
 
 @onready var manager: Node = $CampaignManager
 @onready var world_layer: Node2D = $WorldLayer
+@onready var _ui: Control = $UI
 @onready var bottom_banner: Control = $UI/BottomBanner
 @onready var _top_bar: Control = $UI/TopBar
 @onready var _turn_indicator: Control = $UI/TurnIndicator
@@ -293,7 +294,9 @@ func _ready() -> void:
 	if not _province_map.setup():
 		_fail_to_start("could not load the map package in campaign/map_data")
 		return
-	_province_map.region_clicked.connect(_on_region_clicked)
+	# Deliberately NOT wired to _on_region_clicked: region_area's Area2D
+	# physics picking fires a physics step late, so clicks are resolved
+	# synchronously in _unhandled_input instead (see comment there).
 
 	# The faction roster and its colors come from the map package now, so a
 	# scenario can add or recolor factions without touching this script.
@@ -332,6 +335,11 @@ func _ready() -> void:
 	# City markers must not swallow the clicks that become move orders; their
 	# own child markers keep taking clicks regardless of the container filter.
 	cities_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# $UI anchors BottomBanner/TopBar/TurnIndicator but has no visuals of its
+	# own; its default STOP mouse_filter was swallowing every click over the
+	# map. Child widgets keep their own STOP filter, so this is safe.
+	_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	# Close-in TW-style campaign framing: start centred over the cities'
 	# midpoint rather than the map origin.
@@ -502,19 +510,22 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_camera_transform()
 			_project_markers()
 		elif event.button_index == MOUSE_BUTTON_LEFT:
-			# A left-click that reaches here missed every province polygon
-			# (each one has its own Area2D that would otherwise have
-			# consumed it via _on_region_clicked) and every army/city
-			# marker - i.e. it landed on water/impassable terrain or
-			# outside the map entirely. That's never a valid move or
-			# selection target, so clear whatever's currently selected
-			# (army and/or city panel) instead of issuing an order onto an
-			# unmovable spot.
-			_army_layer.select(-1)
-			if _selected_city_id != -1 or _selected_province_id != -1:
-				_selected_city_id = -1
-				_selected_province_id = -1
-				_refresh_bottom_banner(manager.get_state())
+			# Missed every Control (army/city markers); may still have hit a
+			# province polygon. Area2D physics picking defers a step too
+			# late, so resolve the province hit synchronously here instead.
+			var world_pos: Vector2 = _screen_to_world(event.position)
+			var province_id := -1
+			if world_pos != Vector2.INF:
+				var local_pos: Vector2 = (world_pos + _map_half_size) / MAP_SCALE
+				province_id = _province_map.province_at_local_point(local_pos)
+			if province_id != -1:
+				_on_region_clicked(province_id)
+			else:
+				_army_layer.select(-1)
+				if _selected_city_id != -1 or _selected_province_id != -1:
+					_selected_city_id = -1
+					_selected_province_id = -1
+					_refresh_bottom_banner(manager.get_state())
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			# Right-click on open map does nothing; right-click only attacks
 			# via the marker handler in army_layer._on_marker_input.
@@ -935,7 +946,7 @@ func _refresh_bottom_banner(state: Dictionary) -> void:
 			"(%.0f, %.0f)" % [float(shown_army["x"]), float(shown_army["y"])]
 		)
 		_city_stat_value_labels["region_wealth"].text = (
-			"Garrisoned" if bool(shown_army["garrisoned"]) else "In the field"
+			"Garrisoned" if int(shown_army["garrisoned"]) != -1 else "In the field"
 		)
 		return
 

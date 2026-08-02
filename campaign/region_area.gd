@@ -112,4 +112,16 @@ func _on_mouse_exited() -> void:
 
 func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		# 2D physics picking is deferred to the next physics step rather than
+		# resolved synchronously like Control gui_input, so campaign_ui does
+		# NOT drive its move/select orders off this signal - it resolves
+		# province clicks itself, synchronously, in _unhandled_input (via
+		# province_map.province_at_local_point). This signal is kept for any
+		# other listener that only cares about hover-adjacent click feedback
+		# and can tolerate arriving a step late; marking the event handled
+		# here just keeps a late duplicate pick from also reaching
+		# _unhandled_input as a separate "click".
+		var vp := get_viewport()
+		if vp != null:
+			vp.set_input_as_handled()
 		clicked.emit(province_id)

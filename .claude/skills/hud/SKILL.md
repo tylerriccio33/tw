@@ -18,6 +18,10 @@ Reference for editing the Total War-style HUD in the live campaign game (`campai
 3. If the widget needs live data, store a reference to it (see `_city_panel_name_label`, `_city_stat_value_labels`, etc. near the top of the script) and write to it from `_refresh_bottom_banner()`.
 4. Wire up button signals explicitly in `_ready()` or the relevant `_build_*` method, e.g. `end_turn_button.pressed.connect(_on_end_turn_pressed)` — Godot won't auto-connect anything.
 
+## Gotcha: `UI`'s own mouse_filter, not just its children's
+
+`UI` is a full-viewport-anchored `Control` with no visuals of its own — it exists purely to anchor `BottomBanner`/`TopBar`/`TurnIndicator`. Control's default `mouse_filter` is `STOP`, so if this node ever loses its explicit `_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE` (set in `campaign_ui.gd::_ready()`), it silently blocks every click on the map underneath it — cities and provinces stop responding entirely, while army markers (added even later in the tree, so they sit visually on top of `UI`) keep working. That split makes it look like an army-selection bug rather than a HUD layout regression, so if "nothing on the map is clickable except armies" ever comes back, check this first before chasing click-handler logic. Same applies to `cities_root` (`$CityMarkers`), which gets the identical treatment for the same reason. See the `armies` skill's "Input → order call chain" for the full click-routing picture this sits inside of.
+
 ## The top-left widgets are different from the bottom banner
 
 `StatusLabel`, `LogLabel`, and `Controls` (`TargetOption`/`AttackButton`) are declared directly in `campaign.tscn` with `layout_mode = 0` and fixed pixel offsets, not fractional anchors like the bottom banner. That's an existing inconsistency, not a bug to silently "fix" — know it's there before assuming all HUD elements behave the same way.
