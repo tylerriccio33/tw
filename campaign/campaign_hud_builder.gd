@@ -407,7 +407,7 @@ static func _make_stat_row(
 static func _build_buildings_panel(ui: Node) -> void:
 	var panel := Control.new()
 	panel.name = "BuildingsPanel"
-	anchor_rect(panel, 0.19, 0.824, 0.762, 0.99)
+	anchor_rect(panel, 0.19, 0.617, 0.762, 0.99)
 	panel.visible = false
 	ui.bottom_banner.add_child(panel)
 	ui._buildings_panel = panel
