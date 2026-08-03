@@ -1,0 +1,15 @@
+{
+ "name": "provinces",
+ "title": "Provinces",
+ "input": "polygon",
+ "kind": "identity",
+ "raster": "provinces.png",
+ "id_encoding": "rgb24",
+ "nodata_color": "#000000",
+ "snap_source": true,
+ "clip_to": "coastline:land",
+ "gapfill": {
+  "max_gap_px": 12,
+  "within": "coastline:land"
+ }
+}

@@ -35,6 +35,7 @@ import mapfmt
 import numpy as np
 from gapfill import fill_land_gaps
 from PIL import Image, ImageDraw
+from shapely.geometry import Polygon
 
 # Contour tracing for provinces.geo.json. The raster is the source of
 # truth, so simplification is deliberately tight - this is not the place
@@ -668,6 +669,28 @@ def validate_package(project: dict, package: mapfmt.Package) -> list[str]:
 # --------------------------------------------------------------------------
 
 
+def _repair_self_intersection(points: list[float]) -> list[float]:
+    """Untangle a bowtie ring that RDP simplification can fold over itself.
+
+    approxPolyDP simplifies a raw contour without any self-intersection
+    check, and a thin traced neck occasionally comes out crossed. buffer(0)
+    is the standard shapely fix: it resolves the ring into valid geometry,
+    and we keep the largest resulting piece.
+    """
+    poly = Polygon(zip(points[0::2], points[1::2]))
+    if poly.is_valid:
+        return points
+    repaired = poly.buffer(0)
+    if repaired.is_empty:
+        return points
+    if repaired.geom_type == "MultiPolygon":
+        repaired = max(repaired.geoms, key=lambda g: g.area)
+    if repaired.geom_type != "Polygon":
+        return points
+    coords = list(repaired.exterior.coords)[:-1]
+    return [c for xy in coords for c in xy]
+
+
 def trace_rings(id_buf: np.ndarray, province_id: int) -> list[dict]:
     """Polygon rings for one province, holes included.
 
@@ -692,6 +715,7 @@ def trace_rings(id_buf: np.ndarray, province_id: int) -> list[dict]:
         points: list[float] = []
         for pt in simplified:
             points.extend([float(pt[0][0]), float(pt[0][1])])
+        points = _repair_self_intersection(points)
         rings.append({"points": points, "hole": int(hierarchy[0][i][3]) != -1})
     return rings
 

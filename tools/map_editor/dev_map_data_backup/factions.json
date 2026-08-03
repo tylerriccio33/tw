@@ -1,0 +1,20 @@
+[
+ {
+  "key": "england",
+  "name": "England",
+  "color": "#911eb4",
+  "money": 100
+ },
+ {
+  "key": "alba",
+  "name": "Alba",
+  "color": "#f58231",
+  "money": 100
+ },
+ {
+  "key": "ireland",
+  "name": "Ireland",
+  "color": "#4363d8",
+  "money": 100
+ }
+]

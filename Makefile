@@ -6,7 +6,7 @@ ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
 	@git add .
 	@echo "Running pre-commit"
-	@uvx prek run --all-files
+	@uvx prek run --all-files --fail-fast
 	@echo "Committing with message: $$MSG"
 	@git commit -m "$$MSG"
 	@echo "Pushing to origin main"

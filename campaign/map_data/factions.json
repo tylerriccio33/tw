@@ -1,20 +1,26 @@
 [
  {
-  "key": "england",
-  "name": "England",
-  "color": "#911eb4",
+  "key": "red",
+  "name": "Red",
+  "color": "#cd5c5c",
   "money": 100
  },
  {
-  "key": "alba",
-  "name": "Alba",
-  "color": "#f58231",
+  "key": "blue",
+  "name": "Blue",
+  "color": "#6495ed",
   "money": 100
  },
  {
-  "key": "ireland",
-  "name": "Ireland",
-  "color": "#4363d8",
+  "key": "green",
+  "name": "Green",
+  "color": "#3cb371",
+  "money": 100
+ },
+ {
+  "key": "yellow",
+  "name": "Yellow",
+  "color": "#daa520",
   "money": 100
  }
 ]

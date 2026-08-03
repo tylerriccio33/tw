@@ -7,21 +7,17 @@
  "nodata_color": "#000000",
  "snap_source": false,
  "legend": {
-  "#cd5c5c": {
-   "key": "red",
-   "name": "Red"
+  "#f58231": {
+   "key": "alba",
+   "name": "Alba"
   },
-  "#6495ed": {
-   "key": "blue",
-   "name": "Blue"
+  "#4363d8": {
+   "key": "ireland",
+   "name": "Ireland"
   },
-  "#3cb371": {
-   "key": "green",
-   "name": "Green"
-  },
-  "#daa520": {
-   "key": "yellow",
-   "name": "Yellow"
+  "#911eb4": {
+   "key": "england",
+   "name": "England"
   }
  },
  "reduce": {

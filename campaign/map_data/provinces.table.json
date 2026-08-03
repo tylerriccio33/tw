@@ -2,299 +2,301 @@
  "format_version": 1,
  "provinces": [
   {
-   "id": 2,
-   "key": "scotland",
-   "name": "Scotland",
+   "id": 1,
+   "key": "province_1",
+   "name": "Province 1",
    "centroid": [
-    848.41,
-    654.75
+    3510.33,
+    5266.64
    ],
-   "area_px": 197000,
+   "area_px": 2669460,
    "neighbors": [
-    6
+    6,
+    8,
+    10,
+    11,
+    12
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "alba",
+   "starting_owner": "red",
+   "display_color": "#4363d8",
+   "city_position": [
+    3082.0,
+    5099.0
+   ]
+  },
+  {
+   "id": 2,
+   "key": "province_2",
+   "name": "Province 2",
+   "centroid": [
+    3926.41,
+    432.59
+   ],
+   "area_px": 60628,
+   "neighbors": [
+    7
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "blue",
    "display_color": "#f58231",
    "city_position": [
-    844.3501259211761,
-    704.7430076936722
+    4111.0,
+    102.0
+   ]
+  },
+  {
+   "id": 3,
+   "key": "province_3",
+   "name": "Province 3",
+   "centroid": [
+    5269.89,
+    7520.14
+   ],
+   "area_px": 793541,
+   "neighbors": [
+    8,
+    10
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "green",
+   "display_color": "#911eb4",
+   "city_position": [
+    5655.0,
+    7999.0
+   ]
+  },
+  {
+   "id": 4,
+   "key": "province_4",
+   "name": "Province 4",
+   "centroid": [
+    2149.05,
+    2214.22
+   ],
+   "area_px": 562742,
+   "neighbors": [
+    7,
+    11
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "yellow",
+   "display_color": "#46f0f0",
+   "city_position": [
+    1422.0,
+    2226.0
    ]
   },
   {
    "id": 5,
-   "key": "wales",
-   "name": "Wales",
+   "key": "province_5",
+   "name": "Province 5",
    "centroid": [
-    772.79,
-    1399.68
+    688.68,
+    5837.79
    ],
-   "area_px": 71045,
+   "area_px": 521985,
    "neighbors": [
-    6,
-    7
+    9,
+    12
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "england",
-   "display_color": "#46f0f0",
+   "starting_owner": "red",
+   "display_color": "#bfef45",
    "city_position": [
-    733.3399500032525,
-    1463.3088703902026
+    232.0,
+    6077.0
    ]
   },
   {
    "id": 6,
-   "key": "northumbria",
-   "name": "Northumbria",
+   "key": "province_6",
+   "name": "Province 6",
    "centroid": [
-    986.36,
-    1145.04
+    2962.77,
+    6800.35
    ],
-   "area_px": 84443,
+   "area_px": 555577,
    "neighbors": [
-    2,
-    5,
-    7
+    1,
+    10
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "england",
-   "display_color": "#bfef45",
+   "starting_owner": "blue",
+   "display_color": "#fabed4",
    "city_position": [
-    1088.2361184681295,
-    1199.2404880324302
+    2345.0,
+    7360.0
    ]
   },
   {
    "id": 7,
-   "key": "anglia",
-   "name": "Anglia",
+   "key": "province_7",
+   "name": "Province 7",
    "centroid": [
-    1087.01,
-    1497.26
+    3087.01,
+    2281.71
    ],
-   "area_px": 153664,
+   "area_px": 888054,
    "neighbors": [
-    5,
-    6,
-    15
+    2,
+    4,
+    11
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "england",
-   "display_color": "#fabed4",
+   "starting_owner": "green",
+   "display_color": "#469990",
    "city_position": [
-    1125.2395104407706,
-    1481.8104767974348
+    3717.0,
+    2367.0
    ]
   },
   {
    "id": 8,
-   "key": "northern_ireland",
-   "name": "Northern Ireland",
+   "key": "province_8",
+   "name": "Province 8",
    "centroid": [
-    484.2,
-    932.3
+    4540.84,
+    6067.39
    ],
-   "area_px": 47004,
+   "area_px": 1821790,
    "neighbors": [
-    11,
-    12
+    1,
+    3,
+    10
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "alba",
-   "display_color": "#bfef45",
+   "starting_owner": "yellow",
+   "display_color": "#dcbeff",
    "city_position": [
-    568.50665848876,
-    916.6704992674257
+    5093.0,
+    5906.0
    ]
   },
   {
    "id": 9,
-   "key": "connacth",
-   "name": "Connacth",
+   "key": "province_9",
+   "name": "Province 9",
    "centroid": [
-    236.04,
-    1334.62
+    1306.77,
+    4550.95
    ],
-   "area_px": 51162,
+   "area_px": 1574546,
    "neighbors": [
-    13,
-    14
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "ireland",
-   "display_color": "#fabed4",
-   "city_position": [
-    206.88260057431208,
-    1355.6631603844864
-   ]
-  },
-  {
-   "id": 10,
-   "key": "dyflin",
-   "name": "Dyflin",
-   "centroid": [
-    483.08,
-    1177.14
-   ],
-   "area_px": 15416,
-   "neighbors": [
+    5,
     11,
-    12,
-    14
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "ireland",
-   "display_color": "#469990",
-   "city_position": [
-    507.9556534426199,
-    1205.9683449077877
-   ]
-  },
-  {
-   "id": 11,
-   "key": "galway",
-   "name": "Galway",
-   "centroid": [
-    467.76,
-    1060.92
-   ],
-   "area_px": 7230,
-   "neighbors": [
-    8,
-    10,
     12
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "ireland",
-   "display_color": "#dcbeff",
+   "starting_owner": "red",
+   "display_color": "#9a6324",
    "city_position": [
-    475.9981785571571,
-    1049.5456725557315
+    1204.0,
+    4268.0
+   ]
+  },
+  {
+   "id": 10,
+   "key": "province_10",
+   "name": "Province 10",
+   "centroid": [
+    4151.23,
+    7496.4
+   ],
+   "area_px": 533717,
+   "neighbors": [
+    1,
+    3,
+    6,
+    8
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "blue",
+   "display_color": "#808000",
+   "city_position": [
+    3938.0,
+    7999.0
+   ]
+  },
+  {
+   "id": 11,
+   "key": "province_11",
+   "name": "Province 11",
+   "centroid": [
+    2849.57,
+    3463.11
+   ],
+   "area_px": 1950057,
+   "neighbors": [
+    1,
+    4,
+    7,
+    9
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "green",
+   "display_color": "#ffd8b1",
+   "city_position": [
+    2641.0,
+    3556.0
    ]
   },
   {
    "id": 12,
-   "key": "fore",
-   "name": "Fore",
+   "key": "province_12",
+   "name": "Province 12",
    "centroid": [
-    301.06,
-    1057.39
+    1571.54,
+    5573.01
    ],
-   "area_px": 53022,
+   "area_px": 1012327,
    "neighbors": [
-    8,
-    10,
-    11,
-    13,
-    14
+    1,
+    5,
+    9
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "ireland",
-   "display_color": "#9a6324",
-   "city_position": [
-    259.0237438084883,
-    1044.4997798992135
-   ]
-  },
-  {
-   "id": 13,
-   "key": "limerick",
-   "name": "Limerick",
-   "centroid": [
-    256.98,
-    1192.21
-   ],
-   "area_px": 13011,
-   "neighbors": [
-    9,
-    12,
-    14
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "ireland",
-   "display_color": "#808000",
-   "city_position": [
-    285.9353016067728,
-    1190.830666938234
-   ]
-  },
-  {
-   "id": 14,
-   "key": "wexford",
-   "name": "Wexford",
-   "centroid": [
-    414.82,
-    1264.64
-   ],
-   "area_px": 18066,
-   "neighbors": [
-    9,
-    10,
-    12,
-    13
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "ireland",
-   "display_color": "#ffd8b1",
-   "city_position": [
-    430.584924772552,
-    1306.8861980381464
-   ]
-  },
-  {
-   "id": 15,
-   "key": "wessex",
-   "name": "Wessex",
-   "centroid": [
-    750.19,
-    1683.52
-   ],
-   "area_px": 49551,
-   "neighbors": [
-    7
-   ],
-   "tags": {
-    "terrain": "plains",
-    "resources": []
-   },
-   "starting_owner": "england",
+   "starting_owner": "yellow",
    "display_color": "#000075",
    "city_position": [
-    878.8100426338227,
-    1699.9066112774933
+    1751.0,
+    5861.0
    ]
   }
  ]
