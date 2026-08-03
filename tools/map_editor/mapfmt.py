@@ -57,7 +57,7 @@ VALID_INPUTS = ("polygon", "brush", "assign", "point")
 VALID_KINDS = ("mask", "identity", "class")
 VALID_REDUCE_MODES = ("majority", "any")
 VALID_POINT_COUPLINGS = ("province", "free")
-VALID_POINT_FIELD_TYPES = ("faction", "counts")
+VALID_POINT_FIELD_TYPES = ("faction", "counts", "tier")
 
 
 class PackageError(Exception):
@@ -163,12 +163,17 @@ class LayerConfig:
                 "faction" entry (its own owner/faction). This is how
                 army starting positions work.
     point_fields    only meaningful when point_coupling == "free". Maps
-                payload field name -> {"type": "faction"|"counts", ...}.
-                "faction" means the value must be one of the package's
-                faction keys. "counts" means the value is a dict of
-                small-integer fields, e.g. {"keys": [...], "min": 0}.
-                Nothing here knows the word "army" - a "naval_starts"
-                layer could reuse the exact same machinery.
+                payload field name -> {"type": "faction"|"counts"|"tier",
+                ...}. "faction" means the value must be one of the
+                package's faction keys. "counts" means the value is a
+                dict of small-integer fields, e.g. {"keys": [...], "min":
+                0}. "tier" means the value is a small integer in
+                [min, max] (default 1..5). A city's tier sets its
+                growth speed; growth.py finds it by field type, not
+                by name.
+                Nothing here knows the word "army" or "city" - a
+                "naval_starts" layer could reuse the exact same
+                machinery.
 
     `input` is about the editing gesture, `kind` about the meaning.
 
@@ -304,6 +309,14 @@ def parse_layer_config(data: dict, name_hint: str = "") -> LayerConfig:
                         f"layer '{name}' point_fields.{field_name} is type=counts "
                         "but declares no 'keys'"
                     )
+                if field_type == "tier":
+                    lo = field_cfg.get("min", 1)
+                    hi = field_cfg.get("max", 5)
+                    if not isinstance(lo, int) or not isinstance(hi, int) or lo > hi:
+                        raise PackageError(
+                            f"layer '{name}' point_fields.{field_name} is type=tier "
+                            f"but has a nonsensical min/max ({lo}..{hi})"
+                        )
     elif point_fields:
         raise PackageError(f"layer '{name}' has point_fields but input != 'point'")
 
@@ -425,11 +438,29 @@ def load_package(root: Path) -> Package:
             raise PackageError(
                 f"city_layer '{city_layer}' isn't one of the declared layers"
             )
-        if layers[city_layer].input != "point" or layers[city_layer].kind != "identity":
+        cfg = layers[city_layer]
+        if cfg.input != "point":
             raise PackageError(
-                f"city_layer '{city_layer}' must be input=point, kind=identity, "
-                f"got input={layers[city_layer].input}, kind={layers[city_layer].kind}"
+                f"city_layer '{city_layer}' must be input=point, got input={cfg.input}"
             )
+        if cfg.point_coupling == "province":
+            if cfg.kind != "identity":
+                raise PackageError(
+                    f"city_layer '{city_layer}' has point_coupling=province, so it "
+                    f"must be kind=identity, got kind={cfg.kind}"
+                )
+        else:  # free - cities seed province growth (see growth.py)
+            if cfg.kind != "class":
+                raise PackageError(
+                    f"city_layer '{city_layer}' has point_coupling=free, so it "
+                    f"must be kind=class, got kind={cfg.kind}"
+                )
+            if not any(fc.get("type") == "tier" for fc in cfg.point_fields.values()):
+                raise PackageError(
+                    f"city_layer '{city_layer}' has point_coupling=free, so it "
+                    "needs a point_fields entry of type='tier' to drive province "
+                    "growth speed"
+                )
 
     _check_mask_references(layers, manifest["layers"])
     return Package(root=root, manifest=manifest, layers=layers, factions=factions)

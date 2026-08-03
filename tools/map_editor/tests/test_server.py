@@ -10,6 +10,7 @@ import json
 import threading
 from http.server import ThreadingHTTPServer
 
+import export
 import init_package
 import mapfmt
 import numpy as np
@@ -156,7 +157,7 @@ def test_revectorize_keeps_an_enclave_as_its_own_ring(package):
     raster[8:32, 10:50] = mapfmt.id_to_color(2)
     raster[14:24, 20:30] = mapfmt.id_to_color(1)
 
-    features = server.revectorize(raster, package.layers["provinces"], {})
+    features = export.revectorize(raster, package.layers["provinces"], {})
     by_id = {f["id"]: f for f in features}
 
     assert set(by_id) == {1, 2}
@@ -179,7 +180,7 @@ def test_revectorize_handles_a_mask_layer_keyed_by_legend_entry(package):
         "layers": {"terrain": {"features": [{"key": key, "note": "prior"}]}}
     }
 
-    features = server.revectorize(raster, cfg, prior_project)
+    features = export.revectorize(raster, cfg, prior_project)
     by_key = {f["key"]: f for f in features}
 
     assert key in by_key

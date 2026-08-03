@@ -31,8 +31,8 @@ from io import BytesIO
 from pathlib import Path
 
 import coastline as coast
-import cv2
 import export
+import growth
 import init_package
 import mapfmt
 import numpy as np
@@ -42,9 +42,6 @@ from PIL import Image
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DEV_DIR_DEFAULT = Path(__file__).resolve().parent / "dev_map_data"
-
-REVECTORIZE_MIN_AREA = 12  # px^2, drops single-pixel noise contours
-REVECTORIZE_EPSILON = 1.0  # px, cv2.approxPolyDP tolerance
 
 
 class ApiError(Exception):
@@ -64,6 +61,7 @@ def manifest_payload(package: mapfmt.Package) -> dict:
         "size": list(package.size),
         "layer_order": package.layer_order,
         "province_layer": package.manifest["province_layer"],
+        "city_layer": package.manifest.get("city_layer"),
         "factions": package.factions,
         "layers": {
             name: {
@@ -115,65 +113,6 @@ def quantize_to_legend(raster: np.ndarray, cfg: mapfmt.LayerConfig) -> np.ndarra
     distances = ((flat[:, None, :] - palette[None, :, :]) ** 2).sum(axis=2)
     nearest = distances.argmin(axis=1)
     return palette[nearest].astype(np.uint8).reshape(raster.shape)
-
-
-def revectorize(
-    raster: np.ndarray, cfg: mapfmt.LayerConfig, project: dict
-) -> list[dict]:
-    """Turn a layer raster back into editable polygons.
-
-    RETR_CCOMP, not RETR_EXTERNAL, so an enclave stays an enclave rather
-    than vanishing into whatever surrounds it.
-    """
-    if cfg.kind == "identity":
-        ids = export.id_buffer(raster)
-        existing = {
-            int(f["id"]): f
-            for f in mapfmt.project_features(project, cfg.name)
-            if "id" in f
-        }
-        groups = [
-            (int(pid), ids == int(pid)) for pid in np.unique(ids) if int(pid) != 0
-        ]
-    else:
-        existing = {f.get("key"): f for f in mapfmt.project_features(project, cfg.name)}
-        groups = []
-        for hex_color, entry in cfg.legend.items():
-            if hex_color == cfg.nodata_color:
-                continue
-            rgb = np.array(mapfmt.hex_to_rgb(hex_color), dtype=np.uint8)
-            groups.append((entry["key"], np.all(raster == rgb, axis=-1)))
-
-    features = []
-    for identity, mask in groups:
-        contours, _ = cv2.findContours(
-            mask.astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
-        )
-        polygons = []
-        for contour in contours:
-            if cv2.contourArea(contour) < REVECTORIZE_MIN_AREA:
-                continue
-            simplified = cv2.approxPolyDP(contour, REVECTORIZE_EPSILON, True)
-            pts = [
-                [round(float(p[0][0]), 1), round(float(p[0][1]), 1)] for p in simplified
-            ]
-            if len(pts) >= 3:
-                polygons.append(pts)
-        if not polygons:
-            continue
-
-        prior = existing.get(identity, {})
-        feature = dict(prior)
-        feature["polygons"] = polygons
-        if cfg.kind == "identity":
-            feature["id"] = identity
-            feature.setdefault("name", f"Province {identity}")
-            feature.setdefault("key", mapfmt.slugify(feature["name"]))
-        else:
-            feature["key"] = identity
-        features.append(feature)
-
-    return features
 
 
 def fill_gaps(project: dict, package: mapfmt.Package, layer_name: str) -> dict:
@@ -232,7 +171,7 @@ def fill_gaps(project: dict, package: mapfmt.Package, layer_name: str) -> dict:
         residual = int((np.all(raster == nodata, axis=-1) & within).sum())
 
     return {
-        "features": revectorize(raster, cfg, project),
+        "features": export.revectorize(raster, cfg, project),
         "changed_px": changed,
         "residual_px": residual,
         "max_gap_px": (cfg.gapfill or {}).get("max_gap_px"),
@@ -260,7 +199,7 @@ def clean_shapes(project: dict, package: mapfmt.Package, layer_name: str) -> dic
 
     size = package.size
     before = export.rasterize_polygon_layer(project, cfg, size)
-    features = revectorize(before, cfg, project)
+    features = export.revectorize(before, cfg, project)
     after_project = {"layers": {layer_name: {"features": features}}}
     after = export.rasterize_polygon_layer(after_project, cfg, size)
     changed = int(np.any(before != after, axis=-1).sum())
@@ -518,10 +457,31 @@ def make_handler(package_dir: Path):
                     result = export.export_package(project, package)
                     self._send_json({"ok": True, **result})
 
+                elif path == "/api/grow/start":
+                    package, project = load()
+                    payload = self._json_body()
+                    project = payload.get("project") or project
+                    result = growth.start(package, project)
+                    mapfmt.save_project(package_dir, project)
+                    self._send_json({"ok": True, **result})
+
+                elif path == "/api/grow/step":
+                    package, project = load()
+                    payload = self._json_body()
+                    project = payload.get("project") or project
+                    result = growth.step(package, project)
+                    mapfmt.save_project(package_dir, project)
+                    self._send_json({"ok": True, **result})
+
                 else:
                     self.send_error(404, "Not found")
 
-            except (ApiError, export.ExportBlocked, mapfmt.PackageError) as exc:
+            except (
+                ApiError,
+                export.ExportBlocked,
+                mapfmt.PackageError,
+                growth.GrowthError,
+            ) as exc:
                 self._send_json({"ok": False, "error": str(exc)}, 400)
             except (ValueError, OSError) as exc:
                 self._send_json({"ok": False, "error": str(exc)}, 500)

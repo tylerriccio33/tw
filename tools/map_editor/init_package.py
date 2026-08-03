@@ -51,6 +51,14 @@ TERRAIN_LEGEND = {
     "#c9b688": {"key": "desert", "name": "Desert", "move_cost": 1.4},
 }
 
+CITY_TIER_LEGEND = {
+    "#c7d9f0": {"key": "1", "name": "Tier 1"},
+    "#8fb3e0": {"key": "2", "name": "Tier 2"},
+    "#5c8dcf": {"key": "3", "name": "Tier 3"},
+    "#2f5fa8": {"key": "4", "name": "Tier 4"},
+    "#123b73": {"key": "5", "name": "Tier 5"},
+}
+
 RESOURCE_LEGEND = {
     "#9aa0a6": {"key": "iron", "name": "Iron"},
     "#d4af37": {"key": "gold", "name": "Gold"},
@@ -184,10 +192,14 @@ def layer_configs() -> dict[str, dict]:
             "name": "cities",
             "title": "Cities",
             "input": "point",
-            "kind": "identity",
+            "kind": "class",
             "raster": "cities.png",
             "nodata_color": "#000000",
             "snap_source": False,
+            "clip_to": "coastline:land",
+            "point_coupling": "free",
+            "point_fields": {"tier": {"type": "tier", "min": 1, "max": 5}},
+            "legend": CITY_TIER_LEGEND,
         },
     }
 
@@ -243,24 +255,26 @@ def rasterize_land_features(features: list[dict], shape: tuple[int, int]) -> np.
     return np.array(image) > 0
 
 
-def seed_provinces(
-    land_mask: np.ndarray, count: int
-) -> tuple[list[dict], dict[str, list[float]]]:
+DEFAULT_CITY_TIER = 3
+
+
+def seed_provinces(land_mask: np.ndarray, count: int) -> tuple[list[dict], list[dict]]:
     """Chop the landmass into `count` placeholder provinces.
 
-    Purely a bootstrap, so the game has something to run on before anyone
-    traces a real border. Farthest-point sampling spreads seeds over the
-    land, then every land pixel joins its nearest seed. The result is
-    contiguous, entirely on land, and fully connected, which is all the
-    pipeline needs. The borders mean nothing; retrace them.
+    Purely a bootstrap, so the game runs before anyone places real
+    cities and grows real provinces from them. Farthest-point sampling
+    spreads seeds over the land, then every land pixel joins its
+    nearest seed. The result is contiguous, on land, and connected -
+    all the pipeline needs. The borders mean nothing; open the editor
+    and grow real ones from real cities.
 
-    Also hands back a capital point per province. The seed pixel already
-    sits inside its own region, so it doubles as a free placeholder
-    centroid.
+    Also hands back a free city point per province, at the same seed
+    pixel and a default tier. It's a starting point for growth, not a
+    claim about the final map.
     """
     ys, xs = np.nonzero(land_mask)
     if len(ys) == 0 or count < 1:
-        return [], {}
+        return [], []
 
     # Farthest-point sampling: start at the land centroid's nearest pixel,
     # then repeatedly take the land pixel furthest from every seed so far.
@@ -285,7 +299,7 @@ def seed_provinces(
     label_of_seed = {int(labels[sy, sx]): i for i, (sx, sy) in enumerate(seeds)}
 
     features = []
-    city_points: dict[str, list[float]] = {}
+    city_points: list[dict] = []
     for label, index in sorted(label_of_seed.items(), key=lambda kv: kv[1]):
         mask = ((labels == label) & land_mask).astype(np.uint8)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -316,7 +330,7 @@ def seed_provinces(
             }
         )
         sx, sy = seeds[index]
-        city_points[str(province_id)] = [float(sx), float(sy)]
+        city_points.append({"x": float(sx), "y": float(sy), "tier": DEFAULT_CITY_TIER})
     return features, city_points
 
 
@@ -390,7 +404,11 @@ def init_package(
                     for i, p in enumerate(provinces)
                 }
             },
-            "cities": {"points": city_points},
+            "cities": {
+                "points": {
+                    f"p{i + 1}": payload for i, payload in enumerate(city_points)
+                }
+            },
         },
     }
     (package_dir / mapfmt.PROJECT_NAME).write_text(json.dumps(project, indent=1) + "\n")

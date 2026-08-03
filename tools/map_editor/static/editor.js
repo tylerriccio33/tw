@@ -86,9 +86,24 @@ function defaultPointPayload(cfg) {
       payload[fieldName] = state.manifest.factions?.[0]?.key ?? null;
     } else if (fieldCfg.type === "counts") {
       payload[fieldName] = Object.fromEntries((fieldCfg.keys || []).map((k) => [k, 0]));
+    } else if (fieldCfg.type === "tier") {
+      payload[fieldName] = fieldCfg.min ?? 1;
     }
   }
   return payload;
+}
+
+// Whichever payload field colors a free-point layer's dots: "faction" if
+// it has one (army starts), otherwise "tier" (cities). Mirrors
+// export.py's _color_field_name.
+function colorFieldName(cfg) {
+  for (const wanted of ["faction", "tier"]) {
+    const found = Object.entries(cfg.point_fields || {}).find(
+      ([, fc]) => fc.type === wanted
+    );
+    if (found) return found[0];
+  }
+  return null;
 }
 
 function legendEntries(cfg) {
@@ -353,6 +368,7 @@ function renderTools() {
     if (cfg.kind === "mask") addButton("Autotrace from backdrop", runAutotrace);
     if (cfg.gapfill || cfg.clip_to) addButton("Fill Gaps", runFillGaps);
     addButton("Fix Crossings & Overlaps", runCleanShapes);
+    if (state.activeLayer === state.manifest.province_layer) renderGrowPanel();
   } else if (cfg.input === "brush") {
     addButton("Brush", () => setTool("brush"), state.tool === "brush");
     addButton("Bucket", () => setTool("bucket"), state.tool === "bucket");
@@ -403,6 +419,43 @@ function renderTools() {
       !Object.keys(assignments(state.activeLayer)).length
     );
   }
+}
+
+function renderGrowPanel() {
+  const cityLayerName = state.manifest.city_layer;
+  const cityCfg = cityLayerName ? layerCfg(cityLayerName) : null;
+  if (!cityCfg || cityCfg.point_coupling !== "free") return; // nothing to grow from
+
+  const wrap = document.createElement("div");
+  wrap.className = "grow-panel";
+
+  const heading = document.createElement("div");
+  heading.className = "section-label";
+  heading.textContent = "Grow from cities";
+  wrap.appendChild(heading);
+
+  const growth = state.project.layers[state.manifest.province_layer]?.growth;
+  const info = document.createElement("div");
+  info.className = "hint";
+  info.textContent = growth?.seed_of
+    ? `Step ${growth.step ?? 0} - ${Object.keys(growth.seed_of).length} city(ies) seeded.`
+    : "Not started - place tiered cities, then Start Over to seed provinces.";
+  wrap.appendChild(info);
+
+  const row = document.createElement("div");
+  row.className = "grow-buttons";
+  const startBtn = document.createElement("button");
+  startBtn.textContent = "Start Over";
+  startBtn.onclick = runGrowStart;
+  const stepBtn = document.createElement("button");
+  stepBtn.textContent = "Step";
+  stepBtn.className = "primary";
+  stepBtn.disabled = !growth?.seed_of;
+  stepBtn.onclick = runGrowStep;
+  row.append(startBtn, stepBtn);
+  wrap.appendChild(row);
+
+  el.tools.appendChild(wrap);
 }
 
 function setTool(tool) {
@@ -507,11 +560,9 @@ function renderFreePointList(cfg) {
     const row = document.createElement("div");
     const isActive = String(pointId) === String(state.selected[name]);
     row.className = "feature-row" + (isActive ? " active" : "");
-    const ownerField = Object.entries(cfg.point_fields || {}).find(
-      ([, fc]) => fc.type === "faction"
-    )?.[0];
-    const owner = ownerField ? payload[ownerField] : null;
-    row.textContent = `${pointId}${owner ? " - " + owner : ""}`;
+    const colorField = colorFieldName(cfg);
+    const label = colorField ? payload[colorField] : null;
+    row.textContent = `${pointId}${label !== null && label !== undefined ? " - " + label : ""}`;
     row.onclick = () => {
       state.selected[name] = pointId;
       renderFeatureList();
@@ -564,6 +615,26 @@ function freePointForm(cfg, pointId, payload) {
         label.appendChild(input);
         form.appendChild(label);
       }
+    } else if (fieldCfg.type === "tier") {
+      const label = document.createElement("label");
+      label.textContent = fieldName;
+      const select = document.createElement("select");
+      const lo = fieldCfg.min ?? 1;
+      const hi = fieldCfg.max ?? 5;
+      for (let t = lo; t <= hi; t++) {
+        const option = document.createElement("option");
+        option.value = String(t);
+        option.textContent = `Tier ${t}`;
+        if (payload[fieldName] === t) option.selected = true;
+        select.appendChild(option);
+      }
+      select.onchange = () => {
+        payload[fieldName] = Number(select.value);
+        scheduleAutosave();
+        render();
+      };
+      label.appendChild(select);
+      form.appendChild(label);
     }
   }
 
@@ -1030,11 +1101,17 @@ function renderPointsOverlay(svg) {
       }
       dot.setAttribute("class", cls);
       if (isFree) {
-        const ownerField = Object.entries(cfg.point_fields || {}).find(
-          ([, fc]) => fc.type === "faction"
-        )?.[0];
-        const owner = ownerField ? value[ownerField] : null;
-        if (owner) dot.setAttribute("fill", colorForKey(cfg, owner));
+        const colorField = colorFieldName(cfg);
+        const colorValue = colorField ? value[colorField] : null;
+        if (colorValue !== null && colorValue !== undefined) {
+          dot.setAttribute("fill", colorForKey(cfg, String(colorValue)));
+        }
+        if (cfg.point_fields?.[colorField]?.type === "tier") {
+          // Bigger dot for a bigger city - the same speed that drives
+          // growth reads at a glance on the map. The stylesheet's `.vertex
+          // { r: 4 }` outranks a plain r="" attribute, so set it inline.
+          dot.style.r = `${4 + Number(colorValue || 1)}px`;
+        }
         if (name === state.activeLayer) {
           dot.onpointerdown = (e) => beginFreePointDrag(e, name, pid, value);
         }
@@ -1494,6 +1571,56 @@ async function runCleanShapes() {
         "Later-drawn provinces kept the contested land - reorder or " +
         "retrace if that's not who should own it."
       : "No crossings or overlaps to fix."
+  );
+}
+
+async function runGrowStart() {
+  showConfirm(
+    "Reset this layer's provinces and reseed them from the current city points?",
+    async () => {
+      setStatus("Seeding provinces from cities...");
+      await flushRasters();
+      const response = await fetch("/api/grow/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: state.project }),
+      });
+      const result = await response.json();
+      if (!result.ok) return setStatus(result.error, true);
+
+      const province = state.manifest.province_layer;
+      state.project.layers[province].features = result.features;
+      state.project.layers[province].growth = result.growth;
+      state.snapIndex = null;
+      renderSidebar();
+      render();
+      setStatus(`Seeded ${result.province_count} province(s) from cities. Step 0.`);
+    }
+  );
+}
+
+async function runGrowStep() {
+  setStatus("Growing provinces...");
+  await flushRasters();
+  const response = await fetch("/api/grow/step", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project: state.project }),
+  });
+  const result = await response.json();
+  if (!result.ok) return setStatus(result.error, true);
+
+  const province = state.manifest.province_layer;
+  state.project.layers[province].features = result.features;
+  state.project.layers[province].growth = result.growth;
+  state.snapIndex = null;
+  renderSidebar();
+  render();
+  setStatus(
+    result.done
+      ? `Step ${result.step}: nothing left to grow - every city is done.`
+      : `Step ${result.step}: grew ${result.changed_px}px, ` +
+        `${result.growing_cities.length} city(ies) still expanding.`
   );
 }
 

@@ -165,10 +165,17 @@ def rasterize_assign_layer(
 POINT_RADIUS_PX = 4
 
 
-def _owner_field_name(cfg: mapfmt.LayerConfig) -> str | None:
-    for field_name, field_cfg in cfg.point_fields.items():
-        if field_cfg.get("type") == "faction":
-            return field_name
+def _color_field_name(cfg: mapfmt.LayerConfig) -> str | None:
+    """Whichever payload field colors this free-point layer's dots.
+
+    The "faction" field wins if there is one (army starts, colored by
+    owner). Otherwise the "tier" field (cities, colored by growth speed).
+    """
+    fields = cfg.point_fields
+    for wanted in ("faction", "tier"):
+        for field_name, field_cfg in fields.items():
+            if field_cfg.get("type") == wanted:
+                return field_name
     return None
 
 
@@ -184,21 +191,24 @@ def rasterize_point_layer(
     color fills the dot directly. There is no legend to look up -
     the color comes straight from the province id.
 
-    point_coupling == "free" (army starts, ...): the layer's legend
-    supplies the color, keyed by the point's "faction" payload field.
-    A brush/class layer colors a key the same way.
+    point_coupling == "free" (army starts, cities, ...): the layer's
+    legend supplies the color. It's keyed by the point's "faction" or
+    "tier" field (see _color_field_name). A brush/class layer colors
+    a key the same way.
     """
     canvas = _blank(size, cfg.nodata_rgb)
     image = Image.fromarray(canvas)
     draw = ImageDraw.Draw(image)
 
     if cfg.point_coupling == "free":
-        owner_field = _owner_field_name(cfg)
+        color_field = _color_field_name(cfg)
         for payload in mapfmt.project_points(project, cfg.name).values():
             x, y = payload["x"], payload["y"]
-            owner = payload.get(owner_field) if owner_field else None
+            value = payload.get(color_field) if color_field else None
             rgb = (
-                mapfmt.hex_to_rgb(cfg.color_for_key(owner)) if owner else cfg.nodata_rgb
+                mapfmt.hex_to_rgb(cfg.color_for_key(str(value)))
+                if value is not None
+                else cfg.nodata_rgb
             )
             draw.ellipse(
                 [
@@ -247,6 +257,82 @@ def id_buffer(raster: np.ndarray) -> np.ndarray:
     g = raster[:, :, 1].astype(np.int32)
     b = raster[:, :, 2].astype(np.int32)
     return (r << 16) | (g << 8) | b
+
+
+def id_raster(id_buf: np.ndarray) -> np.ndarray:
+    """(H, W) int32 of province ids -> rgb24 raster. Inverse of id_buffer,
+    used by growth.py to turn a grown claim buffer back into a raster it
+    can revectorize."""
+    ids = id_buf.astype(np.int64)
+    r = ((ids >> 16) & 0xFF).astype(np.uint8)
+    g = ((ids >> 8) & 0xFF).astype(np.uint8)
+    b = (ids & 0xFF).astype(np.uint8)
+    return np.dstack([r, g, b])
+
+
+REVECTORIZE_MIN_AREA = 12  # px^2, drops single-pixel noise contours
+REVECTORIZE_EPSILON = 1.0  # px, cv2.approxPolyDP tolerance
+
+
+def revectorize(
+    raster: np.ndarray, cfg: mapfmt.LayerConfig, project: dict
+) -> list[dict]:
+    """Turn a layer raster back into editable polygons.
+
+    RETR_CCOMP, not RETR_EXTERNAL, so an enclave stays an enclave rather
+    than vanishing into whatever surrounds it. Shared by Fill Gaps, Clean
+    Shapes, and growth.py's per-step commit - all three go raster in,
+    editable polygons out.
+    """
+    if cfg.kind == "identity":
+        ids = id_buffer(raster)
+        existing = {
+            int(f["id"]): f
+            for f in mapfmt.project_features(project, cfg.name)
+            if "id" in f
+        }
+        groups = [
+            (int(pid), ids == int(pid)) for pid in np.unique(ids) if int(pid) != 0
+        ]
+    else:
+        existing = {f.get("key"): f for f in mapfmt.project_features(project, cfg.name)}
+        groups = []
+        for hex_color, entry in cfg.legend.items():
+            if hex_color == cfg.nodata_color:
+                continue
+            rgb = np.array(mapfmt.hex_to_rgb(hex_color), dtype=np.uint8)
+            groups.append((entry["key"], np.all(raster == rgb, axis=-1)))
+
+    features = []
+    for identity, mask in groups:
+        contours, _ = cv2.findContours(
+            mask.astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
+        )
+        polygons = []
+        for contour in contours:
+            if cv2.contourArea(contour) < REVECTORIZE_MIN_AREA:
+                continue
+            simplified = cv2.approxPolyDP(contour, REVECTORIZE_EPSILON, True)
+            pts = [
+                [round(float(p[0][0]), 1), round(float(p[0][1]), 1)] for p in simplified
+            ]
+            if len(pts) >= 3:
+                polygons.append(pts)
+        if not polygons:
+            continue
+
+        prior = existing.get(identity, {})
+        feature = dict(prior)
+        feature["polygons"] = polygons
+        if cfg.kind == "identity":
+            feature["id"] = identity
+            feature.setdefault("name", f"Province {identity}")
+            feature.setdefault("key", mapfmt.slugify(feature["name"]))
+        else:
+            feature["key"] = identity
+        features.append(feature)
+
+    return features
 
 
 def key_buffer(
@@ -527,7 +613,7 @@ def _validate_points(project: dict, package: mapfmt.Package) -> list[str]:
     return problems
 
 
-def _mask_bool(package: mapfmt.Package, project: dict, ref: str) -> np.ndarray:
+def mask_bool(package: mapfmt.Package, project: dict, ref: str) -> np.ndarray:
     """Rasterize just the one layer a mask reference names, and return the
     boolean coverage for its key. Used by free-point validation, which
     runs before the main export loop has any rasters to reuse."""
@@ -553,7 +639,15 @@ def _validate_free_points(project: dict, package: mapfmt.Package) -> list[str]:
             continue
         points = mapfmt.project_points(project, name)
 
-        mask = _mask_bool(package, project, cfg.clip_to) if cfg.clip_to else None
+        mask = None
+        if cfg.clip_to:
+            try:
+                mask = mask_bool(package, project, cfg.clip_to)
+            except mapfmt.PackageError:
+                # The referenced layer is itself broken (e.g. a feature
+                # names a key outside its legend) - _validate_keys already
+                # reports that. Nothing useful to check on-mask here.
+                mask = None
 
         for point_id, payload in points.items():
             if (
@@ -616,6 +710,24 @@ def _validate_free_points(project: dict, package: mapfmt.Package) -> list[str]:
                             f"{name} point '{point_id}' {field_name} has "
                             f"unknown key(s) {sorted(extra)}, expected one of "
                             f"{keys}"
+                        )
+                elif field_cfg["type"] == "tier":
+                    lo = field_cfg.get("min", 1)
+                    hi = field_cfg.get("max", 5)
+                    if (
+                        not isinstance(value, int)
+                        or isinstance(value, bool)
+                        or not (lo <= value <= hi)
+                    ):
+                        problems.append(
+                            f"{name} point '{point_id}' has {field_name}="
+                            f"{value!r}, expected an integer in {lo}..{hi}"
+                        )
+                    elif str(value) not in cfg.keys:
+                        problems.append(
+                            f"{name} point '{point_id}' has {field_name}="
+                            f"{value!r}, which has no legend color in '{name}' - "
+                            "add one so the layer can be rasterized"
                         )
 
     return problems
@@ -840,6 +952,17 @@ def build_province_table(
 
     city_layer = package.city_layer
     city_points = mapfmt.project_points(project, city_layer.name) if city_layer else {}
+    # A grown province's city isn't keyed by province id the way a
+    # click-a-province point is - growth.py records which city seeded
+    # which province id instead.
+    seed_of: dict[str, str] = {}
+    if city_layer is not None and city_layer.point_coupling == "free":
+        seed_of = (
+            project.get("layers", {})
+            .get(cfg.name, {})
+            .get("growth", {})
+            .get("seed_of", {})
+        )
 
     table: list[dict] = []
     geo: list[dict] = []
@@ -864,7 +987,12 @@ def build_province_table(
             row[tag_name] = by_id.get(pid)
         if feature.get("color"):
             row["display_color"] = feature["color"]
-        if city_layer is not None and str(pid) in city_points:
+        if city_layer is not None and city_layer.point_coupling == "free":
+            city_id = seed_of.get(str(pid))
+            payload = city_points.get(city_id) if city_id else None
+            if payload:
+                row["city_position"] = [payload["x"], payload["y"]]
+        elif city_layer is not None and str(pid) in city_points:
             row["city_position"] = list(city_points[str(pid)])
 
         table.append(row)

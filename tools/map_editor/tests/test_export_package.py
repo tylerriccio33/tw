@@ -331,37 +331,57 @@ def test_a_blocked_export_writes_nothing(package):
 # ---------------------------------------------------------------------------
 # point-input city layer
 #
-# init_package's default layer set now includes "cities", so the plain
-# `package` fixture already has a city_layer wired up in its manifest.
+# init_package's default layer set now includes "cities", a
+# point_coupling=free layer whose "tier" field drives province growth
+# (see growth.py, test_growth.py). It isn't coupled to a province at all,
+# so export needs no province for a city point to be valid.
 # ---------------------------------------------------------------------------
 
 
-def test_city_layer_rasterizes_a_dot_in_province_color(package):
+def test_city_layer_rasterizes_a_dot_colored_by_tier(package):
     project = project_with(package, provinces=two_provinces())
-    project["layers"]["cities"]["points"] = {"1": [20, 20], "2": [40, 20]}
+    project["layers"]["cities"]["points"] = {
+        "p1": {"x": 20, "y": 20, "tier": 1},
+        "p2": {"x": 40, "y": 20, "tier": 5},
+    }
 
     run_export(package, project)
 
     with Image.open(package.raster_path("cities")) as im:
         raster = np.array(im.convert("RGB"))
 
-    assert tuple(raster[20, 20]) == mapfmt.id_to_color(1)
-    assert tuple(raster[20, 40]) == mapfmt.id_to_color(2)
+    tier_cfg = package.layers["cities"]
+    assert tuple(raster[20, 20]) == mapfmt.hex_to_rgb(tier_cfg.color_for_key("1"))
+    assert tuple(raster[20, 40]) == mapfmt.hex_to_rgb(tier_cfg.color_for_key("5"))
     assert tuple(raster[0, 0]) == (0, 0, 0)
 
 
-def test_city_layer_missing_point_blocks_export(package):
+def test_city_layer_bad_tier_blocks_export(package):
     project = project_with(package, provinces=two_provinces())
-    project["layers"]["cities"]["points"] = {"1": [20, 20]}  # province 2 missing
+    project["layers"]["cities"]["points"] = {"p1": {"x": 20, "y": 20, "tier": 9}}
 
-    with pytest.raises(export.ExportBlocked, match="no authored point"):
+    with pytest.raises(export.ExportBlocked, match="tier"):
         run_export(package, project)
 
 
-def test_province_table_gets_city_position(package):
-    project = project_with(package, provinces=two_provinces())
-    project["layers"]["cities"]["points"] = {"1": [20, 20], "2": [40, 20]}
+def test_province_table_gets_city_position_from_growth_seed(package):
+    """A city point isn't linked to any province without a growth run.
+    It's an independent seed, not one-per-province like a
+    click-a-province point. Once growth.start records which city
+    seeded which province, export's table carries that position
+    through."""
+    import growth
 
+    project = project_with(package, provinces=[])
+    project["layers"]["coastline"]["features"] = [
+        {"key": "land", "polygons": [box(10, 8, 50, 32)]}
+    ]
+    project["layers"]["cities"]["points"] = {
+        "p1": {"x": 20, "y": 20, "tier": 1},
+        "p2": {"x": 40, "y": 20, "tier": 1},
+    }
+
+    growth.start(package, project)
     run_export(package, project)
 
     table = {row["id"]: row for row in mapfmt.read_province_table(package.root)}

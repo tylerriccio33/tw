@@ -11,7 +11,24 @@ import mapfmt
 import numpy as np
 import pytest
 from PIL import Image
-from tests.conftest import box, project_with
+from tests.conftest import box, make_package, project_with
+
+# A province-coupled point layer, for the tests below that exercise the
+# generic point_coupling=province machinery (_validate_points,
+# prune_orphan_points). The default "cities" layer is point_coupling=free
+# now that provinces grow from it - see growth.py and test_growth.py.
+CAPITALS_LAYER = {
+    "name": "capitals",
+    "title": "Capitals",
+    "input": "point",
+    "kind": "identity",
+    "raster": "capitals.png",
+    "nodata_color": "#000000",
+}
+
+
+def _package(tmp_path):
+    return make_package(tmp_path, extra_layers={"capitals": CAPITALS_LAYER})
 
 
 def two_provinces():
@@ -179,41 +196,46 @@ def test_a_province_with_no_drawable_area_is_skipped_without_crashing(package):
 # ---------------------------------------------------------------------------
 
 
-def test_a_point_keyed_by_a_non_integer_string_is_flagged(package):
+def test_a_point_keyed_by_a_non_integer_string_is_flagged(tmp_path):
+    package = _package(tmp_path)
     project = project_with(package, provinces=two_provinces())
-    project["layers"]["cities"]["points"] = {"not-an-id": [20, 20]}
+    project["layers"]["capitals"]["points"] = {"not-an-id": [20, 20]}
     problems = export._validate_points(project, package)
     assert any("not a province id" in p for p in problems)
 
 
-def test_a_point_for_a_nonexistent_province_is_silently_ignored(package):
+def test_a_point_for_a_nonexistent_province_is_silently_ignored(tmp_path):
     """Not flagged - prune_orphan_points drops these before validation."""
+    package = _package(tmp_path)
     project = project_with(package, provinces=two_provinces())
-    project["layers"]["cities"]["points"]["99"] = [20, 20]
+    project["layers"]["capitals"]["points"]["99"] = [20, 20]
     problems = export._validate_points(project, package)
     assert not any("which doesn't exist" in p for p in problems)
 
 
-def test_prune_orphan_points_drops_points_for_missing_provinces(package):
+def test_prune_orphan_points_drops_points_for_missing_provinces(tmp_path):
+    package = _package(tmp_path)
     project = project_with(package, provinces=two_provinces())
-    project["layers"]["cities"]["points"]["99"] = [20, 20]
-    project["layers"]["cities"]["points"]["1"] = [20, 20]
+    project["layers"]["capitals"]["points"]["99"] = [20, 20]
+    project["layers"]["capitals"]["points"]["1"] = [20, 20]
     dropped = export.prune_orphan_points(project, package)
     assert any("99" in d for d in dropped)
-    assert "99" not in project["layers"]["cities"]["points"]
-    assert "1" in project["layers"]["cities"]["points"]
+    assert "99" not in project["layers"]["capitals"]["points"]
+    assert "1" in project["layers"]["capitals"]["points"]
 
 
-def test_a_point_outside_the_map_bounds_is_flagged(package):
+def test_a_point_outside_the_map_bounds_is_flagged(tmp_path):
+    package = _package(tmp_path)
     project = project_with(package, provinces=two_provinces())
-    project["layers"]["cities"]["points"]["1"] = [9999, 9999]
+    project["layers"]["capitals"]["points"]["1"] = [9999, 9999]
     problems = export._validate_points(project, package)
     assert any("is outside the" in p for p in problems)
 
 
-def test_a_province_missing_its_point_is_flagged(package):
+def test_a_province_missing_its_point_is_flagged(tmp_path):
+    package = _package(tmp_path)
     project = project_with(package, provinces=two_provinces())
-    del project["layers"]["cities"]["points"]["1"]
+    del project["layers"]["capitals"]["points"]["1"]
     problems = export._validate_points(project, package)
     assert any("no authored point for province 1" in p for p in problems)
 

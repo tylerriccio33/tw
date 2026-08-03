@@ -16,14 +16,14 @@ def test_seed_provinces_with_zero_count_returns_nothing():
     land_mask = np.ones((20, 20), dtype=bool)
     features, points = init_package.seed_provinces(land_mask, 0)
     assert features == []
-    assert points == {}
+    assert points == []
 
 
 def test_seed_provinces_on_an_empty_land_mask_returns_nothing():
     land_mask = np.zeros((20, 20), dtype=bool)
     features, points = init_package.seed_provinces(land_mask, 5)
     assert features == []
-    assert points == {}
+    assert points == []
 
 
 def test_trace_land_features_on_a_blank_mask_returns_nothing():
