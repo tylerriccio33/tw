@@ -45,6 +45,34 @@ repos:
         files: ^tools/map_editor/.*\.py$
         pass_filenames: false
 
+      - id: eslint
+        name: eslint (map editor)
+        entry: bash -c 'cd tools/map_editor && npm install --no-audit --no-fund --silent && npx eslint --fix static'
+        language: system
+        files: ^tools/map_editor/static/.*\.js$
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier (map editor)
+        entry: bash -c 'cd tools/map_editor && npm install --no-audit --no-fund --silent && npx prettier --write static'
+        language: system
+        files: ^tools/map_editor/static/.*\.(js|css|html)$
+        pass_filenames: false
+
+      - id: stylelint
+        name: stylelint (map editor)
+        entry: bash -c 'cd tools/map_editor && npm install --no-audit --no-fund --silent && npx stylelint --fix "static/**/*.css"'
+        language: system
+        files: ^tools/map_editor/static/.*\.css$
+        pass_filenames: false
+
+      - id: tsc
+        name: tsc --noEmit (map editor, checkJs)
+        entry: bash -c 'cd tools/map_editor && npm install --no-audit --no-fund --silent && npx tsc --noEmit'
+        language: system
+        files: ^tools/map_editor/(static/.*\.(js|d\.ts)|tsconfig\.json)$
+        pass_filenames: false
+
       - id: gdformat
         name: gdformat
         entry: uvx --from "gdtoolkit==4.5.0" gdformat

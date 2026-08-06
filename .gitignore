@@ -25,6 +25,9 @@
 .ruff_cache
 .venv/
 
+# Node (map editor JS tooling)
+node_modules/
+
 # Rendered shots (scratch output of make play-shot / hud-shot / render-test).
 /shots/play/
 /shots/render_test/

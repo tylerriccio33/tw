@@ -98,9 +98,7 @@ function defaultPointPayload(cfg) {
 // Whichever payload field labels a free-point layer's dots with text
 // (cities' "name" field). Mirrors colorFieldName below.
 function nameFieldName(cfg) {
-  const found = Object.entries(cfg.point_fields || {}).find(
-    ([, fc]) => fc.type === "name"
-  );
+  const found = Object.entries(cfg.point_fields || {}).find(([, fc]) => fc.type === "name");
   return found ? found[0] : null;
 }
 
@@ -109,9 +107,7 @@ function nameFieldName(cfg) {
 // export.py's _color_field_name.
 function colorFieldName(cfg) {
   for (const wanted of ["faction", "tier"]) {
-    const found = Object.entries(cfg.point_fields || {}).find(
-      ([, fc]) => fc.type === wanted
-    );
+    const found = Object.entries(cfg.point_fields || {}).find(([, fc]) => fc.type === wanted);
     if (found) return found[0];
   }
   return null;
@@ -139,13 +135,32 @@ function darken(hex, amount = 0.45) {
 }
 
 function slugify(name) {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 const PALETTE = [
-  "#4363d8", "#f58231", "#911eb4", "#46f0f0", "#bfef45", "#fabed4",
-  "#469990", "#dcbeff", "#9a6324", "#808000", "#ffd8b1", "#000075",
-  "#c65102", "#c50202", "#c5ab02", "#3cb44b", "#e6194b", "#42d4f4",
+  "#4363d8",
+  "#f58231",
+  "#911eb4",
+  "#46f0f0",
+  "#bfef45",
+  "#fabed4",
+  "#469990",
+  "#dcbeff",
+  "#9a6324",
+  "#808000",
+  "#ffd8b1",
+  "#000075",
+  "#c65102",
+  "#c50202",
+  "#c5ab02",
+  "#3cb44b",
+  "#e6194b",
+  "#42d4f4",
 ];
 
 // Native prompt/confirm read as "the button did nothing" when this is
@@ -164,18 +179,21 @@ function showModal(title, inputValue, onOk) {
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  /** @type {HTMLInputElement | null} */
   const input = overlay.querySelector(".modal-input");
+  const cancelBtn = /** @type {HTMLElement} */ (overlay.querySelector(".cancel"));
+  const okBtn = /** @type {HTMLElement} */ (overlay.querySelector(".ok"));
   if (input) {
     input.value = inputValue;
     input.focus();
     input.select();
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") overlay.querySelector(".ok").click();
-      if (e.key === "Escape") overlay.querySelector(".cancel").click();
+      if (e.key === "Enter") okBtn.click();
+      if (e.key === "Escape") cancelBtn.click();
     });
   }
-  overlay.querySelector(".cancel").onclick = () => overlay.remove();
-  overlay.querySelector(".ok").onclick = () => {
+  cancelBtn.onclick = () => overlay.remove();
+  okBtn.onclick = () => {
     overlay.remove();
     onOk(input ? input.value : true);
   };
@@ -215,9 +233,10 @@ async function boot() {
     state.visible[name] = true;
     const cfg = layerCfg(name);
     if (cfg.input === "brush") await mountBrushCanvas(name);
-    state.selected[name] = cfg.input === "polygon" && cfg.kind === "identity"
-      ? -1
-      : cfg.default_key || (legendEntries(cfg)[0] || {}).key || null;
+    state.selected[name] =
+      cfg.input === "polygon" && cfg.kind === "identity"
+        ? -1
+        : cfg.default_key || (legendEntries(cfg)[0] || {}).key || null;
   }
 
   setActiveLayer(state.project.active_layer || state.manifest.layer_order[0]);
@@ -369,12 +388,12 @@ function renderTools() {
         renderTools();
         render();
       },
-      state.editMode
+      state.editMode,
     );
     addButton(
       state.tool === "trace" ? "Trace: On (T)" : "Trace (T)",
       toggleTrace,
-      state.tool === "trace"
+      state.tool === "trace",
     );
     if (cfg.kind === "mask") addButton("Autotrace from backdrop", runAutotrace);
     if (cfg.gapfill || cfg.clip_to) addButton("Fill Gaps", runFillGaps);
@@ -391,9 +410,9 @@ function renderTools() {
     label.textContent = `Size ${state.brushSize}px`;
     const slider = document.createElement("input");
     slider.type = "range";
-    slider.min = 2;
-    slider.max = 120;
-    slider.value = state.brushSize;
+    slider.min = "2";
+    slider.max = "120";
+    slider.value = String(state.brushSize);
     slider.oninput = () => {
       state.brushSize = Number(slider.value);
       label.textContent = `Size ${state.brushSize}px`;
@@ -427,7 +446,7 @@ function renderTools() {
         });
       },
       false,
-      !Object.keys(assignments(state.activeLayer)).length
+      !Object.keys(assignments(state.activeLayer)).length,
     );
   }
 }
@@ -637,10 +656,7 @@ function freePointForm(cfg, pointId, payload) {
         input.min = fieldCfg.min ?? 0;
         input.value = payload[fieldName][countKey] ?? 0;
         input.oninput = () => {
-          payload[fieldName][countKey] = Math.max(
-            fieldCfg.min ?? 0,
-            Number(input.value) || 0
-          );
+          payload[fieldName][countKey] = Math.max(fieldCfg.min ?? 0, Number(input.value) || 0);
           scheduleAutosave();
         };
         label.appendChild(input);
@@ -763,7 +779,7 @@ function legendRow(cfg, entry) {
     const count = document.createElement("span");
     count.className = "shape-count";
     count.textContent = String(
-      Object.values(assignments(state.activeLayer)).filter((k) => k === entry.key).length
+      Object.values(assignments(state.activeLayer)).filter((k) => k === entry.key).length,
     );
     row.appendChild(count);
 
@@ -811,10 +827,12 @@ function removeOwner(key) {
     return;
   }
   const faction = factions.find((f) => f.key === key);
-  showConfirm(`Delete owner "${faction ? faction.name : key}"? Provinces assigned to ` +
-    "it start unowned.", async () => {
-    await saveFactions(factions.filter((f) => f.key !== key));
-  });
+  showConfirm(
+    `Delete owner "${faction ? faction.name : key}"? Provinces assigned to ` + "it start unowned.",
+    async () => {
+      await saveFactions(factions.filter((f) => f.key !== key));
+    },
+  );
 }
 
 async function saveFactions(factions) {
@@ -875,7 +893,7 @@ function newIdentityFeature() {
       id: nextId,
       key: slugify(name),
       name: name.trim(),
-      color: PALETTE[(list.length) % PALETTE.length],
+      color: PALETTE[list.length % PALETTE.length],
       polygons: [],
     });
     state.selected[state.activeLayer] = list.length - 1;
@@ -1027,10 +1045,10 @@ function renderHoverLabel(svg) {
   if (!cfg || cfg.input !== "point" || !state.hoverLabel) return;
   const [x, y] = state.hoverLabel.at;
   const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  text.setAttribute("x", x + 10 / state.zoom);
-  text.setAttribute("y", y - 10 / state.zoom);
+  text.setAttribute("x", String(x + 10 / state.zoom));
+  text.setAttribute("y", String(y - 10 / state.zoom));
   text.setAttribute("class", "hover-label");
-  text.setAttribute("font-size", 14 / state.zoom);
+  text.setAttribute("font-size", String(14 / state.zoom));
   text.textContent = state.hoverLabel.text;
   svg.appendChild(text);
 }
@@ -1054,7 +1072,7 @@ function renderPolygonLayer(svg, name, cfg) {
         "poly-fill" +
           (selected ? " selected" : "") +
           (isActive ? "" : " dim") +
-          (state.magnet[name] ? " magnet" : "")
+          (state.magnet[name] ? " magnet" : ""),
       );
       if (isAssignTarget(name)) {
         node.classList.add("clickable");
@@ -1153,8 +1171,8 @@ function renderPointsOverlay(svg) {
       const label = nameField ? value[nameField] : null;
       if (label) {
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.setAttribute("x", x);
-        text.setAttribute("y", y - 10);
+        text.setAttribute("x", String(x));
+        text.setAttribute("y", String(y - 10));
         text.setAttribute("class", "point-label");
         text.textContent = label;
         svg.appendChild(text);
@@ -1211,16 +1229,13 @@ function renderVertexHandles(svg) {
       // add detail to a border that's already roughly right.
       const next = polygon[(vertexIndex + 1) % polygon.length];
       const mid = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      mid.setAttribute("cx", (point[0] + next[0]) / 2);
-      mid.setAttribute("cy", (point[1] + next[1]) / 2);
+      mid.setAttribute("cx", String((point[0] + next[0]) / 2));
+      mid.setAttribute("cy", String((point[1] + next[1]) / 2));
       mid.setAttribute("class", "vertex mid");
       mid.onpointerdown = (e) => {
         e.stopPropagation();
         e.preventDefault();
-        polygon.splice(vertexIndex + 1, 0, [
-          (point[0] + next[0]) / 2,
-          (point[1] + next[1]) / 2,
-        ]);
+        polygon.splice(vertexIndex + 1, 0, [(point[0] + next[0]) / 2, (point[1] + next[1]) / 2]);
         state.snapIndex = null;
         scheduleAutosave();
         render();
@@ -1351,13 +1366,10 @@ function onCanvasClick(event) {
     const at = svgPoint(event);
     const under = provinceAt(at[0], at[1]);
     const target = features(state.manifest.province_layer).find(
-      (f) => String(f.id) === String(pid)
+      (f) => String(f.id) === String(pid),
     );
     if (under && target && under.id !== target.id) {
-      setStatus(
-        `That spot is inside "${under.name}", not "${target.name}" - placed anyway`,
-        true
-      );
+      setStatus(`That spot is inside "${under.name}", not "${target.name}" - placed anyway`, true);
     } else {
       setStatus(`Placed in "${target ? target.name : pid}"`);
     }
@@ -1610,9 +1622,9 @@ async function runCleanShapes() {
   setStatus(
     result.changed_px
       ? `Redrew ${result.changed_px}px of overlapping or crossed borders. ` +
-        "Later-drawn provinces kept the contested land - reorder or " +
-        "retrace if that's not who should own it."
-      : "No crossings or overlaps to fix."
+          "Later-drawn provinces kept the contested land - reorder or " +
+          "retrace if that's not who should own it."
+      : "No crossings or overlaps to fix.",
   );
 }
 
@@ -1637,7 +1649,7 @@ async function runGrowStart() {
       renderSidebar();
       render();
       setStatus(`Seeded ${result.province_count} province(s) from cities. Step 0.`);
-    }
+    },
   );
 }
 
@@ -1662,7 +1674,7 @@ async function runGrowStep() {
     result.done
       ? `Step ${result.step}: nothing left to grow - every city is done.`
       : `Step ${result.step}: grew ${result.changed_px}px, ` +
-        `${result.growing_cities.length} city(ies) still expanding.`
+          `${result.growing_cities.length} city(ies) still expanding.`,
   );
 }
 
@@ -1700,7 +1712,7 @@ async function runExport() {
     render();
   }
   setStatus(
-    `Exported ${result.province_count} provinces. Run make promote-map to ship it.${dropped}`
+    `Exported ${result.province_count} provinces. Run make promote-map to ship it.${dropped}`,
   );
 }
 
@@ -1730,10 +1742,11 @@ function setZoom(zoom, anchor) {
 }
 
 const held = new Set();
+let panZoomLast = 0;
 function panZoomTick(now) {
-  if (!panZoomTick.last) panZoomTick.last = now;
-  const dt = Math.min(0.05, (now - panZoomTick.last) / 1000);
-  panZoomTick.last = now;
+  if (!panZoomLast) panZoomLast = now;
+  const dt = Math.min(0.05, (now - panZoomLast) / 1000);
+  panZoomLast = now;
 
   const step = PAN_SPEED * dt;
   if (held.has("a")) el.viewport.scrollLeft -= step;
@@ -1782,11 +1795,12 @@ function bindEvents() {
         y: event.clientY - rect.top,
       });
     },
-    { passive: false }
+    { passive: false },
   );
 
   window.addEventListener("keydown", (event) => {
-    if (event.target.tagName === "INPUT" || event.target.tagName === "BUTTON") return;
+    const target = /** @type {HTMLElement} */ (event.target);
+    if (target.tagName === "INPUT" || target.tagName === "BUTTON") return;
     const key = event.key.toLowerCase();
 
     if (key === "enter") return finishShape();

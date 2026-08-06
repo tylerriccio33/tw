@@ -1,0 +1,21 @@
+{
+  "name": "tw-map-editor",
+  "private": true,
+  "scripts": {
+    "lint": "eslint static",
+    "format": "prettier --check static",
+    "format:fix": "prettier --write static",
+    "typecheck": "tsc --noEmit",
+    "lint:css": "stylelint \"static/**/*.css\"",
+    "check": "npm run lint && npm run format && npm run typecheck && npm run lint:css"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.19.0",
+    "eslint": "^9.19.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "stylelint": "^17.14.1",
+    "stylelint-config-standard": "^40.0.0",
+    "typescript": "^5.7.3"
+  }
+}

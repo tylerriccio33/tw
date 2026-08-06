@@ -12,7 +12,7 @@
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
-  else root.Trace = api;
+  else /** @type {any} */ (root).Trace = api;
 })(typeof self !== "undefined" ? self : this, function () {
   const EPS = 1e-9;
 
@@ -40,9 +40,7 @@
   }
 
   function segmentCount(polyline) {
-    return polyline.closed
-      ? polyline.points.length
-      : polyline.points.length - 1;
+    return polyline.closed ? polyline.points.length : polyline.points.length - 1;
   }
 
   function closestPointOnSegment(px, py, a, b) {
@@ -99,9 +97,7 @@
     if (polyline.closed) {
       const forwardSpan = mod(endArc - startArc, polyline.total);
       const backwardSpan = polyline.total - forwardSpan;
-      const goForward = longWay
-        ? forwardSpan > backwardSpan
-        : forwardSpan <= backwardSpan;
+      const goForward = longWay ? forwardSpan > backwardSpan : forwardSpan <= backwardSpan;
       const span = goForward ? forwardSpan : backwardSpan;
 
       for (let i = 0; i < polyline.points.length; i++) {
@@ -123,7 +119,10 @@
     }
 
     between.sort((p, q) => p[0] - q[0]);
-    return [hitA.point].concat(between.map((entry) => entry[1]), [hitB.point]);
+    return [hitA.point].concat(
+      between.map((entry) => entry[1]),
+      [hitB.point],
+    );
   }
 
   // A single click-pair on a real coastline can pull in hundreds of

@@ -1,6 +1,6 @@
 GODOT ?= godot
 
-.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-preview map-package-init map-package-check promote-map gut gut-test render-shots render-test render-test-update
+.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-js-check map-editor-preview map-package-init map-package-check promote-map gut gut-test render-shots render-test render-test-update
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -25,6 +25,7 @@ help:
 	@echo "make hud-shot      - screenshot just the bottom HUD banner to shots/play/hud.png"
 	@echo "make map-editor    - launch the browser-based layered map editor (tools/map_editor)"
 	@echo "make map-editor-test - run the map editor's pytest suite (format, export pipeline, coastline classification)"
+	@echo "make map-editor-js-check - eslint + prettier --check + tsc --noEmit + stylelint over tools/map_editor/static"
 	@echo "make map-editor-preview - composite the whole layer stack to one PNG (tools/map_editor/dev_map_data/preview.png), no browser needed"
 	@echo "make map-package-init - create a fresh map package from a backdrop (SEED=N for placeholder provinces)"
 	@echo "make map-package-check - validate the dev map package without exporting"
@@ -147,6 +148,9 @@ map-editor:
 
 map-editor-test:
 	cd tools/map_editor && uv run --group dev pytest -q
+
+map-editor-js-check:
+	cd tools/map_editor && npm install --no-audit --no-fund --silent && npm run check
 
 # Composites every layer in manifest order over the real backdrop and
 # writes tools/map_editor/dev_map_data/preview.png. Runs the same
