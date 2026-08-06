@@ -18,9 +18,10 @@ from PIL import Image
 
 BACKDROP = init_package.GAME_DIR_DEFAULT / "backdrop.png"
 
-pytestmark = pytest.mark.skipif(
-    not BACKDROP.is_file(), reason=f"no backdrop at {BACKDROP}"
-)
+pytestmark = [
+    pytest.mark.skipif(not BACKDROP.is_file(), reason=f"no backdrop at {BACKDROP}"),
+    pytest.mark.slow,
+]
 
 
 @pytest.fixture(scope="module")

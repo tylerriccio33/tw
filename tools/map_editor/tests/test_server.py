@@ -7,8 +7,6 @@ touch the package.
 
 import http.client
 import json
-import threading
-from http.server import ThreadingHTTPServer
 
 import export
 import init_package
@@ -17,7 +15,7 @@ import numpy as np
 import pytest
 import server
 from PIL import Image
-from tests.conftest import box, make_package, project_with
+from tests.conftest import _live_server, box, make_package, project_with
 
 
 def two_provinces():
@@ -201,14 +199,6 @@ def test_revectorize_handles_a_mask_layer_keyed_by_legend_entry(package):
 # ---------------------------------------------------------------------------
 # point layer endpoint
 # ---------------------------------------------------------------------------
-
-
-def _live_server(package_dir):
-    handler = server.make_handler(package_dir)
-    httpd = ThreadingHTTPServer(("localhost", 0), handler)
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    thread.start()
-    return httpd
 
 
 def test_points_endpoint_round_trips_a_provinces_point(tmp_path):

@@ -191,7 +191,207 @@ def test_growth_produces_valid_geometry_after_many_steps(big_package):
     assert export.validate_package(project, package) == []
 
 
+def test_growth_around_a_pinch_obstacle_produces_valid_geometry(pinch_package):
+    # Fast regression for the same invariant test_growth_realistic.py
+    # checks against the real backdrop (see conftest.pinch_package's
+    # docstring for why this smaller coastline still reproduces it):
+    # growth wrapping around an obstacle can leave a claim touching
+    # itself at a single pixel corner, which cv2.findContours traces as
+    # a self-intersecting polygon that export rejects.
+    package, project = pinch_package
+    growth.start(package, project)
+
+    result = None
+    for _ in range(400):
+        result = growth.step(package, project)
+        if result["done"]:
+            break
+
+    assert result["done"]
+    assert export.validate_package(project, package) == []
+
+
 def _province_area(package, project, province_id):
     province_cfg = package.province_layer
     raster = export.rasterize_polygon_layer(project, province_cfg, package.size)
     return int((export.id_buffer(raster) == province_id).sum())
+
+
+# ---------------------------------------------------------------------------
+# tier speed edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_a_city_missing_the_tier_field_defaults_to_tier_one_speed(big_package):
+    # tier_of() falls back to int(payload.get(tier_field, 1)) - a city
+    # authored without a tier at all (rather than an explicit tier=1)
+    # must grow at the same, slowest speed rather than erroring or
+    # defaulting to something faster. Placed far apart so contesting the
+    # other's pixels doesn't affect either city's single-step growth -
+    # any area difference then comes only from the tier default, not
+    # from which city gets processed first in a contested tie.
+    package = big_package
+    project = mapfmt.empty_project(package.size, package)
+    project["layers"]["coastline"]["features"] = [
+        {"key": "land", "polygons": [land_rect(BIG_LAND_BOX)]}
+    ]
+    project["layers"]["cities"]["points"] = {
+        "p1": {"x": 150, "y": 200, "name": "no-tier"},
+        "p2": _city(450, 200, 1),
+    }
+    growth.start(package, project)
+    growth.step(package, project)
+
+    untiered_area = _province_area(package, project, 1)
+    explicit_tier_one_area = _province_area(package, project, 2)
+    assert untiered_area == explicit_tier_one_area
+
+
+def test_tier_speed_scales_linearly_with_pixels_per_tier_step(package):
+    # radius = max(1, tier) * PIXELS_PER_TIER_STEP. Two cities far enough
+    # apart that neither claim reaches the other (or the coastline) in one
+    # step should each grow into a disc of radius tier * step size, so the
+    # ratio of claimed areas after one step should track the square of the
+    # ratio of tiers.
+    project = _project(package)
+    project["layers"]["cities"]["points"] = {
+        "p1": _city(20, 20, 1),
+        "p2": _city(35, 20, 2),
+    }
+    growth.start(package, project)
+    growth.step(package, project)
+
+    tier1_area = _province_area(package, project, 1)
+    tier2_area = _province_area(package, project, 2)
+    # Not an exact circle (clipped by land/step interactions), but a
+    # tier-2 city's border moves twice as far, so its claimed area should
+    # be well above the tier-1 city's, not merely equal or marginally more.
+    assert tier2_area > tier1_area * 1.5
+
+
+# ---------------------------------------------------------------------------
+# restarting mid-growth
+# ---------------------------------------------------------------------------
+
+
+def test_start_over_with_a_different_city_set_replaces_the_previous_provinces(package):
+    # start() wipes whatever the province layer currently holds, per its
+    # docstring. Confirm that growing from a smaller city set, then
+    # calling start() again with more cities, actually replaces (not
+    # merges with) the previous province set.
+    project = _project(package)
+    project["layers"]["cities"]["points"] = {"p1": _city(20, 20, 3)}
+    growth.start(package, project)
+    growth.step(package, project)
+    assert project["layers"]["provinces"]["growth"]["seed_of"] == {"1": "p1"}
+
+    project["layers"]["cities"]["points"] = {
+        "p1": _city(20, 20, 3),
+        "p2": _city(35, 20, 3),
+    }
+    result = growth.start(package, project)
+
+    assert result["province_count"] == 2
+    assert project["layers"]["provinces"]["growth"]["step"] == 0
+    assert project["layers"]["provinces"]["growth"]["seed_of"] == {
+        "1": "p1",
+        "2": "p2",
+    }
+    assert project["layers"]["provinces"]["growth"]["finished_cities"] == []
+
+
+def test_step_survives_a_cold_cache_mid_growth(big_package):
+    # Growth runs as a sequence of separate HTTP requests handled by a
+    # process that may have restarted between them - step() then has to
+    # fall back to rebuilding the claim buffer from the polygons on
+    # record instead of the (now-missing) cached one. Clearing growth's
+    # module-level caches simulates that, and growth should still be
+    # able to make progress on the next step.
+    package = big_package
+    project = mapfmt.empty_project(package.size, package)
+    project["layers"]["coastline"]["features"] = [
+        {"key": "land", "polygons": [land_rect(BIG_LAND_BOX)]}
+    ]
+    project["layers"]["cities"]["points"] = {
+        "p1": _city(150, 200, 1),
+        "p2": _city(450, 200, 2),
+    }
+    growth.start(package, project)
+    growth.step(package, project)
+
+    growth._claim_cache.clear()
+    growth._land_mask_cache.clear()
+
+    result = growth.step(package, project)
+
+    assert result["changed_px"] > 0
+    assert export.validate_package(project, package) == []
+
+
+# ---------------------------------------------------------------------------
+# multiple simultaneous growth fronts
+# ---------------------------------------------------------------------------
+
+
+def test_cities_of_equal_tier_split_the_land_close_to_evenly(big_package):
+    # Two equal-tier cities, symmetric about the land rectangle's midline
+    # and far enough apart that most of their growth happens before the
+    # fronts meet, should claim close to equal shares once growth
+    # finishes - the front forms roughly down the middle rather than one
+    # city dominating just because a step processes it first.
+    # (Cities right next to each other relative to the per-step growth
+    # radius would let whichever a step processes first sweep nearly
+    # everything - that's a real, order-dependent quirk of ties, not
+    # what this test is after.)
+    package = big_package
+    project = mapfmt.empty_project(package.size, package)
+    project["layers"]["coastline"]["features"] = [
+        {"key": "land", "polygons": [land_rect(BIG_LAND_BOX)]}
+    ]
+    project["layers"]["cities"]["points"] = {
+        "p1": _city(200, 200, 1),
+        "p2": _city(400, 200, 1),
+    }
+    growth.start(package, project)
+
+    result = None
+    for _ in range(60):
+        result = growth.step(package, project)
+        if result["done"]:
+            break
+    assert result["done"]
+
+    area1 = _province_area(package, project, 1)
+    area2 = _province_area(package, project, 2)
+    total = area1 + area2
+    assert abs(area1 - area2) / total < 0.15
+
+
+def test_a_city_deleted_mid_growth_stops_its_province_cleanly(big_package):
+    # step() treats a city_id missing from the current points as "someone
+    # deleted this city" and just stops growing its province instead of
+    # erroring - the province it already grew stays put. Uses a big,
+    # sparsely-seeded map so the deleted city is still actively growing
+    # (not already boxed in and finished on its own) at the moment it's
+    # deleted - otherwise the "finished because deleted" and "finished
+    # because boxed in" code paths would be indistinguishable.
+    package = big_package
+    project = mapfmt.empty_project(package.size, package)
+    project["layers"]["coastline"]["features"] = [
+        {"key": "land", "polygons": [land_rect(BIG_LAND_BOX)]}
+    ]
+    project["layers"]["cities"]["points"] = {
+        "p1": _city(200, 200, 1),
+        "p2": _city(400, 200, 1),
+    }
+    growth.start(package, project)
+    growth.step(package, project)
+    area_before = _province_area(package, project, 2)
+
+    del project["layers"]["cities"]["points"]["p2"]
+    result = growth.step(package, project)
+
+    assert "p2" in result["finished_cities"]
+    area_after = _province_area(package, project, 2)
+    assert area_after == area_before
+    assert export.validate_package(project, package) == []

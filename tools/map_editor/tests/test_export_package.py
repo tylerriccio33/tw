@@ -86,6 +86,57 @@ def test_province_drawn_over_the_sea_is_clipped_back_to_the_shore(package):
     assert table[1]["area_px"] == 20 * 24
 
 
+def test_gapfill_closes_gaps_in_two_different_layers_independently(package):
+    # A gap in the identity-kind provinces layer (a seam between two hand
+    # drawn provinces) and a gap in the class-kind terrain brush layer
+    # (an unpainted strip on land) both exist in the same export at once.
+    # export.py's pipeline runs one loop over every layer, filling and
+    # clipping each in turn against the shared coastline mask - this
+    # confirms terrain's gapfill neither leaks into the provinces raster
+    # nor gets confused by it, and vice versa. Single-layer gapfill is
+    # already covered in isolation by test_gapfill.py and the seam test
+    # just above/below this one; this is the "two layers, same export"
+    # gap the plan calls out.
+    gapped_provinces = [
+        {"id": 1, "key": "west", "name": "West", "polygons": [box(10, 8, 28, 32)]},
+        {"id": 2, "key": "east", "name": "East", "polygons": [box(32, 8, 50, 32)]},
+    ]
+    project = project_with(package, provinces=gapped_provinces)
+    # Terrain painted on both sides of a 4px unpainted strip at x=28..32 -
+    # the same seam location as the province gap, so a leak between the
+    # two layers' gapfills would be maximally likely to show up here.
+    paint(package, "terrain", PLAINS, (10, 8, 26, 32))
+    paint(package, "terrain", HILLS, (34, 8, 50, 32))
+
+    run_export(package, project)
+
+    with Image.open(package.raster_path("provinces")) as im:
+        province_ids = export.id_buffer(np.array(im.convert("RGB")))
+    with Image.open(package.raster_path("terrain")) as im:
+        terrain_rgb = np.array(im.convert("RGB"))
+
+    land_ids = province_ids[8:32, 10:50]
+    assert not (land_ids == 0).any(), "province gap must be fully closed"
+    assert set(np.unique(land_ids).tolist()) == {1, 2}
+
+    plains_rgb = mapfmt.hex_to_rgb(PLAINS)
+    hills_rgb = mapfmt.hex_to_rgb(HILLS)
+    terrain_land = terrain_rgb[8:32, 10:50]
+    assert np.all(
+        np.any(
+            [np.all(terrain_land == c, axis=-1) for c in (plains_rgb, hills_rgb)],
+            axis=0,
+        )
+    ), "terrain gap must be fully closed too, independent of the province gap"
+
+    table = {row["id"]: row for row in mapfmt.read_province_table(package.root)}
+    # The province boundary sits inside the filled terrain gap. Both
+    # provinces' terrain tag must reflect their own dominant color, not
+    # bleed the neighbor's gapfilled strip in.
+    assert table[1]["tags"]["terrain"] == "plains"
+    assert table[2]["tags"]["terrain"] == "hills"
+
+
 def test_gap_between_two_provinces_is_filled_not_left_as_a_seam(package):
     # A 4px gutter between the two provinces - the kind of seam that comes
     # from tracing two borders separately instead of snapping them.

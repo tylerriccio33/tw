@@ -15,12 +15,14 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
     "pytest-cov>=7.1.0",
+    "pytest-playwright>=0.5.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "--cov=. --cov-report=term-missing"
+addopts = "--cov=. --cov-report=term-missing -m 'not slow'"
+markers = ["slow: full-scale/realistic regression tests, opt-in only"]
 
 [tool.coverage.run]
 omit = ["tests/*"]

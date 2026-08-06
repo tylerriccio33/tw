@@ -1,6 +1,6 @@
 GODOT ?= godot
 
-.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-js-check map-editor-preview map-package-init map-package-check promote-map gut gut-test render-shots render-test render-test-update
+.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-test-full map-editor-js-check map-editor-preview map-package-init map-package-check promote-map gut gut-test render-shots render-test render-test-update
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -24,7 +24,8 @@ help:
 	@echo "make play-shot     - screenshot the whole campaign window to shots/play/play.png"
 	@echo "make hud-shot      - screenshot just the bottom HUD banner to shots/play/hud.png"
 	@echo "make map-editor    - launch the browser-based layered map editor (tools/map_editor)"
-	@echo "make map-editor-test - run the map editor's pytest suite (format, export pipeline, coastline classification)"
+	@echo "make map-editor-test - run the map editor's fast pytest suite (excludes slow/realistic-backdrop tests)"
+	@echo "make map-editor-test-full - run the map editor's full pytest suite, including slow/realistic-backdrop and browser-driven e2e tests (needs a one-time 'cd tools/map_editor && uv run playwright install chromium')"
 	@echo "make map-editor-js-check - eslint + prettier --check + tsc --noEmit + stylelint over tools/map_editor/static"
 	@echo "make map-editor-preview - composite the whole layer stack to one PNG (tools/map_editor/dev_map_data/preview.png), no browser needed"
 	@echo "make map-package-init - create a fresh map package from a backdrop (SEED=N for placeholder provinces)"
@@ -148,6 +149,20 @@ map-editor:
 
 map-editor-test:
 	cd tools/map_editor && uv run --group dev pytest -q
+
+# Includes test_realistic.py and test_growth_realistic.py, which are
+# marked `slow` and skipped by default (see pyproject.toml's addopts).
+# Together they take ~4-5 minutes because they drive growth/export to
+# completion against the real campaign backdrop. Run this before
+# `make promote-map` or any other release-shaped map change - the fast
+# default suite alone doesn't exercise real-scale coastline geometry.
+#
+# Also includes tests/test_e2e.py, which drives the real editor UI in a
+# headless Chromium browser via pytest-playwright. That needs a one-time
+# per-clone browser download (like `make gut` vendoring the GUT addon):
+#   cd tools/map_editor && uv run playwright install chromium
+map-editor-test-full:
+	cd tools/map_editor && uv run --group dev pytest -q -m ""
 
 map-editor-js-check:
 	cd tools/map_editor && npm install --no-audit --no-fund --silent && npm run check

@@ -155,6 +155,88 @@ def test_decimate_enforces_a_hard_vertex_ceiling():
     assert result["last"] == [499, 0], "the endpoint must survive decimation"
 
 
+# ---------------------------------------------------------------------------
+# snap-radius edge cases
+#
+# trace.js itself has no snap radius constant - editor.js's snapPoint()
+# applies one on top of nearestOnPolyline/nearestOnPolylines' returned
+# .dist. These tests exercise the primitives that a radius cutoff is
+# built on: exact-distance ties, degenerate (zero-length) segments, and
+# "nothing in range" (an empty candidate list, standing in for a caller
+# whose radius check filtered out every candidate).
+# ---------------------------------------------------------------------------
+
+
+def test_nearest_with_no_candidate_lines_returns_nothing():
+    # Stand-in for "no candidates within the snap radius": the caller
+    # would have filtered every polyline out before calling this, leaving
+    # an empty list. Must not throw - just report no hit.
+    result = run_js("""
+        const hit = Trace.nearestOnPolylines([], 5, 5);
+        console.log(JSON.stringify(hit));
+    """)
+    assert result is None
+
+
+def test_nearest_breaks_an_exact_distance_tie_toward_the_first_line():
+    # Two boundaries equidistant from the query point (a point sitting
+    # exactly on the perpendicular bisector between them - the "exactly
+    # at the snap radius boundary between two candidates" case). Ties
+    # must resolve deterministically rather than depending on iteration
+    # order or floating point noise: nearestOnPolylines only replaces
+    # its best match on a strict '<', so the first candidate at the
+    # minimum distance wins.
+    result = run_js("""
+        const a = Trace.buildPolyline([[0,0],[10,0]], false);
+        const b = Trace.buildPolyline([[0,10],[10,10]], false);
+        const hit = Trace.nearestOnPolylines([a, b], 5, 5);
+        console.log(JSON.stringify({line: hit.lineIndex, dist: hit.dist}));
+    """)
+    assert result["line"] == 0
+    assert result["dist"] == 5
+
+
+def test_nearest_on_a_zero_length_segment_does_not_produce_nan():
+    # Two coincident points collapse a segment to zero length.
+    # closestPointOnSegment's lenSq === 0 guard must take over instead of
+    # dividing by zero - a NaN distance would silently sort as "never the
+    # nearest", making that point permanently unsnappable.
+    result = run_js("""
+        const pl = Trace.buildPolyline([[5,5],[5,5],[20,5]], false);
+        const hit = Trace.nearestOnPolyline(pl, 5, 8);
+        console.log(JSON.stringify(hit));
+    """)
+    assert result["point"] == [5, 5]
+    assert result["dist"] == 3
+
+
+def test_nearest_on_a_single_point_closed_polyline_is_the_point_itself():
+    # A closed "polyline" with exactly one point still has to report a
+    # sensible (zero-length) segment rather than indexing past the array
+    # or dividing by zero.
+    result = run_js("""
+        const pl = Trace.buildPolyline([[7,7]], true);
+        const hit = Trace.nearestOnPolyline(pl, 100, 100);
+        console.log(JSON.stringify(hit));
+    """)
+    assert result["point"] == [7, 7]
+    assert result["dist"] == pytest.approx((93**2 + 93**2) ** 0.5)
+
+
+def test_a_query_point_exactly_on_the_boundary_has_zero_distance():
+    # The degenerate "snap radius of 0" case from the caller's point of
+    # view: a point already sitting exactly on the boundary must report
+    # dist == 0 so any positive radius (including a very small one)
+    # still snaps it.
+    points = run_js(f"""
+        const pl = Trace.buildPolyline({SQUARE}, true);
+        const hit = Trace.nearestOnPolyline(pl, 10, 0);
+        console.log(JSON.stringify({{dist: hit.dist, point: hit.point}}));
+    """)
+    assert points["dist"] == 0
+    assert points["point"] == [10, 0]
+
+
 def test_trace_between_applies_simplification_and_the_ceiling():
     result = run_js("""
         const pts = [];
