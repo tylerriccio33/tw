@@ -25,7 +25,7 @@ def _project(package):
 
 
 def _city(x, y, tier):
-    return {"x": float(x), "y": float(y), "tier": tier}
+    return {"x": float(x), "y": float(y), "tier": tier, "name": f"city-{x}-{y}"}
 
 
 @pytest.fixture
@@ -144,6 +144,51 @@ def test_start_over_resets_a_grown_province(package):
 
     assert project["layers"]["provinces"]["growth"]["step"] == 0
     assert reset_area < grown_area
+
+
+BIG_LAND_BOX = (10, 10, 590, 390)
+
+
+@pytest.fixture
+def big_package(tmp_path):
+    return make_package(tmp_path, size=(600, 400), land_box=BIG_LAND_BOX)
+
+
+def test_growth_produces_valid_geometry_after_many_steps(big_package):
+    # Sanity check that a longer growth session on a plain rectangle of
+    # land still validates cleanly. The real pinching regression this
+    # guards against (see test_growth_realistic.py) needs a coastline
+    # with obstacles to reproduce - a rectangle has nothing for two
+    # claims to wrap around - but this still catches gross breakage.
+    package = big_package
+    project = mapfmt.empty_project(package.size, package)
+    project["layers"]["coastline"]["features"] = [
+        {"key": "land", "polygons": [land_rect(BIG_LAND_BOX)]}
+    ]
+    project["layers"]["cities"]["points"] = {
+        f"p{i}": _city(x, y, tier)
+        for i, (x, y, tier) in enumerate(
+            [
+                (100, 100, 1),
+                (250, 100, 2),
+                (400, 100, 3),
+                (100, 250, 4),
+                (250, 250, 5),
+                (400, 250, 1),
+                (175, 350, 2),
+                (325, 350, 3),
+            ],
+            start=1,
+        )
+    }
+    growth.start(package, project)
+
+    for _ in range(200):
+        result = growth.step(package, project)
+        if result["done"]:
+            break
+
+    assert export.validate_package(project, package) == []
 
 
 def _province_area(package, project, province_id):

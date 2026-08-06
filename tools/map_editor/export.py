@@ -35,7 +35,7 @@ import mapfmt
 import numpy as np
 from gapfill import fill_land_gaps
 from PIL import Image, ImageDraw
-from shapely.geometry import Polygon
+from shapely.geometry import LinearRing, Polygon
 
 # Contour tracing for provinces.geo.json. The raster is the source of
 # truth, so simplification is deliberately tight - this is not the place
@@ -274,26 +274,85 @@ REVECTORIZE_MIN_AREA = 12  # px^2, drops single-pixel noise contours
 REVECTORIZE_EPSILON = 1.0  # px, cv2.approxPolyDP tolerance
 
 
+_CLOSE_KERNEL = np.ones((3, 3), np.uint8)
+
+
+def _resolve_diagonal_ties(ids: np.ndarray) -> np.ndarray:
+    """Break 2x2 checkerboards where two different ids meet only at a
+    corner. id A sits top-left/bottom-right, id B top-right/bottom-left,
+    with no background pixel anywhere in the block.
+
+    Growth can produce these where two claims' fronts interleave. There's
+    no free pixel to reclaim here, unlike a same-id pinch through
+    background. A per-mask close can't fix it. One side has to give up
+    the corner.
+
+    The bottom-right cell always yields to the top-right cell's id. That
+    rule holds regardless of which id is numerically which. So both
+    sides of the tie agree on the same raster, and no overlap results.
+    This loop repeats a few times: resolving one block can produce
+    another checkerboard with its neighbor.
+    """
+    ids = ids.copy()
+    for _ in range(8):
+        tl, tr = ids[:-1, :-1], ids[:-1, 1:]
+        bl, br = ids[1:, :-1], ids[1:, 1:]
+        checkerboard = (tl == br) & (tr == bl) & (tl != tr) & (tl != 0) & (tr != 0)
+        if not checkerboard.any():
+            break
+        ys, xs = np.nonzero(checkerboard)
+        ids[ys + 1, xs + 1] = ids[ys, xs + 1]
+    return ids
+
+
 def revectorize(
     raster: np.ndarray, cfg: mapfmt.LayerConfig, project: dict
 ) -> list[dict]:
     """Turn a layer raster back into editable polygons.
 
     RETR_CCOMP, not RETR_EXTERNAL, so an enclave stays an enclave rather
-    than vanishing into whatever surrounds it. Shared by Fill Gaps, Clean
-    Shapes, and growth.py's per-step commit - all three go raster in,
-    editable polygons out.
+    than vanishing into whatever surrounds it. Fill Gaps, Clean Shapes,
+    and growth.py's per-step commit all share this - raster in, editable
+    polygons out.
+
+    Growing two claims toward each other (or dilating around an
+    obstacle) can leave a region that's only diagonally connected.
+    Two lobes end up touching at a single pixel corner.
+    cv2.findContours traces that as a figure-eight that revisits the
+    corner pixel. Once vectorized, that's a self-touching/self-intersecting
+    polygon.
+
+    Before tracing, each group gets a 1px morphological close. The
+    fill can only land on pixels no other group owns (background/nodata).
+    Groups go in a fixed order, and each one's fill comes out of what's
+    left for the rest.
+
+    Closing each mask independently used to let two neighbors both
+    fill the same pinch from their own side. That's what happens
+    with no order and no shared "already spoken for" set. Closing
+    fixed the self-touch. But it
+    planted a real overlap between them - the exact bug this function
+    exists to prevent one layer up.
     """
     if cfg.kind == "identity":
-        ids = id_buffer(raster)
+        raw_ids = id_buffer(raster)
+        ids = _resolve_diagonal_ties(raw_ids)
+        ties_fixed = int((ids != raw_ids).sum())
+        if ties_fixed:
+            print(
+                f"revectorize: {cfg.name} resolved {ties_fixed}px of diagonal ties between provinces"
+            )
         existing = {
             int(f["id"]): f
             for f in mapfmt.project_features(project, cfg.name)
             if "id" in f
         }
         groups = [
-            (int(pid), ids == int(pid)) for pid in np.unique(ids) if int(pid) != 0
+            (int(pid), ids == int(pid))
+            for pid in sorted(np.unique(ids))
+            if int(pid) != 0
         ]
+        background = ids == 0
     else:
         existing = {f.get("key"): f for f in mapfmt.project_features(project, cfg.name)}
         groups = []
@@ -302,14 +361,45 @@ def revectorize(
                 continue
             rgb = np.array(mapfmt.hex_to_rgb(hex_color), dtype=np.uint8)
             groups.append((entry["key"], np.all(raster == rgb, axis=-1)))
+        if cfg.nodata_color:
+            nodata_rgb = np.array(mapfmt.hex_to_rgb(cfg.nodata_color), dtype=np.uint8)
+            background = np.all(raster == nodata_rgb, axis=-1)
+        else:
+            background = np.zeros(raster.shape[:2], dtype=bool)
 
+    spoken_for = ~background  # every group's own pixels start "taken"
+    total_pinch_fix_px = 0
     features = []
     for identity, mask in groups:
-        contours, _ = cv2.findContours(
+        closed = (
+            cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, _CLOSE_KERNEL) > 0
+        )
+        fill = closed & ~mask & ~spoken_for
+        fill_px = int(fill.sum())
+        if fill_px:
+            total_pinch_fix_px += fill_px
+            print(
+                f"revectorize: {cfg.name}/{identity} closed {fill_px}px of self-touching pinch"
+            )
+        mask = mask | fill
+        spoken_for = spoken_for | fill
+        contours, hierarchy = cv2.findContours(
             mask.astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
         )
+        # RETR_CCOMP returns hole boundaries alongside outer ones - a hole
+        # here is another province's territory poking into this mask, not
+        # this province's own land. project.json's "polygons" list has no
+        # hole flag (unlike the final .geo.json, which does and lets Godot
+        # skip them for fill/collision), so downstream code renders every
+        # entry here solid. Adding a hole ring as if it were an extra
+        # blob of this province re-claims someone else's land as an
+        # "overlap" - exactly the false positive export was rejecting.
+        # hierarchy[0][i][3] is the parent index; -1 means top-level/outer.
+        parent_of = hierarchy[0][:, 3] if hierarchy is not None else []
         polygons = []
-        for contour in contours:
+        for i, contour in enumerate(contours):
+            if len(parent_of) and parent_of[i] != -1:
+                continue
             if cv2.contourArea(contour) < REVECTORIZE_MIN_AREA:
                 continue
             simplified = cv2.approxPolyDP(contour, REVECTORIZE_EPSILON, True)
@@ -317,7 +407,11 @@ def revectorize(
                 [round(float(p[0][0]), 1), round(float(p[0][1]), 1)] for p in simplified
             ]
             if len(pts) >= 3:
-                polygons.append(pts)
+                flat = [c for xy in pts for c in xy]
+                flat = _repair_self_intersection(flat)
+                repaired = [[flat[k], flat[k + 1]] for k in range(0, len(flat), 2)]
+                if len(repaired) >= 3:
+                    polygons.append(repaired)
         if not polygons:
             continue
 
@@ -355,33 +449,23 @@ def key_buffer(
 # --------------------------------------------------------------------------
 
 
-def _segments_properly_intersect(p1, p2, p3, p4) -> bool:
-    def orientation(a, b, c):
-        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-
-    d1 = orientation(p3, p4, p1)
-    d2 = orientation(p3, p4, p2)
-    d3 = orientation(p1, p2, p3)
-    d4 = orientation(p1, p2, p4)
-    return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0)) and d1 != 0 and d2 != 0
-
-
 def polygon_self_intersects(points) -> bool:
     """True if any two non-adjacent edges of the closed polygon cross.
 
     A self-crossing polygon fills unpredictably. PIL's scanline fill
     doesn't follow a torn/bowtie shape the way a human eye would. That
     is how a mistraced border renders as a disconnected fragment instead
-    of the territory somebody meant."""
-    n = len(points)
-    edges = [(points[i], points[(i + 1) % n]) for i in range(n)]
-    for i in range(n):
-        for j in range(i + 1, n):
-            if j == i + 1 or (i == 0 and j == n - 1):
-                continue  # adjacent edges share a vertex, not a crossing
-            if _segments_properly_intersect(*edges[i], *edges[j]):
-                return True
-    return False
+    of the territory somebody meant.
+
+    LinearRing.is_simple runs in GEOS (C), not pure Python. This used
+    to be an O(n^2) pairwise segment check here. That was fine for a
+    hand-traced province. But it grew minutes long once growth.py
+    started producing 600+-point provinces, making export look hung
+    rather than slow.
+    """
+    if len(points) < 4:
+        return False
+    return not LinearRing(points).is_simple
 
 
 def problem_polygons(
@@ -537,36 +621,67 @@ def _validate_overlap(project: dict, package: mapfmt.Package) -> list[str]:
             continue
         pid = int(feature["id"])
         labels[pid] = feature.get("name") or f"province {pid}"
+        polygons = feature.get("polygons", [])
+        if not polygons:
+            continue
 
+        # Rasterize into a canvas cropped to this feature's own bbox, not
+        # a fresh full-map canvas every time. _draw_polygons was
+        # allocating and PIL-filling a 5656x8000 image per province -
+        # fine for a handful of hand-traced provinces, but with growth.py
+        # producing dozens of provinces this dominated export's runtime
+        # (tens of seconds) and made it look hung rather than slow.
+        xs_all = [x for poly in polygons for x, _ in poly]
+        ys_all = [y for poly in polygons for _, y in poly]
+        x0 = max(0, int(min(xs_all)))
+        x1 = min(width, int(max(xs_all)) + 1)
+        y0 = max(0, int(min(ys_all)))
+        y1 = min(height, int(max(ys_all)) + 1)
+        if x0 >= x1 or y0 >= y1:
+            continue
+        shifted = [[[x - x0, y - y0] for x, y in poly] for poly in polygons]
         one = _draw_polygons(
-            _blank((width, height), (0, 0, 0)),
-            feature.get("polygons", []),
-            (255, 255, 255),
+            _blank((x1 - x0, y1 - y0), (0, 0, 0)), shifted, (255, 255, 255)
         )
         mine = one[:, :, 0] > 0
         area = int(mine.sum())
         if area == 0:
             continue
 
-        collision = claimed[mine]
+        claimed_slice = claimed[y0:y1, x0:x1]
+        collision = claimed_slice[mine]
+        tolerance = max(MAX_BENIGN_OVERLAP_PX, int(MAX_BENIGN_OVERLAP_FRACTION * area))
         for other_id in np.unique(collision[collision != 0]):
             overlap = int((collision == other_id).sum())
-            if overlap == area:
-                # Wholly inside the other province and drawn after it -
-                # that's an enclave, which is the one case where painting
-                # over another province is exactly what was meant.
+            if overlap >= area - tolerance:
+                # Wholly (or all-but-a-benign-sliver) inside the other
+                # province and drawn after it - that's an enclave, which
+                # is the one case where painting over another province is
+                # exactly what was meant. An exact overlap == area match
+                # is too strict: a few stray pixels of this province's
+                # own mask can land on a completely unrelated third
+                # province first (its own small pinch artifact, not a
+                # real dispute over this enclave), which knocks the count
+                # a handful of px short of the full area and used to make
+                # a legitimate enclave get reported as a huge overlap
+                # against the province it's actually enclaved in.
                 continue
-            tolerance = max(
-                MAX_BENIGN_OVERLAP_PX, int(MAX_BENIGN_OVERLAP_FRACTION * area)
-            )
             if overlap > tolerance:
+                overlap_mask = mine & (claimed_slice == other_id)
+                ys, xs = np.nonzero(overlap_mask)
+                print(
+                    f"validate: '{labels[pid]}' vs '{labels[int(other_id)]}' "
+                    f"overlap bbox x[{xs.min() + x0}:{xs.max() + x0}] "
+                    f"y[{ys.min() + y0}:{ys.max() + y0}], "
+                    f"{overlap}px of {area}px total area"
+                )
                 problems.append(
                     f"provinces '{labels[pid]}' and "
                     f"'{labels[int(other_id)]}' overlap by {overlap}px - the "
                     "raster holds one id per pixel, so whichever is drawn "
                     "later silently takes that land"
                 )
-        claimed[mine] = pid
+        claimed_slice[mine] = pid
 
     return problems
 
@@ -729,6 +844,10 @@ def _validate_free_points(project: dict, package: mapfmt.Package) -> list[str]:
                             f"{value!r}, which has no legend color in '{name}' - "
                             "add one so the layer can be rasterized"
                         )
+                elif field_cfg["type"] == "name" and (
+                    not isinstance(value, str) or not value.strip()
+                ):
+                    problems.append(f"{name} point '{point_id}' has no {field_name}")
 
     return problems
 

@@ -152,7 +152,17 @@ def test_fill_gaps_on_an_unknown_layer_is_reported_not_crashed(package):
 
 
 def test_revectorize_keeps_an_enclave_as_its_own_ring(package):
-    """RETR_EXTERNAL would swallow the inner province; RETR_CCOMP doesn't."""
+    """Both provinces still come out, id 1's own shape included.
+
+    RETR_CCOMP (not RETR_EXTERNAL) still finds the enclave's hole
+    boundary inside province 2's mask. But that hole ring isn't kept
+    as one of province 2's own polygons.
+
+    project.json's polygon list has no hole flag, unlike the final
+    .geo.json. So every entry here draws solid. Keeping the hole ring
+    made _validate_overlap see province 2 as also covering province
+    1's territory - a false overlap.
+    """
     raster = np.zeros((40, 60, 3), dtype=np.uint8)
     raster[8:32, 10:50] = mapfmt.id_to_color(2)
     raster[14:24, 20:30] = mapfmt.id_to_color(1)
@@ -161,7 +171,7 @@ def test_revectorize_keeps_an_enclave_as_its_own_ring(package):
     by_id = {f["id"]: f for f in features}
 
     assert set(by_id) == {1, 2}
-    assert len(by_id[2]["polygons"]) == 2, "outer boundary plus the hole"
+    assert len(by_id[2]["polygons"]) == 1, "outer boundary only, hole dropped"
 
 
 def test_revectorize_handles_a_mask_layer_keyed_by_legend_entry(package):

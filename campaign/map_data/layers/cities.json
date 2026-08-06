@@ -2,8 +2,42 @@
  "name": "cities",
  "title": "Cities",
  "input": "point",
- "kind": "identity",
+ "kind": "class",
  "raster": "cities.png",
  "nodata_color": "#000000",
- "snap_source": false
+ "snap_source": false,
+ "clip_to": "coastline:land",
+ "point_coupling": "free",
+ "point_fields": {
+  "name": {
+   "type": "name"
+  },
+  "tier": {
+   "type": "tier",
+   "min": 1,
+   "max": 5
+  }
+ },
+ "legend": {
+  "#c7d9f0": {
+   "key": "1",
+   "name": "Tier 1"
+  },
+  "#8fb3e0": {
+   "key": "2",
+   "name": "Tier 2"
+  },
+  "#5c8dcf": {
+   "key": "3",
+   "name": "Tier 3"
+  },
+  "#2f5fa8": {
+   "key": "4",
+   "name": "Tier 4"
+  },
+  "#123b73": {
+   "key": "5",
+   "name": "Tier 5"
+  }
+ }
 }

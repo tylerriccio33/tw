@@ -57,7 +57,7 @@ VALID_INPUTS = ("polygon", "brush", "assign", "point")
 VALID_KINDS = ("mask", "identity", "class")
 VALID_REDUCE_MODES = ("majority", "any")
 VALID_POINT_COUPLINGS = ("province", "free")
-VALID_POINT_FIELD_TYPES = ("faction", "counts", "tier")
+VALID_POINT_FIELD_TYPES = ("faction", "counts", "tier", "name")
 
 
 class PackageError(Exception):
@@ -163,14 +163,15 @@ class LayerConfig:
                 "faction" entry (its own owner/faction). This is how
                 army starting positions work.
     point_fields    only meaningful when point_coupling == "free". Maps
-                payload field name -> {"type": "faction"|"counts"|"tier",
-                ...}. "faction" means the value must be one of the
-                package's faction keys. "counts" means the value is a
-                dict of small-integer fields, e.g. {"keys": [...], "min":
-                0}. "tier" means the value is a small integer in
+                payload field name -> {"type": "faction"|"counts"|"tier"
+                |"name", ...}. "faction" means the value must be one of
+                the package's faction keys. "counts" means the value is
+                a dict of small-integer fields, e.g. {"keys": [...],
+                "min": 0}. "tier" means the value is a small integer in
                 [min, max] (default 1..5). A city's tier sets its
                 growth speed; growth.py finds it by field type, not
-                by name.
+                by name. "name" means a free-text label, shown next to
+                the point on the map.
                 Nothing here knows the word "army" or "city" - a
                 "naval_starts" layer could reuse the exact same
                 machinery.

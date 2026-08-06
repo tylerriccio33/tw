@@ -341,8 +341,8 @@ def test_a_blocked_export_writes_nothing(package):
 def test_city_layer_rasterizes_a_dot_colored_by_tier(package):
     project = project_with(package, provinces=two_provinces())
     project["layers"]["cities"]["points"] = {
-        "p1": {"x": 20, "y": 20, "tier": 1},
-        "p2": {"x": 40, "y": 20, "tier": 5},
+        "p1": {"x": 20, "y": 20, "name": "Alpha", "tier": 1},
+        "p2": {"x": 40, "y": 20, "name": "Beta", "tier": 5},
     }
 
     run_export(package, project)
@@ -377,8 +377,8 @@ def test_province_table_gets_city_position_from_growth_seed(package):
         {"key": "land", "polygons": [box(10, 8, 50, 32)]}
     ]
     project["layers"]["cities"]["points"] = {
-        "p1": {"x": 20, "y": 20, "tier": 1},
-        "p2": {"x": 40, "y": 20, "tier": 1},
+        "p1": {"x": 20, "y": 20, "name": "Alpha", "tier": 1},
+        "p2": {"x": 40, "y": 20, "name": "Beta", "tier": 1},
     }
 
     growth.start(package, project)

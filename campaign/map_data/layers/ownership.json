@@ -7,21 +7,29 @@
  "nodata_color": "#000000",
  "snap_source": false,
  "legend": {
-  "#cd5c5c": {
-   "key": "red",
-   "name": "Red"
+  "#4363d8": {
+   "key": "england",
+   "name": "England"
   },
-  "#6495ed": {
-   "key": "blue",
-   "name": "Blue"
+  "#f58231": {
+   "key": "wales",
+   "name": "Wales"
   },
-  "#3cb371": {
-   "key": "green",
-   "name": "Green"
+  "#911eb4": {
+   "key": "alba",
+   "name": "Alba"
   },
-  "#daa520": {
-   "key": "yellow",
-   "name": "Yellow"
+  "#46f0f0": {
+   "key": "norway",
+   "name": "Norway"
+  },
+  "#bfef45": {
+   "key": "ireland",
+   "name": "Ireland"
+  },
+  "#fabed4": {
+   "key": "france",
+   "name": "France"
   }
  },
  "reduce": {

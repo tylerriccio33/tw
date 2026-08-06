@@ -198,7 +198,10 @@ def layer_configs() -> dict[str, dict]:
             "snap_source": False,
             "clip_to": "coastline:land",
             "point_coupling": "free",
-            "point_fields": {"tier": {"type": "tier", "min": 1, "max": 5}},
+            "point_fields": {
+                "name": {"type": "name"},
+                "tier": {"type": "tier", "min": 1, "max": 5},
+            },
             "legend": CITY_TIER_LEGEND,
         },
     }
@@ -330,7 +333,9 @@ def seed_provinces(land_mask: np.ndarray, count: int) -> tuple[list[dict], list[
             }
         )
         sx, sy = seeds[index]
-        city_points.append({"x": float(sx), "y": float(sy), "tier": DEFAULT_CITY_TIER})
+        city_points.append(
+            {"x": float(sx), "y": float(sy), "name": name, "tier": DEFAULT_CITY_TIER}
+        )
     return features, city_points
 
 

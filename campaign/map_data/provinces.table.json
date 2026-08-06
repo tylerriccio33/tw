@@ -6,26 +6,27 @@
    "key": "province_1",
    "name": "Province 1",
    "centroid": [
-    3510.33,
-    5266.64
+    4413.19,
+    6350.33
    ],
-   "area_px": 2669460,
+   "area_px": 720561,
    "neighbors": [
-    6,
-    8,
-    10,
-    11,
-    12
+    7,
+    15,
+    25,
+    27,
+    28,
+    29,
+    30
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "red",
-   "display_color": "#4363d8",
+   "starting_owner": "england",
    "city_position": [
-    3082.0,
-    5099.0
+    4555.018875221868,
+    6335
    ]
   },
   {
@@ -33,22 +34,22 @@
    "key": "province_2",
    "name": "Province 2",
    "centroid": [
-    3926.41,
-    432.59
+    2736.71,
+    7022.3
    ],
-   "area_px": 60628,
+   "area_px": 116856,
    "neighbors": [
-    7
+    16,
+    17
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "blue",
-   "display_color": "#f58231",
+   "starting_owner": "england",
    "city_position": [
-    4111.0,
-    102.0
+    2814.8509091809633,
+    7072.980911068604
    ]
   },
   {
@@ -56,23 +57,28 @@
    "key": "province_3",
    "name": "Province 3",
    "centroid": [
-    5269.89,
-    7520.14
+    1650.82,
+    4773.44
    ],
-   "area_px": 793541,
+   "area_px": 815853,
    "neighbors": [
-    8,
-    10
+    31,
+    37,
+    46,
+    48,
+    49,
+    51,
+    52,
+    53
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "green",
-   "display_color": "#911eb4",
+   "starting_owner": "ireland",
    "city_position": [
-    5655.0,
-    7999.0
+    1914.1041839427062,
+    5083.4916416989945
    ]
   },
   {
@@ -80,23 +86,26 @@
    "key": "province_4",
    "name": "Province 4",
    "centroid": [
-    2149.05,
-    2214.22
+    2748.7,
+    3174.27
    ],
-   "area_px": 562742,
+   "area_px": 1341911,
    "neighbors": [
-    7,
-    11
+    22,
+    33,
+    41,
+    42,
+    43,
+    44
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "yellow",
-   "display_color": "#46f0f0",
+   "starting_owner": "alba",
    "city_position": [
-    1422.0,
-    2226.0
+    2888.6989822842065,
+    3173.2838929010595
    ]
   },
   {
@@ -104,23 +113,21 @@
    "key": "province_5",
    "name": "Province 5",
    "centroid": [
-    688.68,
-    5837.79
+    4077.64,
+    4892.04
    ],
-   "area_px": 521985,
+   "area_px": 22148,
    "neighbors": [
-    9,
-    12
+    20
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "red",
-   "display_color": "#bfef45",
+   "starting_owner": "england",
    "city_position": [
-    232.0,
-    6077.0
+    4108.891669807765,
+    4880.775717336765
    ]
   },
   {
@@ -128,23 +135,25 @@
    "key": "province_6",
    "name": "Province 6",
    "centroid": [
-    2962.77,
-    6800.35
+    2876.03,
+    5878.88
    ],
-   "area_px": 555577,
+   "area_px": 562525,
    "neighbors": [
-    1,
-    10
+    8,
+    17,
+    18,
+    19,
+    38
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "blue",
-   "display_color": "#fabed4",
+   "starting_owner": "wales",
    "city_position": [
-    2345.0,
-    7360.0
+    3083.6179419525065,
+    6241.311440460192
    ]
   },
   {
@@ -152,24 +161,25 @@
    "key": "province_7",
    "name": "Province 7",
    "centroid": [
-    3087.01,
-    2281.71
+    3647.5,
+    6700.23
    ],
-   "area_px": 888054,
+   "area_px": 231014,
    "neighbors": [
-    2,
-    4,
-    11
+    1,
+    9,
+    17,
+    18,
+    30
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "green",
-   "display_color": "#469990",
+   "starting_owner": "england",
    "city_position": [
-    3717.0,
-    2367.0
+    3621.594270637015,
+    6763.694784009015
    ]
   },
   {
@@ -177,24 +187,24 @@
    "key": "province_8",
    "name": "Province 8",
    "centroid": [
-    4540.84,
-    6067.39
+    3166.08,
+    5519.11
    ],
-   "area_px": 1821790,
+   "area_px": 276343,
    "neighbors": [
-    1,
-    3,
-    10
+    6,
+    19,
+    27,
+    38
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "yellow",
-   "display_color": "#dcbeff",
+   "starting_owner": "wales",
    "city_position": [
-    5093.0,
-    5906.0
+    3227.217602882633,
+    5674.520806978994
    ]
   },
   {
@@ -202,24 +212,21 @@
    "key": "province_9",
    "name": "Province 9",
    "centroid": [
-    1306.77,
-    4550.95
+    3927.36,
+    6880.03
    ],
-   "area_px": 1574546,
+   "area_px": 13153,
    "neighbors": [
-    5,
-    11,
-    12
+    7
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "red",
-   "display_color": "#9a6324",
+   "starting_owner": "england",
    "city_position": [
-    1204.0,
-    4268.0
+    3925.6678477195624,
+    6876.747895672566
    ]
   },
   {
@@ -227,25 +234,24 @@
    "key": "province_10",
    "name": "Province 10",
    "centroid": [
-    4151.23,
-    7496.4
+    678.07,
+    5914.88
    ],
-   "area_px": 533717,
+   "area_px": 411554,
    "neighbors": [
-    1,
-    3,
-    6,
-    8
+    47,
+    48,
+    49,
+    50
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "blue",
-   "display_color": "#808000",
+   "starting_owner": "ireland",
    "city_position": [
-    3938.0,
-    7999.0
+    783.5742178665661,
+    5929.440787595223
    ]
   },
   {
@@ -253,25 +259,24 @@
    "key": "province_11",
    "name": "Province 11",
    "centroid": [
-    2849.57,
-    3463.11
+    3702.29,
+    5158.17
    ],
-   "area_px": 1950057,
+   "area_px": 224648,
    "neighbors": [
-    1,
-    4,
-    7,
-    9
+    20,
+    26,
+    27,
+    38
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "green",
-   "display_color": "#ffd8b1",
+   "starting_owner": "england",
    "city_position": [
-    2641.0,
-    3556.0
+    3778.533943375083,
+    5284.5655856463145
    ]
   },
   {
@@ -279,24 +284,999 @@
    "key": "province_12",
    "name": "Province 12",
    "centroid": [
-    1571.54,
-    5573.01
+    5402.14,
+    6914.67
    ],
-   "area_px": 1012327,
+   "area_px": 333988,
    "neighbors": [
-    1,
-    5,
-    9
+    14
    ],
    "tags": {
     "terrain": "plains",
     "resources": []
    },
-   "starting_owner": "yellow",
-   "display_color": "#000075",
+   "starting_owner": "france",
    "city_position": [
-    1751.0,
-    5861.0
+    5153.657293629853,
+    6771.491550330639
+   ]
+  },
+  {
+   "id": 13,
+   "key": "province_13",
+   "name": "Province 13",
+   "centroid": [
+    4801.69,
+    7776.87
+   ],
+   "area_px": 758417,
+   "neighbors": [
+    14
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "france",
+   "city_position": [
+    5021.112401055409,
+    7870.835601679655
+   ]
+  },
+  {
+   "id": 14,
+   "key": "province_14",
+   "name": "Province 14",
+   "centroid": [
+    5267.36,
+    7384.36
+   ],
+   "area_px": 248558,
+   "neighbors": [
+    12,
+    13
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "france",
+   "city_position": [
+    5161.454052016585,
+    7395.232856060577
+   ]
+  },
+  {
+   "id": 15,
+   "key": "province_15",
+   "name": "Province 15",
+   "centroid": [
+    4739.28,
+    6478.27
+   ],
+   "area_px": 17615,
+   "neighbors": [
+    1
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    4710.84125087451,
+    6454.431249644353
+   ]
+  },
+  {
+   "id": 16,
+   "key": "province_16",
+   "name": "Province 16",
+   "centroid": [
+    2984.56,
+    6844.02
+   ],
+   "area_px": 65042,
+   "neighbors": [
+    2,
+    17
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    3021.0342560317977,
+    6839.904227053669
+   ]
+  },
+  {
+   "id": 17,
+   "key": "province_17",
+   "name": "Province 17",
+   "centroid": [
+    3034.47,
+    6662.01
+   ],
+   "area_px": 304664,
+   "neighbors": [
+    2,
+    6,
+    7,
+    16,
+    18,
+    30
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    3321.3447829667098,
+    6458.9134935677175
+   ]
+  },
+  {
+   "id": 18,
+   "key": "province_18",
+   "name": "Province 18",
+   "centroid": [
+    3554.39,
+    6133.23
+   ],
+   "area_px": 137359,
+   "neighbors": [
+    6,
+    7,
+    17,
+    19,
+    27,
+    30
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    3527.528129817545,
+    6158.60315070232
+   ]
+  },
+  {
+   "id": 19,
+   "key": "province_19",
+   "name": "Province 19",
+   "centroid": [
+    3391.0,
+    5889.88
+   ],
+   "area_px": 73222,
+   "neighbors": [
+    6,
+    8,
+    18,
+    27
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "wales",
+   "city_position": [
+    3388.578483026765,
+    5921.0442227640215
+   ]
+  },
+  {
+   "id": 20,
+   "key": "province_20",
+   "name": "Province 20",
+   "centroid": [
+    4029.37,
+    4721.93
+   ],
+   "area_px": 395515,
+   "neighbors": [
+    5,
+    11,
+    21,
+    22,
+    26,
+    38
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    4329.850283867533,
+    4796.000997999624
+   ]
+  },
+  {
+   "id": 21,
+   "key": "province_21",
+   "name": "Province 21",
+   "centroid": [
+    4414.91,
+    4874.42
+   ],
+   "area_px": 3201,
+   "neighbors": [
+    20
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    4406.048477268928,
+    4867.716900773449
+   ]
+  },
+  {
+   "id": 22,
+   "key": "province_22",
+   "name": "Province 22",
+   "centroid": [
+    3527.11,
+    4187.76
+   ],
+   "area_px": 797424,
+   "neighbors": [
+    4,
+    20,
+    33,
+    38
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    3796.4629300577644,
+    3989.1970917940794
+   ]
+  },
+  {
+   "id": 23,
+   "key": "province_23",
+   "name": "Province 23",
+   "centroid": [
+    5102.64,
+    5674.16
+   ],
+   "area_px": 16502,
+   "neighbors": [
+    24
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    5109.761204564169,
+    5661.074075208901
+   ]
+  },
+  {
+   "id": 24,
+   "key": "province_24",
+   "name": "Province 24",
+   "centroid": [
+    4903.82,
+    5575.46
+   ],
+   "area_px": 150467,
+   "neighbors": [
+    23,
+    25,
+    29
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    4863.237637677301,
+    5535.571245354706
+   ]
+  },
+  {
+   "id": 25,
+   "key": "province_25",
+   "name": "Province 25",
+   "centroid": [
+    4483.19,
+    5599.27
+   ],
+   "area_px": 162332,
+   "neighbors": [
+    1,
+    24,
+    26,
+    27,
+    29
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    4594.3028374370815,
+    5540.05348927807
+   ]
+  },
+  {
+   "id": 26,
+   "key": "province_26",
+   "name": "Province 26",
+   "centroid": [
+    4230.01,
+    5244.81
+   ],
+   "area_px": 268475,
+   "neighbors": [
+    11,
+    20,
+    25,
+    27
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    4285.027817160829,
+    5235.260902489308
+   ]
+  },
+  {
+   "id": 27,
+   "key": "province_27",
+   "name": "Province 27",
+   "centroid": [
+    3792.88,
+    5636.01
+   ],
+   "area_px": 356601,
+   "neighbors": [
+    1,
+    8,
+    11,
+    18,
+    19,
+    25,
+    26,
+    30,
+    38
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    3818.874163411116,
+    5652.109587362173
+   ]
+  },
+  {
+   "id": 28,
+   "key": "province_28",
+   "name": "Province 28",
+   "centroid": [
+    4895.11,
+    6007.08
+   ],
+   "area_px": 9231,
+   "neighbors": [
+    1,
+    29
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    4881.166624359982,
+    5997.242369461212
+   ]
+  },
+  {
+   "id": 29,
+   "key": "province_29",
+   "name": "Province 29",
+   "centroid": [
+    4775.85,
+    5894.5
+   ],
+   "area_px": 144890,
+   "neighbors": [
+    1,
+    24,
+    25,
+    28
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    4737.734730898532,
+    5903.115247070565
+   ]
+  },
+  {
+   "id": 30,
+   "key": "province_30",
+   "name": "Province 30",
+   "centroid": [
+    3877.08,
+    6196.73
+   ],
+   "area_px": 206958,
+   "neighbors": [
+    1,
+    7,
+    17,
+    18,
+    27
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "england",
+   "city_position": [
+    3814.3919167404456,
+    6176.532126395778
+   ]
+  },
+  {
+   "id": 31,
+   "key": "province_31",
+   "name": "Province 31",
+   "centroid": [
+    982.69,
+    4615.31
+   ],
+   "area_px": 276693,
+   "neighbors": [
+    3,
+    48
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "ireland",
+   "city_position": [
+    995.73641523169,
+    4666.183885116209
+   ]
+  },
+  {
+   "id": 32,
+   "key": "province_32",
+   "name": "Province 32",
+   "centroid": [
+    3057.72,
+    1622.47
+   ],
+   "area_px": 16007,
+   "neighbors": [
+    40
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3046.4874151242784,
+    1648.0643140861487
+   ]
+  },
+  {
+   "id": 33,
+   "key": "province_33",
+   "name": "Province 33",
+   "centroid": [
+    2808.19,
+    3930.1
+   ],
+   "area_px": 271512,
+   "neighbors": [
+    4,
+    22,
+    45
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    2835.4050092795587,
+    3945.612101703784
+   ]
+  },
+  {
+   "id": 34,
+   "key": "province_34",
+   "name": "Province 34",
+   "centroid": [
+    3177.08,
+    1339.69
+   ],
+   "area_px": 29868,
+   "neighbors": [],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "norway",
+   "city_position": [
+    3164.206449153065,
+    1282.729860224687
+   ]
+  },
+  {
+   "id": 35,
+   "key": "province_35",
+   "name": "Province 35",
+   "centroid": [
+    3908.69,
+    474.42
+   ],
+   "area_px": 42941,
+   "neighbors": [],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "norway",
+   "city_position": [
+    3935.4690858933886,
+    450.5791597624692
+   ]
+  },
+  {
+   "id": 36,
+   "key": "province_36",
+   "name": "Province 36",
+   "centroid": [
+    2612.17,
+    4514.24
+   ],
+   "area_px": 21502,
+   "neighbors": [],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    2616.2040493638874,
+    4503.7619617699065
+   ]
+  },
+  {
+   "id": 37,
+   "key": "province_37",
+   "name": "Province 37",
+   "centroid": [
+    1775.81,
+    4302.02
+   ],
+   "area_px": 58364,
+   "neighbors": [
+    3,
+    46
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "ireland",
+   "city_position": [
+    1763.7558719140563,
+    4300.798376291315
+   ]
+  },
+  {
+   "id": 38,
+   "key": "province_38",
+   "name": "Province 38",
+   "centroid": [
+    3343.72,
+    5045.59
+   ],
+   "area_px": 136367,
+   "neighbors": [
+    6,
+    8,
+    11,
+    20,
+    22,
+    27
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "wales",
+   "city_position": [
+    3367.1703009268344,
+    5096.415631367388
+   ]
+  },
+  {
+   "id": 39,
+   "key": "province_39",
+   "name": "Province 39",
+   "centroid": [
+    3367.02,
+    2300.93
+   ],
+   "area_px": 101112,
+   "neighbors": [
+    43,
+    44
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3424.00017942349,
+    2254.925434667132
+   ]
+  },
+  {
+   "id": 40,
+   "key": "province_40",
+   "name": "Province 40",
+   "centroid": [
+    2874.68,
+    1751.75
+   ],
+   "area_px": 149949,
+   "neighbors": [
+    32,
+    44
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3038.368861053328,
+    1759.694286099373
+   ]
+  },
+  {
+   "id": 41,
+   "key": "province_41",
+   "name": "Province 41",
+   "centroid": [
+    2028.02,
+    3014.99
+   ],
+   "area_px": 43601,
+   "neighbors": [
+    4
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    2015.43104811353,
+    3062.720504871919
+   ]
+  },
+  {
+   "id": 42,
+   "key": "province_42",
+   "name": "Province 42",
+   "centroid": [
+    3304.57,
+    2942.81
+   ],
+   "area_px": 24440,
+   "neighbors": [
+    4,
+    43
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3314.3996994656545,
+    2961.2387121326237
+   ]
+  },
+  {
+   "id": 43,
+   "key": "province_43",
+   "name": "Province 43",
+   "centroid": [
+    3383.17,
+    2582.27
+   ],
+   "area_px": 220223,
+   "neighbors": [
+    4,
+    39,
+    42,
+    44
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3557.956321594178,
+    2644.615518786024
+   ]
+  },
+  {
+   "id": 44,
+   "key": "province_44",
+   "name": "Province 44",
+   "centroid": [
+    2490.13,
+    2236.14
+   ],
+   "area_px": 658407,
+   "neighbors": [
+    4,
+    39,
+    40,
+    43
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    2660.8560967541166,
+    2149.3843702182653
+   ]
+  },
+  {
+   "id": 45,
+   "key": "province_45",
+   "name": "Province 45",
+   "centroid": [
+    2593.46,
+    4105.28
+   ],
+   "area_px": 22759,
+   "neighbors": [
+    33
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    2640.55971157674,
+    4142.486779618016
+   ]
+  },
+  {
+   "id": 46,
+   "key": "province_46",
+   "name": "Province 46",
+   "centroid": [
+    1514.9,
+    4057.28
+   ],
+   "area_px": 354418,
+   "neighbors": [
+    3,
+    37
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "ireland",
+   "city_position": [
+    1570.9402127289752,
+    4028.827171750006
+   ]
+  },
+  {
+   "id": 47,
+   "key": "province_47",
+   "name": "Province 47",
+   "centroid": [
+    1109.7,
+    5960.57
+   ],
+   "area_px": 173671,
+   "neighbors": [
+    10,
+    48,
+    49
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "ireland",
+   "city_position": [
+    1051.3527521881256,
+    6058.463026535903
+   ]
+  },
+  {
+   "id": 48,
+   "key": "province_48",
+   "name": "Province 48",
+   "centroid": [
+    830.36,
+    5086.79
+   ],
+   "area_px": 518207,
+   "neighbors": [
+    3,
+    10,
+    31,
+    47,
+    49,
+    50
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "ireland",
+   "city_position": [
+    876.8038396626838,
+    5177.601065558823
+   ]
+  },
+  {
+   "id": 49,
+   "key": "province_49",
+   "name": "Province 49",
+   "centroid": [
+    1576.4,
+    5656.8
+   ],
+   "area_px": 291864,
+   "neighbors": [
+    3,
+    10,
+    47,
+    48,
+    51
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "ireland",
+   "city_position": [
+    1822.6153889284494,
+    5717.484202931872
+   ]
+  },
+  {
+   "id": 50,
+   "key": "province_50",
+   "name": "Province 50",
+   "centroid": [
+    948.88,
+    5543.31
+   ],
+   "area_px": 35225,
+   "neighbors": [
+    10,
+    48
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "ireland",
+   "city_position": [
+    933.6337181593392,
+    5534.8169760011415
+   ]
+  },
+  {
+   "id": 51,
+   "key": "province_51",
+   "name": "Province 51",
+   "centroid": [
+    1596.15,
+    5325.73
+   ],
+   "area_px": 62741,
+   "neighbors": [
+    3,
+    49
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "ireland",
+   "city_position": [
+    1648.0664764030078,
+    5295.319945136405
+   ]
+  },
+  {
+   "id": 52,
+   "key": "province_52",
+   "name": "Province 52",
+   "centroid": [
+    1450.44,
+    4877.64
+   ],
+   "area_px": 28242,
+   "neighbors": [
+    3,
+    53
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "ireland",
+   "city_position": [
+    1477.5768409130412,
+    4889.392774179227
+   ]
+  },
+  {
+   "id": 53,
+   "key": "province_53",
+   "name": "Province 53",
+   "centroid": [
+    1554.31,
+    4785.44
+   ],
+   "area_px": 21951,
+   "neighbors": [
+    3,
+    52
+   ],
+   "tags": {
+    "terrain": "plains",
+    "resources": []
+   },
+   "starting_owner": "ireland",
+   "city_position": [
+    1562.8216586580245,
+    4804.1480682782185
    ]
   }
  ]

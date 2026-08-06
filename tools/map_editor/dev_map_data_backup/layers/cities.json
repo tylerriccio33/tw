@@ -1,9 +1,0 @@
-{
- "name": "cities",
- "title": "Cities",
- "input": "point",
- "kind": "identity",
- "raster": "cities.png",
- "nodata_color": "#000000",
- "snap_source": false
-}

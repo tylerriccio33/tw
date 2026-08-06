@@ -88,9 +88,20 @@ function defaultPointPayload(cfg) {
       payload[fieldName] = Object.fromEntries((fieldCfg.keys || []).map((k) => [k, 0]));
     } else if (fieldCfg.type === "tier") {
       payload[fieldName] = fieldCfg.min ?? 1;
+    } else if (fieldCfg.type === "name") {
+      payload[fieldName] = `New City ${Object.keys(points(cfg.name)).length + 1}`;
     }
   }
   return payload;
+}
+
+// Whichever payload field labels a free-point layer's dots with text
+// (cities' "name" field). Mirrors colorFieldName below.
+function nameFieldName(cfg) {
+  const found = Object.entries(cfg.point_fields || {}).find(
+    ([, fc]) => fc.type === "name"
+  );
+  return found ? found[0] : null;
 }
 
 // Whichever payload field colors a free-point layer's dots: "faction" if
@@ -560,9 +571,10 @@ function renderFreePointList(cfg) {
     const row = document.createElement("div");
     const isActive = String(pointId) === String(state.selected[name]);
     row.className = "feature-row" + (isActive ? " active" : "");
+    const nameField = nameFieldName(cfg);
     const colorField = colorFieldName(cfg);
-    const label = colorField ? payload[colorField] : null;
-    row.textContent = `${pointId}${label !== null && label !== undefined ? " - " + label : ""}`;
+    const label = nameField ? payload[nameField] : colorField ? payload[colorField] : null;
+    row.textContent = `${pointId}${label !== null && label !== undefined && label !== "" ? " - " + label : ""}`;
     row.onclick = () => {
       state.selected[name] = pointId;
       renderFeatureList();
@@ -578,7 +590,26 @@ function freePointForm(cfg, pointId, payload) {
   form.className = "point-form";
 
   for (const [fieldName, fieldCfg] of Object.entries(cfg.point_fields || {})) {
-    if (fieldCfg.type === "faction") {
+    if (fieldCfg.type === "name") {
+      const label = document.createElement("label");
+      label.textContent = fieldName;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = payload[fieldName] ?? "";
+      input.oninput = () => {
+        // Rebuilding the sidebar/map on every keystroke replaces this
+        // input and drops focus after one character - update the data
+        // live, but only re-render the list row and map label on blur.
+        payload[fieldName] = input.value;
+        scheduleAutosave();
+      };
+      input.onchange = () => {
+        renderFeatureList();
+        render();
+      };
+      label.appendChild(input);
+      form.appendChild(label);
+    } else if (fieldCfg.type === "faction") {
       const label = document.createElement("label");
       label.textContent = fieldName;
       const select = document.createElement("select");
@@ -1117,6 +1148,17 @@ function renderPointsOverlay(svg) {
         }
       }
       svg.appendChild(dot);
+
+      const nameField = isFree ? nameFieldName(cfg) : null;
+      const label = nameField ? value[nameField] : null;
+      if (label) {
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", x);
+        text.setAttribute("y", y - 10);
+        text.setAttribute("class", "point-label");
+        text.textContent = label;
+        svg.appendChild(text);
+      }
     }
   }
 }
