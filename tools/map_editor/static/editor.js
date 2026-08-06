@@ -378,31 +378,37 @@ function renderTools() {
   };
 
   if (cfg.input === "polygon") {
-    if (cfg.kind === "identity") addButton("+ New Province", newIdentityFeature);
-    addButton("+ New Shape", newShape);
-    addButton(
-      state.editMode ? "Edit Vertices: On" : "Edit Vertices: Off",
-      () => {
-        state.editMode = !state.editMode;
-        state.drawing = null;
-        renderTools();
-        render();
-      },
-      state.editMode,
-    );
-    addButton(
-      state.tool === "trace" ? "Trace: On (T)" : "Trace (T)",
-      toggleTrace,
-      state.tool === "trace",
-    );
+    // The province layer is grown from city points (see renderGrowPanel)
+    // rather than hand-traced, so it doesn't get the manual drawing tools.
+    const isProvinceLayer = state.activeLayer === state.manifest.province_layer;
+    if (!isProvinceLayer) {
+      if (cfg.kind === "identity") addButton("+ New Province", newIdentityFeature);
+      addButton("+ New Shape", newShape);
+      addButton(
+        state.editMode ? "Edit Vertices: On" : "Edit Vertices: Off",
+        () => {
+          state.editMode = !state.editMode;
+          state.drawing = null;
+          renderTools();
+          render();
+        },
+        state.editMode,
+      );
+      addButton(
+        state.tool === "trace" ? "Trace: On (T)" : "Trace (T)",
+        toggleTrace,
+        state.tool === "trace",
+      );
+    }
     if (cfg.kind === "mask") addButton("Autotrace from backdrop", runAutotrace);
     if (cfg.gapfill || cfg.clip_to) addButton("Fill Gaps", runFillGaps);
     addButton("Fix Crossings & Overlaps", runCleanShapes);
-    if (state.activeLayer === state.manifest.province_layer) renderGrowPanel();
+    if (isProvinceLayer) renderGrowPanel();
   } else if (cfg.input === "brush") {
     addButton("Brush", () => setTool("brush"), state.tool === "brush");
     addButton("Bucket", () => setTool("bucket"), state.tool === "bucket");
     addButton("Eraser", () => setTool("eraser"), state.tool === "eraser");
+    if (cfg.default_key) addButton("Reset Layer", resetLayerToDefault);
 
     const wrap = document.createElement("label");
     wrap.className = "slider";
@@ -1517,6 +1523,24 @@ function bucketFill() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   state.dirtyRasters.add(state.activeLayer);
   scheduleAutosave();
+}
+
+// Wipes the whole layer to nodata (transparent), the same state an
+// eraser stroke leaves behind. Unpainted pixels fall back to default_key
+// at export (export.py), so this is the true "start this layer over" —
+// unlike painting default_key opaquely, it doesn't leave a fill that's
+// indistinguishable from actually-painted plains.
+function resetLayerToDefault() {
+  const cfg = activeCfg();
+  if (!cfg || !cfg.default_key) return;
+  if (!confirm(`Clear all painted "${cfg.title}" (reverts to ${cfg.default_key})?`)) return;
+  const canvas = canvases[state.activeLayer];
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  state.dirtyRasters.add(state.activeLayer);
+  scheduleAutosave();
+  render();
 }
 
 function onBrushDown(event) {

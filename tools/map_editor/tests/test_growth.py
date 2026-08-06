@@ -230,10 +230,10 @@ def _claimed_area_within(package, project, province_id, region_mask):
 
 
 def test_a_terrain_key_with_no_sticky_flag_never_pauses_growth(package):
-    # Painting terrain that *isn't* flagged sticky (see init_package's
-    # TERRAIN_LEGEND - only "mountains" is) must not change growth's
-    # behavior at all. Confirms the mechanism is opt-in per legend key,
-    # not "any terrain slows growth".
+    # Painting terrain that isn't in growth.STICKY_KEYS (mountains, forest,
+    # river) must not change growth's behavior at all. Confirms the
+    # mechanism only applies to those hardcoded keys, not "any terrain
+    # slows growth".
     project = _project(package)
     hills = package.layers["terrain"].color_for_key("hills")
     paint(package, "terrain", hills, (25, 8, 50, 32))

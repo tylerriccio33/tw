@@ -109,9 +109,17 @@ def quantize_to_legend(raster: np.ndarray, cfg: mapfmt.LayerConfig) -> np.ndarra
     palette = np.array([mapfmt.hex_to_rgb(h) for h in palette_hex], dtype=np.int32)
 
     flat = raster.reshape(-1, 3).astype(np.int32)
-    # (pixels, palette, channels) -> nearest palette entry per pixel
-    distances = ((flat[:, None, :] - palette[None, :, :]) ** 2).sum(axis=2)
-    nearest = distances.argmin(axis=1)
+    # One (pixels, palette, channels) broadcast array would be huge at map
+    # resolution (tens of millions of pixels x palette size x 3 x 4 bytes
+    # easily hits multiple GB and OOM-kills the server) - loop over the
+    # small palette instead, keeping every intermediate O(pixels).
+    best_dist = np.full(flat.shape[0], np.iinfo(np.int32).max, dtype=np.int32)
+    nearest = np.zeros(flat.shape[0], dtype=np.intp)
+    for i, color in enumerate(palette):
+        dist = ((flat - color) ** 2).sum(axis=1)
+        better = dist < best_dist
+        best_dist[better] = dist[better]
+        nearest[better] = i
     return palette[nearest].astype(np.uint8).reshape(raster.shape)
 
 

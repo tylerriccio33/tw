@@ -46,12 +46,7 @@ FACTIONS = [
 TERRAIN_LEGEND = {
     "#7d9a4e": {"key": "plains", "name": "Plains", "move_cost": 1.0},
     "#8a7a5a": {"key": "hills", "name": "Hills", "move_cost": 1.5},
-    "#6b6b6b": {
-        "key": "mountains",
-        "name": "Mountains",
-        "move_cost": 2.5,
-        "sticky": True,
-    },
+    "#6b6b6b": {"key": "mountains", "name": "Mountains", "move_cost": 2.5},
     "#2f6d3d": {"key": "forest", "name": "Forest", "move_cost": 1.8},
     "#c9b688": {"key": "desert", "name": "Desert", "move_cost": 1.4},
 }

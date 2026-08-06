@@ -108,17 +108,19 @@ def _land_mask(package: mapfmt.Package, project: dict) -> np.ndarray:
     return mask
 
 
+STICKY_KEYS = frozenset({"mountains", "forest", "river"})
+
+
 def _sticky_layers(package: mapfmt.Package) -> list[tuple[str, list[str]]]:
-    """Layers with legend keys marked `"sticky": true`. A river, a
-    mountain range - any natural border growth gravitates toward and
-    sticks at. Just a flag legend entries may carry, like `move_cost`.
+    """Layers with legend keys in `STICKY_KEYS` (mountains, forest, river -
+    natural border growth gravitates toward and sticks at these).
     Returns (layer name, sticky keys) pairs."""
     out = []
     for name, cfg in package.layers.items():
         if cfg.kind != "class":
             continue
         sticky_keys = [
-            entry["key"] for entry in cfg.legend.values() if entry.get("sticky")
+            entry["key"] for entry in cfg.legend.values() if entry["key"] in STICKY_KEYS
         ]
         if sticky_keys:
             out.append((name, sticky_keys))
