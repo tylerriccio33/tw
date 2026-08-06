@@ -29,6 +29,19 @@ import numpy as np
 PIXELS_PER_TIER_STEP = 18  # how far a tier-1 city's border moves in one step
 SEED_RADIUS_PX = 4
 
+# A front that reaches a sticky pixel (a legend key marked "sticky": true,
+# e.g. a mountain range) pauses there instead of climbing straight over it.
+# It keeps growing anywhere else that step, and gets STICKY_HOLD_STEPS
+# attempts (building "temperature") before it's allowed to push across.
+# This is a heuristic, not a physical simulation - see growth.py's module
+# docstring and the "gravity" request this implements.
+STICKY_HOLD_STEPS = 4
+
+# trim_to_sticky_boundaries' cut zone: how far from a sticky pixel a claim
+# can be before it's considered "just barely" past the boundary and worth
+# reassigning to whichever city is actually closer.
+CUT_MARGIN_PX = 6
+
 
 class GrowthError(ValueError):
     """Something about growth's inputs doesn't make sense, reported to the
@@ -42,6 +55,7 @@ class GrowthError(ValueError):
 # never changes, and the claim buffer from the previous step is exactly
 # the input the next step needs (no reason to rebuild it from polygons).
 _land_mask_cache: dict[str, tuple[str, np.ndarray]] = {}
+_sticky_mask_cache: dict[str, tuple[str, np.ndarray]] = {}
 _claim_cache: dict[str, dict] = {}
 
 
@@ -91,6 +105,69 @@ def _land_mask(package: mapfmt.Package, project: dict) -> np.ndarray:
         return cached[1]
     mask = export.mask_bool(package, project, cfg.clip_to)
     _land_mask_cache[key] = (fingerprint, mask)
+    return mask
+
+
+def _sticky_layers(package: mapfmt.Package) -> list[tuple[str, list[str]]]:
+    """Layers with legend keys marked `"sticky": true`. A river, a
+    mountain range - any natural border growth gravitates toward and
+    sticks at. Just a flag legend entries may carry, like `move_cost`.
+    Returns (layer name, sticky keys) pairs."""
+    out = []
+    for name, cfg in package.layers.items():
+        if cfg.kind != "class":
+            continue
+        sticky_keys = [
+            entry["key"] for entry in cfg.legend.values() if entry.get("sticky")
+        ]
+        if sticky_keys:
+            out.append((name, sticky_keys))
+    return out
+
+
+def _sticky_fingerprint(
+    package: mapfmt.Package, sticky_layers: list[tuple[str, list[str]]]
+) -> str:
+    parts = []
+    for name, _keys in sticky_layers:
+        cfg = package.layers[name]
+        if cfg.input == "brush":
+            path = package.raster_path(name)
+            try:
+                stat = path.stat()
+                parts.append((name, stat.st_mtime_ns, stat.st_size))
+            except FileNotFoundError:
+                parts.append((name, None, None))
+        else:
+            # A brush usually paints sticky terrain; this just avoids
+            # crashing on a polygon/point class layer.
+            parts.append((name, "non-brush"))
+    return repr(parts)
+
+
+def _sticky_mask(package: mapfmt.Package, project: dict) -> np.ndarray:
+    """Boolean union of every sticky-flagged pixel across every class
+    layer. All-False (and effectively free once cached) on a package with
+    no sticky terrain authored - growth behaves exactly as before."""
+    height, width = package.size[1], package.size[0]
+    sticky_layers = _sticky_layers(package)
+    if not sticky_layers:
+        return np.zeros((height, width), dtype=bool)
+
+    key = _cache_key(package)
+    fingerprint = _sticky_fingerprint(package, sticky_layers)
+    cached = _sticky_mask_cache.get(key)
+    if cached is not None and cached[0] == fingerprint:
+        return cached[1]
+
+    mask = np.zeros((height, width), dtype=bool)
+    for name, keys in sticky_layers:
+        cfg = package.layers[name]
+        raster = export.rasterize_layer(project, package, cfg, package.size, None)
+        for k in keys:
+            rgb = np.array(mapfmt.hex_to_rgb(cfg.color_for_key(k)), dtype=np.uint8)
+            mask |= np.all(raster == rgb, axis=-1)
+    _sticky_mask_cache[key] = (fingerprint, mask)
     return mask
 
 
@@ -165,6 +242,7 @@ def start(package: mapfmt.Package, project: dict) -> dict:
         "tier_field": tier_field,
         "finished_cities": [],
         "bbox": bbox,
+        "sticky_hold": {},
     }
     project["layers"][province_layer]["growth"] = meta
 
@@ -195,6 +273,8 @@ def step(package: mapfmt.Package, project: dict) -> dict:
     city_points = mapfmt.project_points(project, city_cfg.name)
 
     mask = _land_mask(package, project)
+    sticky = _sticky_mask(package, project)
+    sticky_hold: dict[str, int] = meta.setdefault("sticky_hold", {})
     size = (mask.shape[1], mask.shape[0])
     height, width = mask.shape
     prior_step = int(meta.get("step", 0))
@@ -277,7 +357,28 @@ def step(package: mapfmt.Package, project: dict) -> dict:
             & (claim[y0:y1, x0:x1] == 0)
             & ~taken_this_step[y0:y1, x0:x1]
         )
+
+        # Gravity: a front that reaches a sticky boundary (river, mountain
+        # range) sets aside those pixels and keeps growing everywhere else,
+        # building "temperature" each step it's still touching one. Only
+        # once that reaches STICKY_HOLD_STEPS does it punch through and
+        # claim the sticky pixels too, same as everything else.
+        sticky_available = available & sticky[y0:y1, x0:x1]
+        if sticky_available.any():
+            hold = sticky_hold.get(city_id, 0) + 1
+            if hold < STICKY_HOLD_STEPS:
+                sticky_hold[city_id] = hold
+                available = available & ~sticky[y0:y1, x0:x1]
+            else:
+                sticky_hold[city_id] = 0  # broke through - reset for the next one
+        else:
+            sticky_hold.pop(city_id, None)
+
         if not available.any():
+            if sticky_available.any():
+                # Paused at the boundary, not boxed in - try again next step.
+                growing_cities.append(city_id)
+                continue
             finished_cities.append(city_id)
             continue
         new_claim[y0:y1, x0:x1][available] = pid
@@ -322,3 +423,76 @@ def step(package: mapfmt.Package, project: dict) -> dict:
         "finished_cities": finished_cities,
         "done": changed_px == 0,
     }
+
+
+def trim_to_sticky_boundaries(
+    package: mapfmt.Package, project: dict, margin_px: int = CUT_MARGIN_PX
+) -> dict:
+    """Post-processing pass for after growth finishes.
+
+    Pulls each province's claim back onto a sticky boundary (river,
+    mountain range) instead of stopping a few pixels short.
+
+    Growth's tier-order tie-breaking can let one province nose slightly
+    across a natural border first. That leaves an arbitrary bulge on the
+    "wrong" side. This doesn't route the border exactly along the
+    boundary. Within margin_px of any sticky pixel, it reassigns the
+    pixel to whichever city center is nearest. That's a Voronoi re-cut
+    restricted to the boundary strip. A placeholder heuristic, not a
+    promise the cut always lands well.
+
+    Idempotent: rerunning with nothing changed reports changed_px == 0.
+    """
+    province_cfg = package.province_layer
+    meta = project.get("layers", {}).get(province_cfg.name, {}).get("growth")
+    if not meta or not meta.get("seed_of"):
+        raise GrowthError("no grown provinces to trim - run Start/Step first")
+
+    city_cfg = _city_layer(package)
+    city_points = mapfmt.project_points(project, city_cfg.name)
+    seed_of: dict[str, str] = meta["seed_of"]
+
+    sticky = _sticky_mask(package, project)
+    features = project["layers"][province_cfg.name]["features"]
+    if not sticky.any():
+        return {"features": features, "changed_px": 0}
+
+    raster = export.rasterize_polygon_layer(project, province_cfg, package.size)
+    claim = export.id_buffer(raster)
+
+    radius = max(1, int(margin_px))
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+    )
+    zone = cv2.dilate(sticky.astype(np.uint8), kernel) > 0
+    zone &= claim > 0
+
+    ys, xs = np.nonzero(zone)
+    if ys.size == 0:
+        return {"features": features, "changed_px": 0}
+
+    city_ids = sorted(seed_of, key=lambda pid: int(pid))
+    centers = np.array(
+        [
+            [city_points[seed_of[pid]]["x"], city_points[seed_of[pid]]["y"]]
+            for pid in city_ids
+        ]
+    )
+    points = np.stack([xs, ys], axis=1).astype(np.float64)
+    dist2 = ((points[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
+    nearest = np.array([int(city_ids[i]) for i in dist2.argmin(axis=1)])
+
+    new_claim = claim.copy()
+    new_claim[ys, xs] = nearest
+
+    changed_px = int((new_claim != claim).sum())
+    features = export.revectorize(export.id_raster(new_claim), province_cfg, project)
+    project["layers"][province_cfg.name]["features"] = features
+
+    cache_key = _cache_key(package)
+    cached = _claim_cache.get(cache_key)
+    if cached is not None:
+        cached["claim"] = new_claim
+
+    print(f"growth trim: {changed_px}px reassigned near sticky boundaries")
+    return {"features": features, "changed_px": changed_px}

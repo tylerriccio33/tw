@@ -482,7 +482,12 @@ function renderGrowPanel() {
   stepBtn.className = "primary";
   stepBtn.disabled = !growth?.seed_of;
   stepBtn.onclick = runGrowStep;
-  row.append(startBtn, stepBtn);
+  const trimBtn = document.createElement("button");
+  trimBtn.textContent = "Trim to Boundaries";
+  trimBtn.title = "Pull borders back onto sticky terrain (rivers, mountains)";
+  trimBtn.disabled = !growth?.seed_of;
+  trimBtn.onclick = runGrowTrim;
+  row.append(startBtn, stepBtn, trimBtn);
   wrap.appendChild(row);
 
   el.tools.appendChild(wrap);
@@ -1675,6 +1680,29 @@ async function runGrowStep() {
       ? `Step ${result.step}: nothing left to grow - every city is done.`
       : `Step ${result.step}: grew ${result.changed_px}px, ` +
           `${result.growing_cities.length} city(ies) still expanding.`,
+  );
+}
+
+async function runGrowTrim() {
+  setStatus("Trimming borders to sticky boundaries...");
+  await flushRasters();
+  const response = await fetch("/api/grow/trim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project: state.project }),
+  });
+  const result = await response.json();
+  if (!result.ok) return setStatus(result.error, true);
+
+  const province = state.manifest.province_layer;
+  state.project.layers[province].features = result.features;
+  state.snapIndex = null;
+  renderSidebar();
+  render();
+  setStatus(
+    result.changed_px
+      ? `Trimmed ${result.changed_px}px back onto sticky boundaries.`
+      : "Nothing to trim - no borders overshot a sticky boundary.",
   );
 }
 
