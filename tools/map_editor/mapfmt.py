@@ -383,6 +383,18 @@ class Package:
         return self.root / self.manifest.get("backdrop", "backdrop.png")
 
     @property
+    def reference_path(self) -> Path | None:
+        """An optional real-world image (e.g. Natural Earth shaded relief)
+        shown in the editor as a toggleable visual reference. Purely a
+        UI aid - not a layer, never exported or promoted, ignored by
+        export.py and the game entirely."""
+        name = self.manifest.get("reference")
+        if not name:
+            return None
+        path = self.root / name
+        return path if path.is_file() else None
+
+    @property
     def layers_dir(self) -> Path:
         return self.root / LAYERS_DIRNAME
 

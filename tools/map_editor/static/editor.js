@@ -23,6 +23,7 @@ const state = {
   project: null,
   activeLayer: null,
   visible: {},
+  referenceVisible: false,
   magnet: {},
   selected: {}, // layer -> feature index (identity) or legend key (others)
   drawing: null, // points of the ring being placed
@@ -213,6 +214,9 @@ async function boot() {
   el.status = document.getElementById("status");
   el.stage = document.getElementById("stage");
   el.backdrop = document.getElementById("bgImage");
+  el.reference = document.getElementById("referenceImage");
+  el.referenceRow = document.getElementById("referenceRow");
+  el.referenceToggle = document.getElementById("referenceToggle");
   el.overlay = document.getElementById("overlay");
   el.hint = document.getElementById("hint");
   el.viewport = document.getElementById("viewport");
@@ -228,6 +232,17 @@ async function boot() {
   el.backdrop.src = "/api/backdrop";
   el.overlay.setAttribute("viewBox", `0 0 ${width} ${height}`);
   el.overlay.setAttribute("preserveAspectRatio", "none");
+
+  if (state.manifest.has_reference) {
+    el.referenceRow.style.display = "flex";
+    el.reference.src = "/api/reference";
+    el.referenceToggle.onclick = () => {
+      state.referenceVisible = !state.referenceVisible;
+      el.reference.style.display = state.referenceVisible ? "block" : "none";
+      el.referenceToggle.textContent = state.referenceVisible ? "◉" : "○";
+      el.referenceToggle.classList.toggle("on", state.referenceVisible);
+    };
+  }
 
   for (const name of state.manifest.layer_order) {
     state.visible[name] = true;

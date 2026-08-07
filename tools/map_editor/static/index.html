@@ -11,6 +11,10 @@
 
       <div class="section-label">Layers</div>
       <div id="layerList"></div>
+      <div id="referenceRow" class="layer-row" style="display: none">
+        <span class="layer-title">Reference (Natural Earth)</span>
+        <button id="referenceToggle" class="icon" title="Show reference image">○</button>
+      </div>
 
       <div id="tools"></div>
 
@@ -32,6 +36,7 @@
     <div id="viewport">
       <div id="stage">
         <img id="bgImage" />
+        <img id="referenceImage" style="display: none" />
         <svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
     </div>

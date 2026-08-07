@@ -62,6 +62,7 @@ def manifest_payload(package: mapfmt.Package) -> dict:
         "layer_order": package.layer_order,
         "province_layer": package.manifest["province_layer"],
         "city_layer": package.manifest.get("city_layer"),
+        "has_reference": package.reference_path is not None,
         "factions": package.factions,
         "layers": {
             name: {
@@ -366,6 +367,12 @@ def make_handler(package_dir: Path):
                 elif path == "/api/backdrop":
                     package, _ = load()
                     self._send_file(package.backdrop_path)
+                elif path == "/api/reference":
+                    package, _ = load()
+                    if package.reference_path is None:
+                        self.send_error(404, "no reference image configured")
+                        return
+                    self._send_file(package.reference_path)
                 elif path.startswith("/api/layer/"):
                     package, _ = load()
                     name = path[len("/api/layer/") :].removesuffix(".png")
