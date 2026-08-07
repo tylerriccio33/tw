@@ -5,6 +5,7 @@
   8000
  ],
  "backdrop": "backdrop.png",
+ "reference": "reference.png",
  "factions": "factions.json",
  "province_layer": "provinces",
  "city_layer": "cities",

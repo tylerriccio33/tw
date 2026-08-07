@@ -35,12 +35,12 @@ SEED_RADIUS_PX = 4
 # attempts (building "temperature") before it's allowed to push across.
 # This is a heuristic, not a physical simulation - see growth.py's module
 # docstring and the "gravity" request this implements.
-STICKY_HOLD_STEPS = 4
+STICKY_HOLD_STEPS = 8
 
 # trim_to_sticky_boundaries' cut zone: how far from a sticky pixel a claim
 # can be before it's considered "just barely" past the boundary and worth
 # reassigning to whichever city is actually closer.
-CUT_MARGIN_PX = 6
+CUT_MARGIN_PX = 10
 
 
 class GrowthError(ValueError):
