@@ -43,12 +43,15 @@ FACTIONS = [
     {"key": "yellow", "name": "Yellow", "color": "#daa520", "money": 100},
 ]
 
+# Movement cost for these keys is a global constant (growth.py's
+# TERRAIN_MOVE_COST), not authored here - keeping it off the legend means
+# it can't drift between map packages.
 TERRAIN_LEGEND = {
-    "#7d9a4e": {"key": "plains", "name": "Plains", "move_cost": 1.0},
-    "#8a7a5a": {"key": "hills", "name": "Hills", "move_cost": 1.5},
-    "#6b6b6b": {"key": "mountains", "name": "Mountains", "move_cost": 2.5},
-    "#2f6d3d": {"key": "forest", "name": "Forest", "move_cost": 1.8},
-    "#c9b688": {"key": "desert", "name": "Desert", "move_cost": 1.4},
+    "#7d9a4e": {"key": "plains", "name": "Plains"},
+    "#8a7a5a": {"key": "hills", "name": "Hills"},
+    "#6b6b6b": {"key": "mountains", "name": "Mountains"},
+    "#2f6d3d": {"key": "forest", "name": "Forest"},
+    "#c9b688": {"key": "desert", "name": "Desert"},
 }
 
 CITY_TIER_LEGEND = {
@@ -59,6 +62,8 @@ CITY_TIER_LEGEND = {
     "#123b73": {"key": "5", "name": "Tier 5"},
 }
 
+# Whether these keys pull growth's frontier toward them is a global
+# constant too (growth.py's ATTRACTION_KEYS), for the same reason.
 RESOURCE_LEGEND = {
     "#9aa0a6": {"key": "iron", "name": "Iron"},
     "#d4af37": {"key": "gold", "name": "Gold"},

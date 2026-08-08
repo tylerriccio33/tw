@@ -118,6 +118,9 @@ def test_growth_never_claims_off_the_land_mask(package):
 
 
 def test_growth_settles_and_reports_done(package):
+    # done means the shared frontier has emptied out - nothing left
+    # reachable for any city - which can happen on the very step that
+    # claims the last pixel, not just on a trailing no-op step.
     project = _project(package)
     project["layers"]["cities"]["points"] = {"p1": _city(20, 20, 5)}
     growth.start(package, project)
@@ -129,7 +132,8 @@ def test_growth_settles_and_reports_done(package):
             break
 
     assert result["done"]
-    assert result["changed_px"] == 0
+    another = growth.step(package, project)
+    assert another["changed_px"] == 0
 
 
 def test_start_over_resets_a_grown_province(package):
@@ -225,153 +229,108 @@ def _claimed_area_within(package, project, province_id, region_mask):
 
 
 # ---------------------------------------------------------------------------
-# sticky boundaries: gravity toward natural borders + the trim pass
+# weighted terrain: move_cost slows growth, "attracts" pulls it
 # ---------------------------------------------------------------------------
 
 
-def test_a_terrain_key_with_no_sticky_flag_never_pauses_growth(package):
-    # Painting terrain that isn't in growth.STICKY_KEYS (mountains, forest,
-    # river) must not change growth's behavior at all. Confirms the
-    # mechanism only applies to those hardcoded keys, not "any terrain
-    # slows growth".
+CLIMATE_LAYER = {
+    "name": "climate",
+    "title": "Climate",
+    "input": "brush",
+    "kind": "class",
+    "raster": "climate.png",
+    "nodata_color": "#000000",
+    "default_key": "temperate",
+    "snap_source": False,
+    "clip_to": "coastline:land",
+    "legend": {
+        "#4a7fb5": {"key": "arctic", "name": "Arctic"},
+        "#7fb54a": {"key": "temperate", "name": "Temperate"},
+    },
+    "reduce": {"into": "climate", "mode": "majority"},
+}
+
+
+def test_a_class_layer_with_unrecognized_keys_never_affects_cost(tmp_path):
+    # Move cost is a global table (growth.TERRAIN_MOVE_COST) keyed by
+    # key name, not something any map package can author. Painting a
+    # class layer whose keys aren't in that table (a "climate" layer,
+    # say) must leave the cost grid at 1.0 everywhere, even though the
+    # package paints a fully legitimate class layer.
+    package = make_package(tmp_path, extra_layers={"climate": CLIMATE_LAYER})
     project = _project(package)
-    hills = package.layers["terrain"].color_for_key("hills")
-    paint(package, "terrain", hills, (25, 8, 50, 32))
+    paint(package, "climate", "#4a7fb5", (25, 8, 50, 32))
     project["layers"]["cities"]["points"] = {"p1": _city(15, 20, 1)}
     growth.start(package, project)
 
-    assert growth._sticky_mask(package, project).sum() == 0
-    result = growth.step(package, project)
-    assert result["changed_px"] > 0
-    assert "sticky_hold" not in result["growth"] or not result["growth"]["sticky_hold"]
+    assert "climate" not in growth._move_cost_layers(package)
+    cost = growth._terrain_cost_grid(package, project)
+    assert np.allclose(cost, 1.0)
 
 
-def test_step_holds_at_a_sticky_boundary_before_punching_through(package):
-    # A city right next to a painted mountain band: the front reaches the
-    # mountains almost immediately (tier-1 radius covers the ~10px gap in
-    # one step), but shouldn't claim any mountain pixel until it's touched
-    # the boundary STICKY_HOLD_STEPS times in a row - growing normally
-    # elsewhere in the meantime, never marked "finished" while paused.
+def test_higher_move_cost_terrain_slows_the_front(package):
+    # A tier-1 city right next to a painted mountain band (move_cost 2.5):
+    # after enough steps to reach both plains and mountains, the province
+    # should have claimed noticeably less mountain area than it would
+    # plains area at the same distance, because each mountain pixel eats
+    # more of the shared cost budget.
     project = _project(package)
     mountains = package.layers["terrain"].color_for_key("mountains")
     paint(package, "terrain", mountains, (25, 8, 50, 32))
     project["layers"]["cities"]["points"] = {"p1": _city(15, 20, 1)}
     growth.start(package, project)
 
-    sticky = growth._sticky_mask(package, project)
-    assert sticky.sum() > 0
+    mountain_mask = growth._terrain_cost_grid(package, project) > 1.0
+    assert mountain_mask.sum() > 0
 
-    claimed_sticky_by_step = []
-    for _ in range(growth.STICKY_HOLD_STEPS + 1):
-        result = growth.step(package, project)
-        assert "p1" not in result["finished_cities"]
-        claimed_sticky_by_step.append(_claimed_area_within(package, project, 1, sticky))
-
-    # No mountain pixel claimed for the first STICKY_HOLD_STEPS - 1 steps...
-    assert all(n == 0 for n in claimed_sticky_by_step[: growth.STICKY_HOLD_STEPS - 1])
-    # ...then the front breaks through.
-    assert claimed_sticky_by_step[growth.STICKY_HOLD_STEPS - 1] > 0
-
-
-def test_step_keeps_growing_elsewhere_while_paused_at_a_boundary(big_package):
-    # The pause is local to the sticky front, not the whole province: a
-    # city touching a mountain band on one side should still be able to
-    # claim ordinary land elsewhere while held at the boundary. Uses the
-    # big, open map so there's room left to grow into once the front
-    # first reaches the mountains (a small map's open land runs out in
-    # one step, which would mask this).
-    package = big_package
-    project = mapfmt.empty_project(package.size, package)
-    project["layers"]["coastline"]["features"] = [
-        {"key": "land", "polygons": [land_rect(BIG_LAND_BOX)]}
-    ]
-    mountains = package.layers["terrain"].color_for_key("mountains")
-    paint(package, "terrain", mountains, (150, 10, 590, 390))
-    project["layers"]["cities"]["points"] = {"p1": _city(100, 200, 1)}
-    growth.start(package, project)
-
-    for _ in range(3):  # reach the boundary, first hold tick
+    for _ in range(2):
         growth.step(package, project)
-    growth_meta = project["layers"]["provinces"]["growth"]
-    assert growth_meta["sticky_hold"].get("p1", 0) >= 1
+    early_mountain_area = _claimed_area_within(package, project, 1, mountain_mask)
 
-    area_before = _province_area(package, project, 1)
-    growth.step(package, project)  # still held, but land elsewhere is open
-    area_after = _province_area(package, project, 1)
-
-    assert growth_meta["sticky_hold"]["p1"] < growth.STICKY_HOLD_STEPS
-    assert area_after > area_before
-
-
-def test_trim_requires_a_grown_province(package):
-    project = _project(package)
-    with pytest.raises(growth.GrowthError, match="Start/Step"):
-        growth.trim_to_sticky_boundaries(package, project)
-
-
-def test_trim_is_a_noop_without_any_sticky_terrain(package):
-    project = _project(package)
-    project["layers"]["cities"]["points"] = {"p1": _city(20, 20, 3)}
-    growth.start(package, project)
-    growth.step(package, project)
-
-    result = growth.trim_to_sticky_boundaries(package, project)
-
-    assert result["changed_px"] == 0
-
-
-def test_trim_cuts_an_overshoot_back_toward_the_nearer_city(package):
-    # A fast (tier 5) city and a slow (tier 1) city on opposite sides of a
-    # mountain band race to grow into it - the fast city dominates the
-    # contest and, once growth settles, has claimed land on the far side
-    # of the boundary that's actually closer to the slow city. Trim should
-    # pull some of that back.
-    project = _project(package)
-    mountains = package.layers["terrain"].color_for_key("mountains")
-    paint(package, "terrain", mountains, (28, 8, 32, 32))
-    project["layers"]["cities"]["points"] = {
-        "p1": _city(15, 20, 5),
-        "p2": _city(45, 20, 1),
-    }
-    growth.start(package, project)
     result = None
     for _ in range(30):
         result = growth.step(package, project)
         if result["done"]:
             break
     assert result["done"]
+    final_mountain_area = _claimed_area_within(package, project, 1, mountain_mask)
 
-    fast_area_before = _province_area(package, project, 1)
-    slow_area_before = _province_area(package, project, 2)
-    assert fast_area_before > slow_area_before  # confirms the overshoot happened
-
-    trim_result = growth.trim_to_sticky_boundaries(package, project)
-
-    assert trim_result["changed_px"] > 0
-    slow_area_after = _province_area(package, project, 2)
-    assert slow_area_after > slow_area_before
-    assert export.validate_package(project, package) == []
+    # Eventually the whole reachable mountain band gets claimed (nothing
+    # else to grow into), but early on - while cheap plains are still
+    # available - growth should have claimed disproportionately little of
+    # it relative to how much mountain there is to claim.
+    assert early_mountain_area < final_mountain_area
+    assert final_mountain_area == mountain_mask.sum()
 
 
-def test_trim_is_idempotent(package):
+def test_resource_tiles_pull_growth_toward_them(package):
+    # A resource painted off to one side (with "attracts": true, same as
+    # the real resources legend) should make a city's early growth reach
+    # farther toward it than in a plain direction the same distance away,
+    # because the discounted cost lets the frontier stretch there first.
     project = _project(package)
-    mountains = package.layers["terrain"].color_for_key("mountains")
-    paint(package, "terrain", mountains, (28, 8, 32, 32))
-    project["layers"]["cities"]["points"] = {
-        "p1": _city(15, 20, 5),
-        "p2": _city(45, 20, 1),
-    }
+    gold = package.layers["resources"].color_for_key("gold")
+    paint(package, "resources", gold, (46, 18, 50, 22))  # east edge, mid-height
+    project["layers"]["cities"]["points"] = {"p1": _city(20, 20, 1)}
     growth.start(package, project)
-    result = None
-    for _ in range(30):
-        result = growth.step(package, project)
-        if result["done"]:
-            break
 
-    growth.trim_to_sticky_boundaries(package, project)
-    second = growth.trim_to_sticky_boundaries(package, project)
+    attraction_layers = growth._attraction_layers(package)
+    assert any(name == "resources" for name, _ in attraction_layers)
 
-    assert second["changed_px"] == 0
+    cost = growth._terrain_cost_grid(package, project)
+    # The resource discounts cost right next to it more steeply than
+    # cost farther away.
+    assert cost[20, 44] < cost[20, 12] < 1.0
+
+    growth.step(package, project)
+    claim = export.id_buffer(
+        export.rasterize_polygon_layer(project, package.province_layer, package.size)
+    )
+    # The claim should have reached farther east (toward gold, x=46-50)
+    # than an equal distance west (away from it) in the same step.
+    east_reach = int((claim[20, 20:46] == 1).sum())
+    west_reach = int((claim[20, 14:20] == 1).sum())
+    assert east_reach > west_reach
 
 
 # ---------------------------------------------------------------------------
@@ -404,12 +363,13 @@ def test_a_city_missing_the_tier_field_defaults_to_tier_one_speed(big_package):
     assert untiered_area == explicit_tier_one_area
 
 
-def test_tier_speed_scales_linearly_with_pixels_per_tier_step(package):
-    # radius = max(1, tier) * PIXELS_PER_TIER_STEP. Two cities far enough
-    # apart that neither claim reaches the other (or the coastline) in one
-    # step should each grow into a disc of radius tier * step size, so the
-    # ratio of claimed areas after one step should track the square of the
-    # ratio of tiers.
+def test_tier_speed_scales_linearly_with_the_step_cost_budget(package):
+    # Tier divides cost per pixel, so a tier-N city's frontier
+    # reaches N times as far in weighted-cost terms for the same shared
+    # STEP_COST_BUDGET. Two cities far enough apart that neither claim
+    # reaches the other (or the coastline) in one step should each grow
+    # into a disc of radius roughly tier * budget, so the ratio of claimed
+    # areas after one step should track the square of the ratio of tiers.
     project = _project(package)
     project["layers"]["cities"]["points"] = {
         "p1": _city(20, 20, 1),

@@ -488,14 +488,6 @@ def make_handler(package_dir: Path):
                     mapfmt.save_project(package_dir, project)
                     self._send_json({"ok": True, **result})
 
-                elif path == "/api/grow/trim":
-                    package, project = load()
-                    payload = self._json_body()
-                    project = payload.get("project") or project
-                    result = growth.trim_to_sticky_boundaries(package, project)
-                    mapfmt.save_project(package_dir, project)
-                    self._send_json({"ok": True, **result})
-
                 else:
                     self.send_error(404, "Not found")
 
