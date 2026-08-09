@@ -442,6 +442,45 @@ button.icon:disabled {
   pointer-events: none;
 }
 
+.road-frontier {
+  r: 10;
+  fill: #21e6c1;
+  stroke: #012;
+  stroke-width: 2;
+  pointer-events: none;
+  animation: road-frontier-pulse 1.1s ease-in-out infinite;
+}
+
+.road-frontier-label {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #012;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.road-search-zone {
+  fill: rgb(33 230 193 / 6%);
+  stroke: rgb(33 230 193 / 45%);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  pointer-events: none;
+}
+
+@keyframes road-frontier-pulse {
+  0%,
+  100% {
+    r: 9;
+    opacity: 1;
+  }
+
+  50% {
+    r: 13;
+    opacity: 0.6;
+  }
+}
+
 /* The locked-on boundary during a trace, and the stretch you're about to
    take from it. */
 .trace-rail {

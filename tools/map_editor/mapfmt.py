@@ -379,6 +379,13 @@ class Package:
         return self.layers[name]
 
     @property
+    def road_layer(self) -> LayerConfig | None:
+        name = self.manifest.get("road_layer")
+        if not name:
+            return None
+        return self.layers[name]
+
+    @property
     def backdrop_path(self) -> Path:
         return self.root / self.manifest.get("backdrop", "backdrop.png")
 
@@ -474,6 +481,20 @@ def load_package(root: Path) -> Package:
                     "needs a point_fields entry of type='tier' to drive province "
                     "growth speed"
                 )
+
+    road_layer = manifest.get("road_layer")
+    if road_layer:
+        if road_layer not in layers:
+            raise PackageError(
+                f"road_layer '{road_layer}' isn't one of the declared layers"
+            )
+        cfg = layers[road_layer]
+        if cfg.input != "brush" or cfg.kind != "class":
+            raise PackageError(
+                f"road_layer '{road_layer}' must be input=brush, kind=class "
+                f"(roads.py writes its raster directly), got input={cfg.input}, "
+                f"kind={cfg.kind}"
+            )
 
     _check_mask_references(layers, manifest["layers"])
     return Package(root=root, manifest=manifest, layers=layers, factions=factions)

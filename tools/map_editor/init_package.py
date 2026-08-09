@@ -72,6 +72,16 @@ RESOURCE_LEGEND = {
     "#e8e8e8": {"key": "salt", "name": "Salt"},
 }
 
+# Never hand-painted - roads.py writes this raster directly from its
+# traffic simulation. The keys are still a plain legend, same as any
+# other class layer, so nothing downstream needs to know that.
+ROAD_LEGEND = {
+    "#c9a24d": {"key": "road_t1", "name": "Trail"},
+    "#e8722c": {"key": "road_t2", "name": "Road"},
+    "#d1272f": {"key": "road_t3", "name": "Highway"},
+    "#39c8ff": {"key": "road_pending", "name": "Under Construction"},
+}
+
 # Palette the editor cycles through as provinces appear. These are display
 # swatches for the editor and preview only - a province's color on the
 # game map is whoever owns it this turn.
@@ -108,15 +118,18 @@ def manifest(size: tuple[int, int]) -> dict:
         "factions": "factions.json",
         "province_layer": "provinces",
         "city_layer": "cities",
+        "road_layer": "roads",
         # Order is the draw order, the export order, and the default snap
         # order all at once. Trace the shore, cut provinces against it,
-        # paint terrain inside those, assign who starts where, then place
-        # each province's capital.
+        # paint terrain inside those, run roads between cities and
+        # resources, assign who starts where, then place each province's
+        # capital.
         "layers": [
             "coastline",
             "provinces",
             "terrain",
             "resources",
+            "roads",
             "ownership",
             "cities",
         ],
@@ -179,6 +192,17 @@ def layer_configs() -> dict[str, dict]:
             "clip_to": "coastline:land",
             "legend": RESOURCE_LEGEND,
             "reduce": {"into": "resources", "mode": "any"},
+        },
+        "roads": {
+            "name": "roads",
+            "title": "Roads",
+            "input": "brush",
+            "kind": "class",
+            "raster": "roads.png",
+            "nodata_color": "#000000",
+            "snap_source": False,
+            "clip_to": "coastline:land",
+            "legend": ROAD_LEGEND,
         },
         "ownership": {
             "name": "ownership",
@@ -396,6 +420,7 @@ def init_package(
 
     seed_terrain_raster(land_mask, layers_dir / "terrain.png")
     seed_empty_raster(size, layers_dir / "resources.png")
+    seed_empty_raster(size, layers_dir / "roads.png")
     seed_empty_raster(size, layers_dir / "cities.png")
 
     provinces, city_points = seed_provinces(land_mask, province_count)
@@ -408,6 +433,7 @@ def init_package(
             "provinces": {"features": provinces},
             "terrain": {},
             "resources": {},
+            "roads": {},
             "ownership": {
                 "assignments": {
                     str(p["id"]): FACTIONS[i % len(FACTIONS)]["key"]

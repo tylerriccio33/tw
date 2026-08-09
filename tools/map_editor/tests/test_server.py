@@ -74,6 +74,7 @@ def test_manifest_lists_layers_in_draw_order(package):
         "provinces",
         "terrain",
         "resources",
+        "roads",
         "ownership",
         "cities",
     ]
@@ -96,6 +97,15 @@ def test_manifest_carries_each_layer_legend_so_the_ui_needs_no_hardcoding(packag
     keys = {e["key"] for e in payload["layers"]["terrain"]["legend"].values()}
     assert "mountains" in keys
     assert payload["layers"]["ownership"]["input"] == "assign"
+
+
+def test_manifest_carries_the_road_and_city_layer_pointers(package):
+    # The browser has no other way to find these - it can't hardcode
+    # "roads"/"cities" as layer names, so editor.js's roads/growth panels
+    # only render if these actually reach the payload.
+    payload = server.manifest_payload(package)
+    assert payload["road_layer"] == "roads"
+    assert payload["city_layer"] == "cities"
 
 
 # ---------------------------------------------------------------------------

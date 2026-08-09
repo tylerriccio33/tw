@@ -52,6 +52,10 @@ function setStatus(message, isError) {
 
 const layerCfg = (name) => state.manifest.layers[name];
 const activeCfg = () => (state.activeLayer ? layerCfg(state.activeLayer) : null);
+// Roads is a brush/class layer in shape (raster + legend), but nobody
+// paints it - roads.py writes it algorithmically. It should never offer
+// brush tools or accept a paint gesture, only its own Start Over/Step.
+const isRoadLayer = (name) => !!name && name === state.manifest.road_layer;
 
 function features(name) {
   const layer = state.project.layers[name];
@@ -261,15 +265,22 @@ async function boot() {
 }
 
 async function mountBrushCanvas(name) {
-  const [width, height] = state.manifest.size;
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = state.manifest.size[0];
+  canvas.height = state.manifest.size[1];
   canvas.className = "layer-canvas";
   canvas.dataset.layer = name;
   el.stage.insertBefore(canvas, el.overlay);
   canvases[name] = canvas;
+  await reloadBrushCanvas(name);
+}
 
+// Re-reads a brush layer's raster from disk into its existing canvas -
+// for a raster changed server-side (roads.build rewrites it outright),
+// as opposed to mountBrushCanvas's one-time setup at load.
+async function reloadBrushCanvas(name) {
+  const canvas = canvases[name];
+  if (!canvas) return;
   const image = new Image();
   await new Promise((resolve) => {
     image.onload = resolve;
@@ -277,6 +288,7 @@ async function mountBrushCanvas(name) {
     image.src = `/api/layer/${name}.png?t=${Date.now()}`;
   });
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(image, 0, 0);
   makeNodataTransparent(canvas, layerCfg(name).nodata_color);
@@ -320,7 +332,7 @@ function setActiveLayer(name) {
   for (const other of state.manifest.layer_order) state.magnet[other] = false;
   for (const other of cfg.snap_candidates) state.magnet[other] = true;
 
-  state.tool = cfg.input === "brush" ? "brush" : "draw";
+  state.tool = cfg.input === "brush" && !isRoadLayer(name) ? "brush" : "draw";
   renderSidebar();
   render();
 }
@@ -419,6 +431,8 @@ function renderTools() {
     if (cfg.gapfill || cfg.clip_to) addButton("Fill Gaps", runFillGaps);
     addButton("Fix Crossings & Overlaps", runCleanShapes);
     if (isProvinceLayer) renderGrowPanel();
+  } else if (cfg.input === "brush" && isRoadLayer(state.activeLayer)) {
+    renderRoadsPanel();
   } else if (cfg.input === "brush") {
     addButton("Brush", () => setTool("brush"), state.tool === "brush");
     addButton("Bucket", () => setTool("bucket"), state.tool === "bucket");
@@ -507,6 +521,100 @@ function renderGrowPanel() {
   wrap.appendChild(row);
 
   el.tools.appendChild(wrap);
+}
+
+function renderRoadsPanel() {
+  const roadLayer = state.manifest.road_layer;
+  if (!roadLayer) return;
+
+  const wrap = document.createElement("div");
+  wrap.className = "grow-panel";
+
+  const heading = document.createElement("div");
+  heading.className = "section-label";
+  heading.textContent = "Build from cities";
+  wrap.appendChild(heading);
+
+  const build = state.project.layers[roadLayer]?.build;
+  const info = document.createElement("div");
+  info.className = "hint";
+  info.textContent = build
+    ? `Step ${build.step ?? 0} - ${build.painted_trips ?? 0}/${build.total_trips ?? 0} ` +
+      `route(s) revealed, ${build.discarded_trips ?? 0} out of reach.`
+    : "Not started - place tiered cities, then Start Over to search for routes.";
+  wrap.appendChild(info);
+
+  const row = document.createElement("div");
+  row.className = "grow-buttons";
+  const startBtn = document.createElement("button");
+  startBtn.textContent = "Start Over";
+  startBtn.onclick = runRoadsStart;
+  const stepBtn = document.createElement("button");
+  stepBtn.textContent = "Step";
+  stepBtn.className = "primary";
+  stepBtn.disabled = !build || build.painted_trips >= build.total_trips;
+  stepBtn.onclick = runRoadsStep;
+  row.append(startBtn, stepBtn);
+  wrap.appendChild(row);
+
+  el.tools.appendChild(wrap);
+}
+
+async function runRoadsStart() {
+  const roadLayer = state.manifest.road_layer;
+  if (!roadLayer) return;
+  showConfirm(
+    "Search for routes between the current cities and resources, and " +
+      "reset this layer to blank? Any hand touch-ups will be lost.",
+    async () => {
+      setStatus("Searching for routes between cities and resources...");
+      await flushRasters();
+      const response = await fetch("/api/roads/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: state.project }),
+      });
+      const result = await response.json();
+      if (!result.ok) return setStatus(result.error, true);
+
+      state.project.layers[roadLayer].build = result;
+      await reloadBrushCanvas(roadLayer);
+      renderSidebar();
+      render();
+      setStatus(
+        `Found ${result.total_trips} route(s) from ${result.cities} ` +
+          `cit${result.cities === 1 ? "y" : "ies"} (${result.discarded_trips} ` +
+          "out of reach). Step to reveal them.",
+      );
+    },
+  );
+}
+
+async function runRoadsStep() {
+  const roadLayer = state.manifest.road_layer;
+  if (!roadLayer) return;
+  setStatus("Revealing roads...");
+  await flushRasters();
+  const response = await fetch("/api/roads/step", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project: state.project }),
+  });
+  const result = await response.json();
+  if (!result.ok) return setStatus(result.error, true);
+
+  state.project.layers[roadLayer].build = result;
+  await reloadBrushCanvas(roadLayer);
+  renderSidebar();
+  render();
+  setStatus(
+    result.done
+      ? `Step ${result.step}: every route is drawn, then matured over ` +
+          `${result.matured_rounds} more round(s) of traffic so busy roads ` +
+          "kept climbing tiers."
+      : `Step ${result.step}: revealed ${result.painted_this_step} route(s), ` +
+          `${result.total_trips - result.painted_trips} still to go.`,
+  );
 }
 
 function setTool(tool) {
@@ -892,6 +1000,12 @@ function renderHint() {
       "<b>T</b> traces along a snapped boundary: click once to lock on, " +
       "again to take the stretch (hold <b>Alt</b> for the long way round). " +
       camera;
+  } else if (cfg.input === "brush" && isRoadLayer(state.activeLayer)) {
+    el.hint.innerHTML =
+      "This layer is 100% algorithm-driven - roads.py writes it from " +
+      "cities and resources, nobody paints it by hand. Use Start Over/" +
+      "Step below. " +
+      camera;
   } else if (cfg.input === "brush") {
     el.hint.innerHTML =
       `Paint into the selected category. Strokes are clipped to ` +
@@ -1059,6 +1173,56 @@ function render() {
   renderDrawing(svg);
   renderTracePreview(svg);
   renderHoverLabel(svg);
+  renderRoadFrontier(svg);
+  renderRoadSearchZones(svg);
+}
+
+// One orb per still-growing road trip, at its current leading pixel -
+// "where the agent is" in roads.py's search. Labeled with the source
+// city's tier so a fast (high-tier) crew's progress is easy to spot next
+// to a slow one's. Purely a build-session visualization: never part of
+// the raster roads.py writes, so it can't leak into the exported map.
+function renderRoadFrontier(svg) {
+  const roadLayer = state.manifest.road_layer;
+  if (!roadLayer || state.activeLayer !== roadLayer) return;
+  const frontier = state.project.layers[roadLayer]?.build?.frontier;
+  if (!frontier || !frontier.length) return;
+
+  for (const marker of frontier) {
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", String(marker.x));
+    dot.setAttribute("cy", String(marker.y));
+    dot.setAttribute("class", "road-frontier");
+    svg.appendChild(dot);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", String(marker.x));
+    label.setAttribute("y", String(marker.y));
+    label.setAttribute("class", "road-frontier-label");
+    label.textContent = String(marker.tier);
+    svg.appendChild(label);
+  }
+}
+
+// One circle per city, sized to its search-cost reach, shown only for the
+// pre-step state start() just seeded - "here's everything a city could
+// possibly road to" is useful before you've committed to stepping, and
+// clutters the view once real roads are growing over the same ground, so
+// roads.step() drops search_zones from build the moment stepping begins.
+function renderRoadSearchZones(svg) {
+  const roadLayer = state.manifest.road_layer;
+  if (!roadLayer || state.activeLayer !== roadLayer) return;
+  const zones = state.project.layers[roadLayer]?.build?.search_zones;
+  if (!zones || !zones.length) return;
+
+  for (const zone of zones) {
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", String(zone.x));
+    circle.setAttribute("cy", String(zone.y));
+    circle.setAttribute("r", String(zone.radius));
+    circle.setAttribute("class", "road-search-zone");
+    svg.appendChild(circle);
+  }
 }
 
 function renderHoverLabel(svg) {
@@ -1555,7 +1719,7 @@ function resetLayerToDefault() {
 
 function onBrushDown(event) {
   const cfg = activeCfg();
-  if (!cfg || cfg.input !== "brush") return;
+  if (!cfg || cfg.input !== "brush" || isRoadLayer(state.activeLayer)) return;
   event.preventDefault();
   if (state.tool === "bucket") return bucketFill();
   state.painting = true;

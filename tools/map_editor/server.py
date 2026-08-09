@@ -36,6 +36,7 @@ import growth
 import init_package
 import mapfmt
 import numpy as np
+import roads
 from gapfill import fill_land_gaps
 from PIL import Image
 
@@ -62,6 +63,7 @@ def manifest_payload(package: mapfmt.Package) -> dict:
         "layer_order": package.layer_order,
         "province_layer": package.manifest["province_layer"],
         "city_layer": package.manifest.get("city_layer"),
+        "road_layer": package.manifest.get("road_layer"),
         "has_reference": package.reference_path is not None,
         "factions": package.factions,
         "layers": {
@@ -488,6 +490,22 @@ def make_handler(package_dir: Path):
                     mapfmt.save_project(package_dir, project)
                     self._send_json({"ok": True, **result})
 
+                elif path == "/api/roads/start":
+                    package, project = load()
+                    payload = self._json_body()
+                    project = payload.get("project") or project
+                    result = roads.start(package, project)
+                    mapfmt.save_project(package_dir, project)
+                    self._send_json({"ok": True, **result})
+
+                elif path == "/api/roads/step":
+                    package, project = load()
+                    payload = self._json_body()
+                    project = payload.get("project") or project
+                    result = roads.step(package, project)
+                    mapfmt.save_project(package_dir, project)
+                    self._send_json({"ok": True, **result})
+
                 else:
                     self.send_error(404, "Not found")
 
@@ -496,6 +514,7 @@ def make_handler(package_dir: Path):
                 export.ExportBlocked,
                 mapfmt.PackageError,
                 growth.GrowthError,
+                roads.RoadsError,
             ) as exc:
                 self._send_json({"ok": False, "error": str(exc)}, 400)
             except (ValueError, OSError) as exc:

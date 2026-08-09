@@ -19,12 +19,12 @@ from tests.conftest import box, make_package, paint, project_with
 
 LAND = (10, 8, 50, 32)
 
-ROADS_LAYER = {
-    "name": "roads",
-    "title": "Roads",
+TRADE_ROUTES_LAYER = {
+    "name": "trade_routes",
+    "title": "Trade Routes",
     "input": "brush",
     "kind": "class",
-    "raster": "roads.png",
+    "raster": "trade_routes.png",
     "nodata_color": "#000000",
     "default_key": "dirt",
     "snap_source": False,
@@ -33,7 +33,7 @@ ROADS_LAYER = {
         "#8b5a2b": {"key": "dirt", "name": "Dirt road", "move_cost": 0.8},
         "#cfcfcf": {"key": "paved", "name": "Paved road", "move_cost": 0.5},
     },
-    "reduce": {"into": "roads", "mode": "any"},
+    "reduce": {"into": "trade_routes", "mode": "any"},
 }
 
 CLIMATE_LAYER = {
@@ -61,34 +61,35 @@ def two_provinces():
     ]
 
 
-def test_a_roads_layer_needs_no_core_changes(tmp_path):
-    """The acceptance test. `roads` appears in no source file, only in the
-    config here. It still gets rasterized, clipped, and reduced into every
-    province's tags."""
+def test_a_trade_routes_layer_needs_no_core_changes(tmp_path):
+    """The acceptance test. `trade_routes` appears in no source file, only
+    in the config here. It still gets rasterized, clipped, and reduced
+    into every province's tags."""
     import export
 
-    package = make_package(tmp_path, extra_layers={"roads": ROADS_LAYER})
-    assert "roads" in package.layer_order
+    package = make_package(tmp_path, extra_layers={"trade_routes": TRADE_ROUTES_LAYER})
+    assert "trade_routes" in package.layer_order
 
     project = project_with(package, provinces=two_provinces())
-    paint(package, "roads", "#8b5a2b", (12, 10, 28, 30))
+    paint(package, "trade_routes", "#8b5a2b", (12, 10, 28, 30))
 
     export.export_package(project, package)
 
-    assert package.raster_path("roads").is_file()
+    assert package.raster_path("trade_routes").is_file()
     table = {row["id"]: row for row in mapfmt.read_province_table(package.root)}
-    assert table[1]["tags"]["roads"] == ["dirt"]
-    assert table[2]["tags"]["roads"] == []
+    assert table[1]["tags"]["trade_routes"] == ["dirt"]
+    assert table[2]["tags"]["trade_routes"] == []
 
 
 def test_two_new_layers_coexist_without_interfering(tmp_path):
     import export
 
     package = make_package(
-        tmp_path, extra_layers={"roads": ROADS_LAYER, "climate": CLIMATE_LAYER}
+        tmp_path,
+        extra_layers={"trade_routes": TRADE_ROUTES_LAYER, "climate": CLIMATE_LAYER},
     )
     project = project_with(package, provinces=two_provinces())
-    paint(package, "roads", "#cfcfcf", (12, 10, 28, 30))
+    paint(package, "trade_routes", "#cfcfcf", (12, 10, 28, 30))
     paint(package, "climate", "#7fb54a", LAND)
     paint(package, "climate", "#4a7fb5", (10, 8, 26, 32))
 
@@ -98,23 +99,23 @@ def test_two_new_layers_coexist_without_interfering(tmp_path):
     assert table[1]["tags"] == {
         "terrain": "plains",  # nothing painted -> the layer's default_key
         "resources": [],
-        "roads": ["paved"],
+        "trade_routes": ["paved"],
         "climate": "arctic",
     }
     assert table[2]["tags"]["climate"] == "temperate"
-    assert table[2]["tags"]["roads"] == []
+    assert table[2]["tags"]["trade_routes"] == []
 
 
 def test_a_new_layer_is_clipped_by_the_coastline_like_any_other(tmp_path):
     import export
 
-    package = make_package(tmp_path, extra_layers={"roads": ROADS_LAYER})
+    package = make_package(tmp_path, extra_layers={"trade_routes": TRADE_ROUTES_LAYER})
     project = project_with(package, provinces=two_provinces())
-    paint(package, "roads", "#8b5a2b", (0, 0, 60, 40))  # painted over everything
+    paint(package, "trade_routes", "#8b5a2b", (0, 0, 60, 40))  # painted over everything
 
     export.export_package(project, package)
 
-    with Image.open(package.raster_path("roads")) as im:
+    with Image.open(package.raster_path("trade_routes")) as im:
         raster = np.array(im.convert("RGB"))
     assert tuple(raster[2, 2]) == (0, 0, 0), "road painted on open sea is clipped"
     assert tuple(raster[20, 20]) == mapfmt.hex_to_rgb("#8b5a2b")
@@ -123,14 +124,14 @@ def test_a_new_layer_is_clipped_by_the_coastline_like_any_other(tmp_path):
 def test_a_layer_added_after_a_project_was_saved_loads_as_empty(tmp_path):
     """Dropping a layer into an existing package shouldn't invalidate the
     project someone is midway through editing."""
-    package = make_package(tmp_path, extra_layers={"roads": ROADS_LAYER})
+    package = make_package(tmp_path, extra_layers={"trade_routes": TRADE_ROUTES_LAYER})
     project = project_with(package, provinces=two_provinces())
-    del project["layers"]["roads"]
+    del project["layers"]["trade_routes"]
 
     mapfmt.save_project(package.root, project)
     reloaded = mapfmt.load_project(package.root, package)
 
-    assert "roads" in reloaded["layers"]
+    assert "trade_routes" in reloaded["layers"]
 
 
 # ---------------------------------------------------------------------------
@@ -141,21 +142,21 @@ def test_a_layer_added_after_a_project_was_saved_loads_as_empty(tmp_path):
 def test_a_layer_clipping_to_a_mask_defined_after_it_is_rejected(tmp_path):
     """Masks come from earlier layers. Referring forward would blow up
     mid-export with a KeyError, after some rasters were already written."""
-    late = dict(ROADS_LAYER, clip_to="nowhere:land")
+    late = dict(TRADE_ROUTES_LAYER, clip_to="nowhere:land")
     with pytest.raises(mapfmt.PackageError, match="clip_to"):
-        make_package(tmp_path, extra_layers={"roads": late})
+        make_package(tmp_path, extra_layers={"trade_routes": late})
 
 
 def test_a_layer_with_no_legend_is_rejected(tmp_path):
-    nonsense = dict(ROADS_LAYER, legend={})
+    nonsense = dict(TRADE_ROUTES_LAYER, legend={})
     with pytest.raises(mapfmt.PackageError, match="legend"):
-        make_package(tmp_path, extra_layers={"roads": nonsense})
+        make_package(tmp_path, extra_layers={"trade_routes": nonsense})
 
 
 def test_an_unknown_input_mode_is_rejected(tmp_path):
-    nonsense = dict(ROADS_LAYER, input="telepathy")
+    nonsense = dict(TRADE_ROUTES_LAYER, input="telepathy")
     with pytest.raises(mapfmt.PackageError, match="input"):
-        make_package(tmp_path, extra_layers={"roads": nonsense})
+        make_package(tmp_path, extra_layers={"trade_routes": nonsense})
 
 
 def test_a_feature_naming_a_key_outside_its_legend_is_reported(tmp_path):

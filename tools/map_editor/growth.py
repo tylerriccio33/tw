@@ -15,11 +15,19 @@ Nothing here names a layer "provinces", "cities", "terrain" or
 "resources". It reads whatever map.json's province_layer and city_layer
 point to, and finds the tier by field *type*. Movement cost and
 resource pull, though, are deliberately *not* per-map data.
-TERRAIN_MOVE_COST and ATTRACTION_KEYS below form a single global
-table, shared by every map package, keyed by legend key name. Any
-class layer painting a "mountains" pixel costs the same to cross on
-every map. Balance tuning lives here in one place instead of drifting
-between map.json packages.
+TERRAIN_MOVE_COST, ATTRACTION_KEYS and ROAD_MOVE_COST below form a
+single global table, shared by every map package, keyed by legend key
+name. Any class layer painting a "mountains" pixel costs the same to
+cross on every map. Balance tuning lives here in one place instead of
+drifting between map.json packages.
+
+A built road layer (roads.py's output - see its road_layer keys
+road_t1/t2/t3) is just another cost-grid entry. Wherever
+a road already runs, growth's frontier crosses at the road's cost
+instead of the terrain's. So a province growing along an established
+trade route reaches further per step than one crossing open ground.
+The Dijkstra machinery itself never changes - the accelerant is
+entirely in the per-pixel cost, same as terrain and resources.
 
 Each step commits immediately. It advances the shared frontier by one
 cost band, then revectorizes the result back into the province layer's
@@ -57,9 +65,9 @@ SEED_RADIUS_PX = 4
 TERRAIN_MOVE_COST: dict[str, float] = {
     "plains": 1.0,
     "hills": 1.5,
-    "mountains": 2.5,
-    "forest": 1.8,
-    "desert": 1.4,
+    "mountains": 20,
+    "forest": 3,
+    "desert": 5,
 }
 
 # Legend keys that pull growth's frontier toward them, same
@@ -70,6 +78,22 @@ TERRAIN_MOVE_COST: dict[str, float] = {
 ATTRACTION_KEYS: frozenset[str] = frozenset({"iron", "gold", "timber", "wine", "salt"})
 ATTRACTION_RADIUS_PX = 60.0
 ATTRACTION_STRENGTH = 0.6
+
+# A road is an improvement over whatever terrain it crosses, not a
+# discount on top of it - a tier-3 road through mountains costs this much
+# to enter, full stop, not 20 (mountains) times some fraction. So this
+# table caps a pixel's cost rather than multiplying it, same global-table
+# convention as TERRAIN_MOVE_COST/ATTRACTION_KEYS: any class layer
+# painting these key names participates automatically, keyed by roads.py's
+# own tier keys since a road's pull is exactly "how built-up is this
+# stretch". Cost is never allowed to collapse near zero - that would let
+# a single step's cost budget jump the frontier arbitrarily far across
+# the map - so tier 3 bottoms out just above MIN_COST_FACTOR.
+ROAD_MOVE_COST: dict[str, float] = {
+    "road_t1": 0.6,
+    "road_t2": 0.35,
+    "road_t3": 0.2,
+}
 
 # Cost is never allowed to collapse near zero - that would let a single
 # step's cost budget jump the frontier arbitrarily far across the map.
@@ -200,23 +224,56 @@ def _attraction_layers(package: mapfmt.Package) -> list[tuple[str, list[str]]]:
     return out
 
 
-def _terrain_cost_grid(package: mapfmt.Package, project: dict) -> np.ndarray:
+def _road_cost_layer(package: mapfmt.Package) -> tuple[str, list[str]] | None:
+    """The road layer, if this package has one and it paints at least
+    one key listed in ROAD_MOVE_COST. Growth's frontier then races
+    down already-built roads, the same way it bends toward resources."""
+    cfg = package.road_layer
+    if cfg is None:
+        return None
+    keys = [k for k in cfg.keys if k in ROAD_MOVE_COST]
+    return (cfg.name, keys) if keys else None
+
+
+def _terrain_cost_grid(
+    package: mapfmt.Package,
+    project: dict,
+    *,
+    include_attraction: bool = True,
+    include_roads: bool = True,
+) -> np.ndarray:
     """Per-pixel float32 multiplier on move cost, from the global
-    TERRAIN_MOVE_COST/ATTRACTION_KEYS tables rather than anything
-    authored in this package. Move-cost layers multiply in (default
-    1.0 where nothing's painted, or the layer's default_key's cost).
-    Attraction layers then discount the result toward resources.
-    A package that paints none of those key names gets all-ones, free
-    everywhere but the coastline. Growth then behaves like a plain
-    unweighted frontier."""
+    TERRAIN_MOVE_COST/ATTRACTION_KEYS/ROAD_MOVE_COST tables rather than
+    anything authored in this package. Move-cost layers multiply in
+    (default 1.0 where nothing's painted, or the layer's default_key's
+    cost). Attraction layers then discount the result toward
+    resources. A road layer caps the result low wherever a road
+    already runs. A package that paints none of those key names gets
+    all-ones, free everywhere but the coastline. Growth then behaves
+    like a plain unweighted frontier.
+
+    `include_attraction=False` skips the resource-discount pass.
+    roads.py wants pure terrain cost, since its targets already *are*
+    the resources. Bending the path toward unrelated ore on the way
+    would double-dip the same pull. `include_roads=False` likewise
+    keeps roads.py's own search from racing down roads it's still
+    building. It wants the raw terrain cost of a route that doesn't
+    exist yet, not a route discounted by itself."""
     height, width = package.size[1], package.size[0]
     move_layers = _move_cost_layers(package)
-    attract_layers = _attraction_layers(package)
+    attract_layers = _attraction_layers(package) if include_attraction else []
+    road_layer = _road_cost_layer(package) if include_roads else None
     relevant = move_layers + [name for name, _ in attract_layers]
+    if road_layer is not None:
+        relevant = relevant + [road_layer[0]]
     if not relevant:
         return np.ones((height, width), dtype=np.float32)
 
-    key = _cache_key(package)
+    key = (
+        _cache_key(package)
+        + ("" if include_attraction else ":no_attract")
+        + ("" if include_roads else ":no_roads")
+    )
     fingerprint = _layers_fingerprint(package, relevant)
     cached = _terrain_cost_cache.get(key)
     if cached is not None and cached[0] == fingerprint:
@@ -247,6 +304,16 @@ def _terrain_cost_grid(package: mapfmt.Package, project: dict) -> np.ndarray:
             dist = cv2.distanceTransform(far, cv2.DIST_L2, 5)
             closeness = np.clip(1.0 - dist / ATTRACTION_RADIUS_PX, 0.0, 1.0)
             cost *= (1.0 - ATTRACTION_STRENGTH * closeness).astype(np.float32)
+
+    if road_layer is not None:
+        road_name, road_keys = road_layer
+        cfg = package.layers[road_name]
+        raster = export.rasterize_layer(project, package, cfg, package.size, None)
+        for k in road_keys:
+            rgb = np.array(mapfmt.hex_to_rgb(cfg.color_for_key(k)), dtype=np.uint8)
+            blob = np.all(raster == rgb, axis=-1)
+            if blob.any():
+                cost = np.where(blob, np.minimum(cost, ROAD_MOVE_COST[k]), cost)
 
     cost = np.maximum(cost, MIN_COST_FACTOR).astype(np.float32)
     _terrain_cost_cache[key] = (fingerprint, cost)
@@ -519,3 +586,15 @@ def step(package: mapfmt.Package, project: dict) -> dict:
         "finished_cities": finished_cities,
         "done": not heap,
     }
+
+
+# roads.py builds its own single-source searches over the same land mask,
+# terrain cost table, and city/tier reading province growth uses - these
+# names are the reuse surface, kept together so the contract is visible
+# from either module instead of roads.py reaching for underscored names.
+city_layer = _city_layer
+tier_field = _tier_field
+land_mask = _land_mask
+terrain_cost_grid = _terrain_cost_grid
+neighbor_offsets = _NEIGHBOR_OFFSETS
+sort_key = _sort_key
