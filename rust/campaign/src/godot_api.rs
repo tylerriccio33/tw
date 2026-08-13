@@ -318,9 +318,6 @@ impl CampaignManager {
                 cities.push(City {
                     id: cities.len() as CityId,
                     name: def.city_name.clone().unwrap_or_else(|| def.name.clone()),
-                    // Ordinary Tax is the only income source for now, so a
-                    // city's whole income is what its tier owes.
-                    income: ordinary_tax(def.tier),
                     tier: def.tier,
                     position: def.city_position,
                     owner: owner_id,
@@ -452,7 +449,9 @@ impl CampaignManager {
             let mut cd = VarDictionary::new();
             cd.set("id", city.id as i64);
             cd.set("name", city.name.clone());
-            cd.set("income", city.income as i64);
+            // The city's per-turn income, derived from its tier (Ordinary Tax
+            // is the only source today). The Economy HUD reads this per city.
+            cd.set("income", ordinary_tax(city.tier) as i64);
             cd.set("tier", city.tier as i64);
             cd.set("owner", city.owner as i64);
             cd.set("province", city.province.map_or(-1, |p| p as i64));

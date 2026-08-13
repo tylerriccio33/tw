@@ -38,15 +38,10 @@ fn distance(a: (f32, f32), b: (f32, f32)) -> f32 {
 pub struct City {
     pub id: CityId,
     pub name: String,
-    /// Total money this city contributes to its owner each turn. Right now the
-    /// only source is Ordinary Tax (`ordinary_tax`), keyed off `tier`, so a
-    /// city built from a map package has `income == ordinary_tax(tier)`. Kept
-    /// as its own field (rather than always recomputing from `tier`) so future
-    /// income sources can be folded in here without every reader learning about
-    /// them.
-    pub income: i32,
-    /// Settlement size class from the map's city layer (1 = smallest). Drives
-    /// the Ordinary Tax obligation via `ordinary_tax`; higher tiers owe more.
+    /// Settlement size class from the map's city layer (1 = smallest). The city
+    /// contributes no money field of its own: its per-turn income is derived
+    /// from this tier via `ordinary_tax` (see `Campaign::income_from`), so tier
+    /// is the single source of truth for what a settlement is worth.
     pub tier: u32,
     pub position: (f32, f32),
     pub owner: FactionId,
@@ -55,9 +50,9 @@ pub struct City {
     pub province: Option<ProvinceId>,
 }
 
-/// Money a single unowned-of-source obligation - the "Ordinary Tax" the faction
-/// head levies on each settlement - is worth per tier level. Tier 1 owes this
-/// much, tier 2 twice as much, and so on, so bigger settlements shoulder a
+/// Money the "Ordinary Tax" - the levy the faction head places on each
+/// settlement - is worth per tier level. Tier 1 owes this much, tier 2 twice
+/// as much, and so on, so bigger settlements shoulder a
 /// proportionally bigger share of the treasury.
 pub const ORDINARY_TAX_PER_TIER: i32 = 25;
 
@@ -65,6 +60,28 @@ pub const ORDINARY_TAX_PER_TIER: i32 = 25;
 /// of 0 (an untiered settlement) owes nothing.
 pub fn ordinary_tax(tier: u32) -> i32 {
     tier as i32 * ORDINARY_TAX_PER_TIER
+}
+
+/// A distinct stream a faction's per-turn income can come from. Only Ordinary
+/// Tax exists today; trade, tribute, and the like will each be their own arm.
+/// `Campaign::faction_income` sums over `ALL`, so adding a source is a new arm
+/// here plus a branch in `Campaign::income_from`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IncomeSource {
+    OrdinaryTax,
+}
+
+impl IncomeSource {
+    /// Every income source, so callers (and `faction_income`) can iterate the
+    /// full set without hardcoding which streams exist.
+    pub const ALL: [IncomeSource; 1] = [IncomeSource::OrdinaryTax];
+
+    /// Human-readable name, matching the "Ordinary Tax" label the UI shows.
+    pub fn label(self) -> &'static str {
+        match self {
+            IncomeSource::OrdinaryTax => "Ordinary Tax",
+        }
+    }
 }
 
 /// A value read off a map layer, whatever that layer happens to describe.
@@ -389,12 +406,34 @@ impl Campaign {
         self.factions.iter().filter(|f| f.alive).count()
     }
 
-    fn collect_income(&mut self, faction_id: FactionId) {
-        let income: i32 = self
-            .cities_owned_by(faction_id)
+    /// A faction's income from one specific source. Splitting income up this
+    /// way (rather than one opaque total) means each stream can be inspected and
+    /// tested on its own, and a new stream is a new `IncomeSource` arm plus its
+    /// branch here - nothing else has to change, because `faction_income` sums
+    /// over every source automatically.
+    pub fn income_from(&self, faction_id: FactionId, source: IncomeSource) -> i32 {
+        match source {
+            // Ordinary Tax: every settlement the faction holds owes tax keyed
+            // to its tier (see `ordinary_tax`).
+            IncomeSource::OrdinaryTax => self
+                .cities_owned_by(faction_id)
+                .iter()
+                .map(|c| ordinary_tax(c.tier))
+                .sum(),
+        }
+    }
+
+    /// A faction's total per-turn income: the sum of every income source. This
+    /// is what `collect_income` credits at the start of the faction's turn.
+    pub fn faction_income(&self, faction_id: FactionId) -> i32 {
+        IncomeSource::ALL
             .iter()
-            .map(|c| c.income)
-            .sum();
+            .map(|source| self.income_from(faction_id, *source))
+            .sum()
+    }
+
+    fn collect_income(&mut self, faction_id: FactionId) {
+        let income = self.faction_income(faction_id);
         if let Some(f) = self.faction_mut(faction_id) {
             f.money += income;
         }
@@ -1157,7 +1196,6 @@ mod tests {
             City {
                 id: 0,
                 name: "Redhold".into(),
-                income: 10,
                 tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
@@ -1166,7 +1204,6 @@ mod tests {
             City {
                 id: 1,
                 name: "Bluehold".into(),
-                income: 10,
                 tier: 1,
                 position: (1.0, 0.0),
                 owner: 1,
@@ -1198,7 +1235,6 @@ mod tests {
             City {
                 id: 0,
                 name: "Big".into(),
-                income: ordinary_tax(4),
                 tier: 4,
                 position: (0.0, 0.0),
                 owner: 0,
@@ -1207,7 +1243,6 @@ mod tests {
             City {
                 id: 1,
                 name: "Small".into(),
-                income: ordinary_tax(1),
                 tier: 1,
                 position: (100.0, 0.0),
                 owner: 0,
@@ -1245,7 +1280,6 @@ mod tests {
             City {
                 id: 0,
                 name: "Redhold".into(),
-                income: ordinary_tax(2),
                 tier: 2,
                 position: (0.0, 0.0),
                 owner: 0,
@@ -1254,7 +1288,6 @@ mod tests {
             City {
                 id: 1,
                 name: "Bluehold".into(),
-                income: ordinary_tax(3),
                 tier: 3,
                 position: (1.0, 0.0),
                 owner: 1,
@@ -1270,10 +1303,133 @@ mod tests {
         assert_eq!(c.faction(0).unwrap().money, ordinary_tax(2) * 2);
     }
 
+    /// A two-faction income fixture: Red holds a tier-4 and a tier-2 city, Blue
+    /// a single tier-3 city. Every faction starts with zero money so income is
+    /// the only thing moving the treasury.
+    fn income_campaign() -> Campaign {
+        let factions = vec![
+            Faction {
+                id: 0,
+                name: "Red".into(),
+                money: 0,
+                alive: true,
+            },
+            Faction {
+                id: 1,
+                name: "Blue".into(),
+                money: 0,
+                alive: true,
+            },
+        ];
+        let cities = vec![
+            City {
+                id: 0,
+                name: "Redcap".into(),
+                tier: 4,
+                position: (0.0, 0.0),
+                owner: 0,
+                province: None,
+            },
+            City {
+                id: 1,
+                name: "Redtown".into(),
+                tier: 2,
+                position: (10.0, 0.0),
+                owner: 0,
+                province: None,
+            },
+            City {
+                id: 2,
+                name: "Bluecap".into(),
+                tier: 3,
+                position: (100.0, 0.0),
+                owner: 1,
+                province: None,
+            },
+        ];
+        Campaign::new(factions, cities, 100)
+    }
+
+    /// The Ordinary Tax stream on its own: the sum of each owned city's
+    /// tier-based tax, and nothing from cities another faction holds.
+    #[test]
+    fn income_from_isolates_ordinary_tax() {
+        let c = income_campaign();
+        assert_eq!(
+            c.income_from(0, IncomeSource::OrdinaryTax),
+            ordinary_tax(4) + ordinary_tax(2)
+        );
+        assert_eq!(c.income_from(1, IncomeSource::OrdinaryTax), ordinary_tax(3));
+    }
+
+    /// The whole-faction income equals the sum over every income source. With
+    /// Ordinary Tax as the only source today it must match that stream exactly -
+    /// this test is what will catch a new source being added to `income_from`
+    /// but forgotten in the `IncomeSource::ALL` total (or vice versa).
+    #[test]
+    fn faction_income_totals_every_source() {
+        let c = income_campaign();
+        for faction_id in [0, 1] {
+            let by_source: i32 = IncomeSource::ALL
+                .iter()
+                .map(|s| c.income_from(faction_id, *s))
+                .sum();
+            assert_eq!(c.faction_income(faction_id), by_source);
+        }
+        assert_eq!(c.faction_income(0), ordinary_tax(4) + ordinary_tax(2));
+    }
+
+    /// Income is a recurring per-turn credit: across three full rounds a
+    /// faction's treasury grows by its `faction_income` each round, so after N
+    /// rounds it holds N times its per-round income (money started at zero).
+    #[test]
+    fn income_accrues_each_round_over_multiple_rounds() {
+        let mut c = income_campaign();
+        let red_per_round = c.faction_income(0);
+        let blue_per_round = c.faction_income(1);
+
+        // Round 1 is credited by Campaign::new (Red) and the first end_turn
+        // (Blue). Each further pair of end_turns is one more round for both.
+        assert_eq!(c.faction(0).unwrap().money, red_per_round);
+        c.end_turn(); // -> Blue, round 1 for Blue
+        assert_eq!(c.faction(1).unwrap().money, blue_per_round);
+
+        for round in 2..=3 {
+            c.end_turn(); // -> Red
+            assert_eq!(c.faction(0).unwrap().money, red_per_round * round);
+            c.end_turn(); // -> Blue
+            assert_eq!(c.faction(1).unwrap().money, blue_per_round * round);
+        }
+    }
+
+    /// Income follows ownership: when a city changes hands the tax it owes
+    /// moves to the new owner and leaves the old owner's income, so conquest is
+    /// reflected the very next time income is computed.
+    #[test]
+    fn income_from_only_counts_currently_owned_cities() {
+        let mut c = income_campaign();
+        let red_before = c.income_from(0, IncomeSource::OrdinaryTax);
+        let blue_before = c.income_from(1, IncomeSource::OrdinaryTax);
+
+        // Blue's tier-3 city (id 2) is captured by Red.
+        c.city_mut(2).unwrap().owner = 0;
+
+        assert_eq!(
+            c.income_from(0, IncomeSource::OrdinaryTax),
+            red_before + ordinary_tax(3)
+        );
+        assert_eq!(
+            c.income_from(1, IncomeSource::OrdinaryTax),
+            blue_before - ordinary_tax(3)
+        );
+        assert_eq!(c.income_from(1, IncomeSource::OrdinaryTax), 0);
+    }
+
     #[test]
     fn new_game_credits_first_faction_income() {
+        // Each faction holds one tier-1 city, so income is ordinary_tax(1).
         let c = sample_campaign();
-        assert_eq!(c.faction(0).unwrap().money, 10);
+        assert_eq!(c.faction(0).unwrap().money, ordinary_tax(1));
         assert_eq!(c.faction(1).unwrap().money, 0);
     }
 
@@ -1282,7 +1438,7 @@ mod tests {
         let mut c = sample_campaign();
         c.end_turn();
         assert_eq!(c.current_faction_id(), 1);
-        assert_eq!(c.faction(1).unwrap().money, 10);
+        assert_eq!(c.faction(1).unwrap().money, ordinary_tax(1));
         assert_eq!(c.turn, 2);
         c.end_turn();
         assert_eq!(c.current_faction_id(), 0);
@@ -1318,7 +1474,6 @@ mod tests {
             City {
                 id: 0,
                 name: "Redhold".into(),
-                income: 10,
                 tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
@@ -1327,7 +1482,6 @@ mod tests {
             City {
                 id: 1,
                 name: "Bluehold".into(),
-                income: 10,
                 tier: 1,
                 position: (1.0, 0.0),
                 owner: 1,
@@ -1336,7 +1490,6 @@ mod tests {
             City {
                 id: 2,
                 name: "Greenhold".into(),
-                income: 10,
                 tier: 1,
                 position: (2.0, 0.0),
                 owner: 2,
@@ -1449,7 +1602,6 @@ mod tests {
             City {
                 id: 0,
                 name: "Redhold".into(),
-                income: 10,
                 tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
@@ -1458,7 +1610,6 @@ mod tests {
             City {
                 id: 1,
                 name: "Bluehold".into(),
-                income: 10,
                 tier: 1,
                 position: (1.0, 0.0),
                 owner: 1,
@@ -1467,7 +1618,6 @@ mod tests {
             City {
                 id: 2,
                 name: "Greenhold".into(),
-                income: 10,
                 tier: 1,
                 position: (2.0, 0.0),
                 owner: 2,
@@ -1544,7 +1694,6 @@ mod tests {
             City {
                 id: 0,
                 name: "A".into(),
-                income: 5,
                 tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
@@ -1553,7 +1702,6 @@ mod tests {
             City {
                 id: 1,
                 name: "B".into(),
-                income: 5,
                 tier: 1,
                 position: (1.0, 0.0),
                 owner: 0,
@@ -1562,7 +1710,6 @@ mod tests {
             City {
                 id: 2,
                 name: "C".into(),
-                income: 5,
                 tier: 1,
                 position: (2.0, 0.0),
                 owner: 1,
@@ -1603,7 +1750,6 @@ mod tests {
             City {
                 id: 0,
                 name: "Redhold".into(),
-                income: 10,
                 tier: 1,
                 position: a,
                 owner: 0,
@@ -1612,7 +1758,6 @@ mod tests {
             City {
                 id: 1,
                 name: "Bluehold".into(),
-                income: 10,
                 tier: 1,
                 position: b,
                 owner: 1,
@@ -1877,7 +2022,6 @@ mod tests {
             City {
                 id: 0,
                 name: "Redhold".into(),
-                income: 10,
                 tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
@@ -1886,7 +2030,6 @@ mod tests {
             City {
                 id: 1,
                 name: "Bluehold".into(),
-                income: 10,
                 tier: 1,
                 position: (100.0, 0.0),
                 owner: 1,
@@ -2004,7 +2147,6 @@ mod tests {
         let cities = vec![City {
             id: 0,
             name: "Redhold".into(),
-            income: 10,
             tier: 1,
             position: (0.0, 0.0),
             owner: 0,
@@ -2105,7 +2247,6 @@ mod tests {
             vec![City {
                 id: 0,
                 name: "Redhold".into(),
-                income: 10,
                 tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
