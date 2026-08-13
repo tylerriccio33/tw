@@ -74,7 +74,12 @@ static func build_top_bar(ui: Node) -> void:
 	for stat in ui.TOP_BAR_STATS:
 		stats_row.add_child(_make_top_bar_stat(ui, stat[0], stat[1], stat[2]))
 
-	for i in ui.TOP_BAR_PLACEHOLDER_ICON_COUNT:
+	# The first of the top-bar's round icons is the Economy opener; the rest
+	# stay as blank "?" placeholders until they get their own screens.
+	var economy_button := _make_top_bar_icon_button(ui, "$", "Economy")
+	economy_button.pressed.connect(_toggle_economy_panel.bind(ui))
+	stats_row.add_child(economy_button)
+	for i in ui.TOP_BAR_PLACEHOLDER_ICON_COUNT - 1:
 		stats_row.add_child(_make_top_bar_placeholder_icon())
 
 	var buttons_row := HBoxContainer.new()
@@ -91,6 +96,7 @@ static func build_top_bar(ui: Node) -> void:
 	buttons_row.add_child(ui.log_button)
 
 	_build_log_panel(ui)
+	build_economy_panel(ui)
 
 
 ## Hidden by default; the log button in the top bar toggles it. Anchored under
@@ -211,6 +217,189 @@ static func _make_top_bar_placeholder_icon() -> PanelContainer:
 	glyph_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
 	icon_circle.add_child(glyph_label)
 	return icon_circle
+
+
+## A clickable variant of the round placeholder icon: same 32px circle, but a
+## Button so it can carry a tooltip and fire on press (e.g. the Economy opener).
+static func _make_top_bar_icon_button(ui: Node, glyph: String, tooltip: String) -> Button:
+	var button := Button.new()
+	button.tooltip_text = tooltip
+	button.text = glyph
+	button.custom_minimum_size = Vector2(32, 32)
+	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	set_font(button, ui.FONT_BOLD, 16)
+	button.add_theme_color_override("font_color", Color.WHITE)
+	var normal_sb := style_box(Color(0.35, 0.38, 0.44))
+	var hover_sb := style_box(Color(0.32, 0.44, 0.6))
+	var pressed_sb := style_box(Color(0.18, 0.26, 0.38))
+	for sb in [normal_sb, hover_sb, pressed_sb]:
+		sb.corner_radius_top_left = 16
+		sb.corner_radius_top_right = 16
+		sb.corner_radius_bottom_left = 16
+		sb.corner_radius_bottom_right = 16
+	button.add_theme_stylebox_override("normal", normal_sb)
+	button.add_theme_stylebox_override("hover", hover_sb)
+	button.add_theme_stylebox_override("pressed", pressed_sb)
+	return button
+
+
+## The Economy modal: hidden until the top-bar Economy ($) icon toggles it
+## (see _toggle_economy_panel). Lists every settlement and the Ordinary Tax it
+## owes, grouped by faction. Anchored just under the top bar. Node references
+## the toggle/populate helpers need are stashed in metadata so the whole
+## feature lives here rather than adding fields to campaign_ui.
+static func build_economy_panel(ui: Node) -> void:
+	var panel := PanelContainer.new()
+	panel.name = "EconomyPanel"
+	panel.visible = false
+	# The army markers are added to the scene tree after $UI, so within the
+	# shared canvas they'd draw over this modal. A high z_index lifts the panel
+	# above them (and everything else in the HUD) so it reads as a real overlay.
+	panel.z_index = 100
+	panel.add_theme_stylebox_override("panel", style_box(ui.HUD_BLUE_DARK, ui.HUD_BLUE, 2))
+	anchor_rect(panel, 0.3, 0.09, 0.7, 0.85)
+	ui._top_bar.add_child(panel)
+	panel.set_meta("manager", ui.manager)
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_%s" % side, 12)
+	panel.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	margin.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Economy — Ordinary Tax"
+	set_font(title, ui.FONT_BOLD, 20)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(title)
+
+	# Column header row.
+	var header := _economy_row("Settlement", "Tier", "Tax", ui.FONT_SEMIBOLD, ui.HUD_CREAM)
+	vbox.add_child(header)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 2)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+
+	var total := _economy_row("Total", "", "0", ui.FONT_BOLD, Color.WHITE)
+	vbox.add_child(total)
+	panel.set_meta("list", list)
+	panel.set_meta("total_value", total.get_node("Value"))
+	panel.set_meta("fonts", [ui.FONT_MEDIUM, ui.FONT_SEMIBOLD])
+	panel.set_meta("cream", ui.HUD_CREAM)
+
+
+## Toggles the Economy modal, repopulating it from live state each time it opens
+## so it always reflects the current map (conquest changes who owes what). Bound
+## to the top-bar Economy button's `pressed` signal.
+static func _toggle_economy_panel(ui: Node) -> void:
+	var panel: PanelContainer = ui._top_bar.get_node("EconomyPanel")
+	panel.visible = not panel.visible
+	if panel.visible:
+		_populate_economy(panel)
+
+
+## Rebuilds the Economy list grouped by faction: a color-coded faction header,
+## that faction's settlements (name / tier / Ordinary Tax) sorted by tier, then
+## a per-faction subtotal, with a grand total in the pinned footer.
+static func _populate_economy(panel: PanelContainer) -> void:
+	var list: VBoxContainer = panel.get_meta("list")
+	for child in list.get_children():
+		child.queue_free()
+
+	var font_medium: Font = panel.get_meta("fonts")[0]
+	var font_semibold: Font = panel.get_meta("fonts")[1]
+	var cream: Color = panel.get_meta("cream")
+	var state: Dictionary = panel.get_meta("manager").get_state()
+
+	var by_faction: Dictionary = {}
+	for city in state.get("cities", []):
+		var owner := int(city.get("owner", -1))
+		if not by_faction.has(owner):
+			by_faction[owner] = []
+		by_faction[owner].append(city)
+
+	var grand_total := 0
+	var first := true
+	for faction in state.get("factions", []):
+		var owned: Array = by_faction.get(int(faction.get("id", -1)), [])
+		if owned.is_empty():
+			continue
+		if not first:
+			var spacer := Control.new()
+			spacer.custom_minimum_size = Vector2(0, 10)
+			list.add_child(spacer)
+		first = false
+
+		var faction_color := Color(String(faction.get("color", "#ffffff")))
+		list.add_child(
+			_economy_row(
+				String(faction.get("name", "?")), "Tier", "Tax", font_semibold, faction_color
+			)
+		)
+
+		owned.sort_custom(func(a, b): return int(a.get("tier", 0)) > int(b.get("tier", 0)))
+		var subtotal := 0
+		for city in owned:
+			var tax := int(city.get("income", 0))
+			subtotal += tax
+			list.add_child(
+				_economy_row(
+					String(city.get("name", "?")),
+					str(int(city.get("tier", 0))),
+					str(tax),
+					font_medium,
+					cream
+				)
+			)
+		grand_total += subtotal
+		list.add_child(_economy_row("Subtotal", "", str(subtotal), font_semibold, Color.WHITE))
+
+	panel.get_meta("total_value").text = str(grand_total)
+
+
+## One three-column row (name / tier / tax) for the Economy list. The tax value
+## label is named "Value" so callers can find it to rewrite later.
+static func _economy_row(
+	name_text: String, tier_text: String, tax_text: String, font: Font, color: Color
+) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+
+	var name_label := Label.new()
+	name_label.text = name_text
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	set_font(name_label, font, 14)
+	name_label.add_theme_color_override("font_color", color)
+	row.add_child(name_label)
+
+	var tier_label := Label.new()
+	tier_label.text = tier_text
+	tier_label.custom_minimum_size = Vector2(60, 0)
+	tier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	set_font(tier_label, font, 14)
+	tier_label.add_theme_color_override("font_color", color)
+	row.add_child(tier_label)
+
+	var tax_label := Label.new()
+	tax_label.name = "Value"
+	tax_label.text = tax_text
+	tax_label.custom_minimum_size = Vector2(80, 0)
+	tax_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	set_font(tax_label, font, 14)
+	tax_label.add_theme_color_override("font_color", color)
+	row.add_child(tax_label)
+
+	return row
 
 
 static func _make_top_bar_button(ui: Node, icon: String, tooltip: String) -> Button:

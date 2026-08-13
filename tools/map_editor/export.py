@@ -1119,6 +1119,16 @@ def build_province_table(
             payload = city_points.get(city_id) if city_id else None
             if payload:
                 row["city_position"] = [payload["x"], payload["y"]]
+                # The settlement's size class, if the city layer authored one.
+                # The simulation reads it to levy Ordinary Tax (higher tier
+                # owes more); absent it, Rust falls back to tier 1.
+                if payload.get("tier") is not None:
+                    row["tier"] = payload["tier"]
+                # The settlement's own name (e.g. "Berwick"), distinct from the
+                # province name ("Province 1"). The simulation names the city by
+                # this so the UI shows real settlement names.
+                if payload.get("name"):
+                    row["city_name"] = payload["name"]
         elif city_layer is not None and str(pid) in city_points:
             row["city_position"] = list(city_points[str(pid)])
 

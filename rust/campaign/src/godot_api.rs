@@ -8,8 +8,8 @@ use rand::thread_rng;
 use std::collections::HashMap;
 
 use crate::model::{
-    ArmyId, BattleKind, BattleReport, Campaign, City, CityId, Faction, FactionId, MoveReport,
-    Province, ProvinceId, TagValue, DEFAULT_MOVE_POINTS,
+    ordinary_tax, ArmyId, BattleKind, BattleReport, Campaign, City, CityId, Faction, FactionId,
+    MoveReport, Province, ProvinceId, TagValue, DEFAULT_MOVE_POINTS,
 };
 
 struct CampaignExtension;
@@ -40,6 +40,13 @@ struct ProvinceDef {
     /// Where its capital sits, from the map's `city_layer` (a `city_position`
     /// column). Falls back to the centroid for older exports that lack one.
     city_position: (f32, f32),
+    /// Settlement size class from the map's city layer, driving its Ordinary
+    /// Tax obligation. Defaults to 1 for older exports that lack the column.
+    tier: u32,
+    /// The settlement's own name (e.g. "Berwick"), distinct from the province
+    /// name. `None` for exports predating the city-name column; the city then
+    /// falls back to the province name.
+    city_name: Option<String>,
     neighbors: Vec<ProvinceId>,
     tags: HashMap<String, TagValue>,
     starting_owner: Option<String>,
@@ -260,6 +267,8 @@ impl CampaignManager {
                     name: dict_string(&dict, "name").unwrap_or_else(|| format!("Province {id}")),
                     centroid,
                     city_position,
+                    tier: dict_int(&dict, "tier").filter(|t| *t > 0).unwrap_or(1) as u32,
+                    city_name: dict_string(&dict, "city_name"),
                     neighbors,
                     tags,
                     starting_owner: dict_string(&dict, "starting_owner"),
@@ -308,8 +317,11 @@ impl CampaignManager {
             if let Some(owner_id) = owner {
                 cities.push(City {
                     id: cities.len() as CityId,
-                    name: def.name.clone(),
-                    income: 20,
+                    name: def.city_name.clone().unwrap_or_else(|| def.name.clone()),
+                    // Ordinary Tax is the only income source for now, so a
+                    // city's whole income is what its tier owes.
+                    income: ordinary_tax(def.tier),
+                    tier: def.tier,
                     position: def.city_position,
                     owner: owner_id,
                     province: Some(def.id),
@@ -441,6 +453,7 @@ impl CampaignManager {
             cd.set("id", city.id as i64);
             cd.set("name", city.name.clone());
             cd.set("income", city.income as i64);
+            cd.set("tier", city.tier as i64);
             cd.set("owner", city.owner as i64);
             cd.set("province", city.province.map_or(-1, |p| p as i64));
             cd.set("x", city.position.0 as f64);

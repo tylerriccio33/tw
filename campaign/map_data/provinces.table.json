@@ -22,7 +22,9 @@
    "city_position": [
     3636,
     3486.67
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Berwick"
   },
   {
    "id": 2,
@@ -57,7 +59,9 @@
    "city_position": [
     4555.018875221868,
     6335
-   ]
+   ],
+   "tier": 5,
+   "city_name": "London"
   },
   {
    "id": 3,
@@ -91,7 +95,9 @@
    "city_position": [
     3675.39,
     5680.000000000003
-   ]
+   ],
+   "tier": 5,
+   "city_name": "Birmingham"
   },
   {
    "id": 4,
@@ -115,7 +121,9 @@
    "city_position": [
     3454.2,
     3613.33
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Roxburgh"
   },
   {
    "id": 5,
@@ -136,7 +144,9 @@
    "city_position": [
     2814.8509091809633,
     7072.980911068604
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Plymouth"
   },
   {
    "id": 6,
@@ -161,7 +171,9 @@
    "city_position": [
     4004.7712000000006,
     6796.133333333334
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Portsmouth"
   },
   {
    "id": 7,
@@ -184,7 +196,9 @@
    "city_position": [
     3244,
     3026
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Dundee"
   },
   {
    "id": 8,
@@ -208,7 +222,9 @@
    "city_position": [
     1914.1041839427062,
     5083.4916416989945
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Dublin"
   },
   {
    "id": 9,
@@ -235,7 +251,9 @@
    "city_position": [
     3876.7032000000004,
     6731.666666666664
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Southampton"
   },
   {
    "id": 10,
@@ -261,7 +279,9 @@
    "city_position": [
     2852.24,
     3253.33
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Stirling"
   },
   {
    "id": 11,
@@ -284,7 +304,9 @@
    "city_position": [
     2888.6989822842065,
     3173.2838929010595
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Edinburgh"
   },
   {
    "id": 12,
@@ -310,7 +332,9 @@
    "city_position": [
     2727,
     3425.933333333333
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Glasgow"
   },
   {
    "id": 13,
@@ -333,7 +357,9 @@
    "city_position": [
     3316.84,
     3106.67
-   ]
+   ],
+   "tier": 3,
+   "city_name": "St Andrews"
   },
   {
    "id": 14,
@@ -357,7 +383,9 @@
    "city_position": [
     4108.891669807765,
     4880.775717336765
-   ]
+   ],
+   "tier": 1,
+   "city_name": "York"
   },
   {
    "id": 15,
@@ -384,7 +412,9 @@
    "city_position": [
     3536.9392,
     5014
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Manchester"
   },
   {
    "id": 16,
@@ -407,7 +437,9 @@
    "city_position": [
     3102.72,
     2233.33
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Elgin"
   },
   {
    "id": 17,
@@ -431,7 +463,9 @@
    "city_position": [
     3083.6179419525065,
     6241.311440460192
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Cardiff"
   },
   {
    "id": 18,
@@ -461,7 +495,9 @@
    "city_position": [
     3820.3856,
     4801.666666666667
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Leeds"
   },
   {
    "id": 19,
@@ -484,7 +520,9 @@
    "city_position": [
     2807.8,
     4106.67
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Kirkcudbright"
   },
   {
    "id": 20,
@@ -514,7 +552,9 @@
    "city_position": [
     3621.594270637015,
     6763.694784009015
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Winchestor"
   },
   {
    "id": 21,
@@ -544,7 +584,9 @@
    "city_position": [
     3849.9988,
     5079.466666666666
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Sheffield"
   },
   {
    "id": 22,
@@ -568,7 +610,9 @@
    "city_position": [
     2714.88,
     5240
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Caernarfon"
   },
   {
    "id": 23,
@@ -591,7 +635,9 @@
    "city_position": [
     3227.217602882633,
     5674.520806978994
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Shrewsbury"
   },
   {
    "id": 24,
@@ -616,7 +662,9 @@
    "city_position": [
     3235,
     5061
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Liverpool"
   },
   {
    "id": 25,
@@ -640,7 +688,9 @@
    "city_position": [
     2896.68,
     5146.67
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Conwy"
   },
   {
    "id": 26,
@@ -659,7 +709,9 @@
    "city_position": [
     3925.6678477195624,
     6876.747895672566
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Wight"
   },
   {
    "id": 27,
@@ -685,7 +737,9 @@
    "city_position": [
     4293.9544000000005,
     6790.199999999999
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Worthing"
   },
   {
    "id": 28,
@@ -710,7 +764,9 @@
    "city_position": [
     2702.76,
     6093.33
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Carmarthen"
   },
   {
    "id": 29,
@@ -731,7 +787,9 @@
    "city_position": [
     783.5742178665661,
     5929.440787595223
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Conneacth"
   },
   {
    "id": 30,
@@ -758,7 +816,9 @@
    "city_position": [
     4363.321199999999,
     6237.066666666668
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Barnet"
   },
   {
    "id": 31,
@@ -780,7 +840,9 @@
    "city_position": [
     2456.32,
     6220
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Pembroke"
   },
   {
    "id": 32,
@@ -803,7 +865,9 @@
    "city_position": [
     3778.533943375083,
     5284.5655856463145
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Nottingham"
   },
   {
    "id": 33,
@@ -826,7 +890,9 @@
    "city_position": [
     3159.6032000000005,
     6345.533333333336
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Caerdydd"
   },
   {
    "id": 34,
@@ -848,7 +914,9 @@
    "city_position": [
     2561.36,
     5946.67
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Cardigan"
   },
   {
    "id": 35,
@@ -869,7 +937,9 @@
    "city_position": [
     5153.657293629853,
     6771.491550330639
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Callias"
   },
   {
    "id": 36,
@@ -900,7 +970,9 @@
    "city_position": [
     4050.8675999999996,
     6363.866666666667
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Reading"
   },
   {
    "id": 37,
@@ -923,7 +995,9 @@
    "city_position": [
     2440.16,
     6133.33
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Haverfordwest"
   },
   {
    "id": 38,
@@ -944,7 +1018,9 @@
    "city_position": [
     5021.112401055409,
     7870.835601679655
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Caen"
   },
   {
    "id": 39,
@@ -968,7 +1044,9 @@
    "city_position": [
     4429.3752,
     6322.466666666666
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Tower Hamlets"
   },
   {
    "id": 40,
@@ -991,7 +1069,9 @@
    "city_position": [
     3074.44,
     6033.33
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Brecon"
   },
   {
    "id": 41,
@@ -1015,7 +1095,9 @@
    "city_position": [
     5161.454052016585,
     7395.232856060577
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Rouan"
   },
   {
    "id": 42,
@@ -1041,7 +1123,9 @@
    "city_position": [
     4260.18,
     6311.4000000000015
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Hillingdon"
   },
   {
    "id": 43,
@@ -1062,7 +1146,9 @@
    "city_position": [
     2795.68,
     5726.67
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Aberystwyth"
   },
   {
    "id": 44,
@@ -1084,7 +1170,9 @@
    "city_position": [
     4710.84125087451,
     6454.431249644353
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Canterbury"
   },
   {
    "id": 45,
@@ -1107,7 +1195,9 @@
    "city_position": [
     3886.076,
     4062.666666666668
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Sunderland"
   },
   {
    "id": 46,
@@ -1130,7 +1220,9 @@
    "city_position": [
     2783.56,
     5426.67
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Harlech"
   },
   {
    "id": 47,
@@ -1152,7 +1244,9 @@
    "city_position": [
     3021.0342560317977,
     6839.904227053669
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Exeter"
   },
   {
    "id": 48,
@@ -1179,7 +1273,9 @@
    "city_position": [
     4136.96,
     5973.333333333334
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Milton Keynes"
   },
   {
    "id": 49,
@@ -1200,7 +1296,9 @@
    "city_position": [
     2792,
     5159
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Beaumaris"
   },
   {
    "id": 50,
@@ -1225,7 +1323,9 @@
    "city_position": [
     3321.3447829667098,
     6458.9134935677175
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Bristol"
   },
   {
    "id": 51,
@@ -1254,7 +1354,9 @@
    "city_position": [
     3846.888,
     5383.533333333333
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Derby"
   },
   {
    "id": 52,
@@ -1278,7 +1380,9 @@
    "city_position": [
     3062.32,
     5213.33
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Denbigh"
   },
   {
    "id": 53,
@@ -1306,7 +1410,9 @@
    "city_position": [
     3527.528129817545,
     6158.60315070232
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Gloucester"
   },
   {
    "id": 54,
@@ -1329,7 +1435,9 @@
    "city_position": [
     3582.1467999999995,
     5611.133333333332
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Wolverhampton"
   },
   {
    "id": 55,
@@ -1351,7 +1459,9 @@
    "city_position": [
     2819.92,
     5180
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Abergwyngregyn"
   },
   {
    "id": 56,
@@ -1375,7 +1485,9 @@
    "city_position": [
     3388.578483026765,
     5921.0442227640215
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Hereford"
   },
   {
    "id": 57,
@@ -1398,7 +1510,9 @@
    "city_position": [
     2848,
     6254
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Abertawe"
   },
   {
    "id": 58,
@@ -1422,7 +1536,9 @@
    "city_position": [
     1571.56,
     5826.67
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Waterford"
   },
   {
    "id": 59,
@@ -1447,7 +1563,9 @@
    "city_position": [
     4329.850283867533,
     4796.000997999624
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Beverly"
   },
   {
    "id": 60,
@@ -1471,7 +1589,9 @@
    "city_position": [
     3846.4435999999996,
     4963.533333333336
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Barnsley"
   },
   {
    "id": 61,
@@ -1495,7 +1615,9 @@
    "city_position": [
     1878.6,
     4853.33
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Drogheda"
   },
   {
    "id": 62,
@@ -1516,7 +1638,9 @@
    "city_position": [
     4406.048477268928,
     4867.716900773449
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Hull"
   },
   {
    "id": 63,
@@ -1544,7 +1668,9 @@
    "city_position": [
     3564.8556000000003,
     5316.333333333333
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Stoke-on-Trent"
   },
   {
    "id": 64,
@@ -1568,7 +1694,9 @@
    "city_position": [
     1515,
     5566.67
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Kilkenny"
   },
   {
    "id": 65,
@@ -1593,7 +1721,9 @@
    "city_position": [
     3796.4629300577644,
     3989.1970917940794
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Newcastle"
   },
   {
    "id": 66,
@@ -1621,7 +1751,9 @@
    "city_position": [
     3724.88,
     6293.333333333332
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Swindon"
   },
   {
    "id": 67,
@@ -1644,7 +1776,9 @@
    "city_position": [
     1640.24,
     5733.33
-   ]
+   ],
+   "tier": 3,
+   "city_name": "New Ross"
   },
   {
    "id": 68,
@@ -1665,7 +1799,9 @@
    "city_position": [
     5109.761204564169,
     5661.074075208901
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Great Yarmouth"
   },
   {
    "id": 69,
@@ -1692,7 +1828,9 @@
    "city_position": [
     4276.4612,
     6081.133333333331
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Luton"
   },
   {
    "id": 70,
@@ -1714,7 +1852,9 @@
    "city_position": [
     1271,
     6033
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Youghal"
   },
   {
    "id": 71,
@@ -1737,7 +1877,9 @@
    "city_position": [
     4863.237637677301,
     5535.571245354706
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Norwich"
   },
   {
    "id": 72,
@@ -1768,7 +1910,9 @@
    "city_position": [
     4348.4944,
     5622.600000000001
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Peterborough"
   },
   {
    "id": 73,
@@ -1792,7 +1936,9 @@
    "city_position": [
     1700.84,
     4966.67
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Trim"
   },
   {
    "id": 74,
@@ -1817,7 +1963,9 @@
    "city_position": [
     4594.3028374370815,
     5540.05348927807
-   ]
+   ],
+   "tier": 3,
+   "city_name": "King's Lynn"
   },
   {
    "id": 75,
@@ -1844,7 +1992,9 @@
    "city_position": [
     4399.6004,
     6418.199999999999
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Croydon"
   },
   {
    "id": 76,
@@ -1866,7 +2016,9 @@
    "city_position": [
     2096.76,
     4186.67
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Carrickfergus"
   },
   {
    "id": 77,
@@ -1893,7 +2045,9 @@
    "city_position": [
     4285.027817160829,
     5235.260902489308
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Lincoln"
   },
   {
    "id": 78,
@@ -1916,7 +2070,9 @@
    "city_position": [
     3684,
     6852
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Bournemouth"
   },
   {
    "id": 79,
@@ -1939,7 +2095,9 @@
    "city_position": [
     1858.4,
     4666.67
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Dundalk"
   },
   {
    "id": 80,
@@ -1966,7 +2124,9 @@
    "city_position": [
     3818.874163411116,
     5652.109587362173
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Leicester"
   },
   {
    "id": 81,
@@ -1990,7 +2150,9 @@
    "city_position": [
     4641.96,
     6280.000000000001
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Basildon"
   },
   {
    "id": 82,
@@ -2012,7 +2174,9 @@
    "city_position": [
     2003.84,
     5346.67
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Wicklow"
   },
   {
    "id": 83,
@@ -2035,7 +2199,9 @@
    "city_position": [
     4881.166624359982,
     5997.242369461212
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Ipswich"
   },
   {
    "id": 84,
@@ -2057,7 +2223,9 @@
    "city_position": [
     3724.9608000000003,
     4903.333333333331
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Huddersfield"
   },
   {
    "id": 85,
@@ -2079,7 +2247,9 @@
    "city_position": [
     5094.44,
     6846.67
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Boulogne"
   },
   {
    "id": 86,
@@ -2106,7 +2276,9 @@
    "city_position": [
     4737.734730898532,
     5903.115247070565
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Bury St. Edmunds"
   },
   {
    "id": 87,
@@ -2131,7 +2303,9 @@
    "city_position": [
     3232.8887999999997,
     6274.266666666666
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Newport"
   },
   {
    "id": 88,
@@ -2153,7 +2327,9 @@
    "city_position": [
     4880.32,
     7386.67
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Dieppe"
   },
   {
    "id": 89,
@@ -2182,7 +2358,9 @@
    "city_position": [
     3814.3919167404456,
     6176.532126395778
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Oxford"
   },
   {
    "id": 90,
@@ -2208,7 +2386,9 @@
    "city_position": [
     3455.4524000000006,
     5548.933333333333
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Telford"
   },
   {
    "id": 91,
@@ -2229,7 +2409,9 @@
    "city_position": [
     4161.2,
     7813.33
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Bayeux"
   },
   {
    "id": 92,
@@ -2248,7 +2430,9 @@
    "city_position": [
     995.73641523169,
     4666.183885116209
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Galway"
   },
   {
    "id": 93,
@@ -2273,7 +2457,9 @@
    "city_position": [
     3339.0600000000004,
     4780.000000000001
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Preston"
   },
   {
    "id": 94,
@@ -2294,7 +2480,9 @@
    "city_position": [
     3789.52,
     7580
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Cherbourg"
   },
   {
    "id": 95,
@@ -2315,7 +2503,9 @@
    "city_position": [
     3046.4874151242784,
     1648.0643140861487
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Firth"
   },
   {
    "id": 96,
@@ -2341,7 +2531,9 @@
    "city_position": [
     3944.858,
     4282.199999999999
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Middlesbrough"
   },
   {
    "id": 97,
@@ -2362,7 +2554,9 @@
    "city_position": [
     5373.2,
     7406.67
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Amiens"
   },
   {
    "id": 98,
@@ -2387,7 +2581,9 @@
    "city_position": [
     2835.4050092795587,
     3945.612101703784
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Strathclyde"
   },
   {
    "id": 99,
@@ -2410,7 +2606,9 @@
    "city_position": [
     3211.6788,
     4790.533333333334
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Blackpool"
   },
   {
    "id": 100,
@@ -2431,7 +2629,9 @@
    "city_position": [
     4524.8,
     7660
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Harfleur"
   },
   {
    "id": 101,
@@ -2450,7 +2650,9 @@
    "city_position": [
     3164.206449153065,
     1282.729860224687
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Orkney"
   },
   {
    "id": 102,
@@ -2473,7 +2675,9 @@
    "city_position": [
     4082.9048,
     5846.399999999998
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Northampton"
   },
   {
    "id": 103,
@@ -2492,7 +2696,9 @@
    "city_position": [
     3935.4690858933886,
     450.5791597624692
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Shetlands"
   },
   {
    "id": 104,
@@ -2519,7 +2725,9 @@
    "city_position": [
     4493.49,
     5863.333333333334
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Cambridge"
   },
   {
    "id": 105,
@@ -2538,7 +2746,9 @@
    "city_position": [
     2616.2040493638874,
     4503.7619617699065
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Isle of Man"
   },
   {
    "id": 106,
@@ -2564,7 +2774,9 @@
    "city_position": [
     4808.812,
     6072.2
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Colchester"
   },
   {
    "id": 107,
@@ -2587,7 +2799,9 @@
    "city_position": [
     1763.7558719140563,
     4300.798376291315
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Belfast"
   },
   {
    "id": 108,
@@ -2611,7 +2825,9 @@
    "city_position": [
     4141.7272,
     6247.533333333332
-   ]
+   ],
+   "tier": 2,
+   "city_name": "High Wycombe"
   },
   {
    "id": 109,
@@ -2635,7 +2851,9 @@
    "city_position": [
     3367.1703009268344,
     5096.415631367388
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Mancheaster"
   },
   {
    "id": 110,
@@ -2661,7 +2879,9 @@
    "city_position": [
     3441.272,
     4834.666666666668
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Blackburn"
   },
   {
    "id": 111,
@@ -2683,7 +2903,9 @@
    "city_position": [
     3424.00017942349,
     2254.925434667132
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Banbh"
   },
   {
    "id": 112,
@@ -2707,7 +2929,9 @@
    "city_position": [
     3609.0532,
     6066.666666666667
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Cheltenham"
   },
   {
    "id": 113,
@@ -2728,7 +2952,9 @@
    "city_position": [
     3038.368861053328,
     1759.694286099373
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Caithness"
   },
   {
    "id": 114,
@@ -2752,7 +2978,9 @@
    "city_position": [
     4637.92,
     6180.000000000003
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Chelmsford"
   },
   {
    "id": 115,
@@ -2771,7 +2999,9 @@
    "city_position": [
     2015.43104811353,
     3062.720504871919
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Muile"
   },
   {
    "id": 116,
@@ -2796,7 +3026,9 @@
    "city_position": [
     3986.4700000000003,
     4984.800000000003
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Doncaster"
   },
   {
    "id": 117,
@@ -2818,7 +3050,9 @@
    "city_position": [
     3314.3996994656545,
     2961.2387121326237
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Brechin"
   },
   {
    "id": 118,
@@ -2845,7 +3079,9 @@
    "city_position": [
     4004.6096000000002,
     6488.866666666667
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Basingstoke"
   },
   {
    "id": 119,
@@ -2870,7 +3106,9 @@
    "city_position": [
     3557.956321594178,
     2644.615518786024
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Berdeen"
   },
   {
    "id": 120,
@@ -2895,7 +3133,9 @@
    "city_position": [
     4368.3712,
     6593.866666666666
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Crawley"
   },
   {
    "id": 121,
@@ -2916,7 +3156,9 @@
    "city_position": [
     2660.8560967541166,
     2149.3843702182653
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Rosemarkie"
   },
   {
    "id": 122,
@@ -2941,7 +3183,9 @@
    "city_position": [
     3380.7527999999998,
     4970.133333333332
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Wigan"
   },
   {
    "id": 123,
@@ -2964,7 +3208,9 @@
    "city_position": [
     2640.55971157674,
     4142.486779618016
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Whithorn"
   },
   {
    "id": 124,
@@ -2987,7 +3233,9 @@
    "city_position": [
     3546.8775999999993,
     5872.600000000001
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Worcester"
   },
   {
    "id": 125,
@@ -3008,7 +3256,9 @@
    "city_position": [
     1570.9402127289752,
     4028.827171750006
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Derry"
   },
   {
    "id": 126,
@@ -3031,7 +3281,9 @@
    "city_position": [
     4557.12,
     6819.999999999997
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Eastbourne"
   },
   {
    "id": 127,
@@ -3052,7 +3304,9 @@
    "city_position": [
     1051.3527521881256,
     6058.463026535903
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Cork"
   },
   {
    "id": 128,
@@ -3077,7 +3331,9 @@
    "city_position": [
     3490.6812,
     6412.400000000001
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Bath"
   },
   {
    "id": 129,
@@ -3098,7 +3354,9 @@
    "city_position": [
     876.8038396626838,
     5177.601065558823
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Galway"
   },
   {
    "id": 130,
@@ -3122,7 +3380,9 @@
    "city_position": [
     3816.7496,
     4315.333333333332
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Darlington"
   },
   {
    "id": 131,
@@ -3147,7 +3407,9 @@
    "city_position": [
     1822.6153889284494,
     5717.484202931872
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Wexford"
   },
   {
    "id": 132,
@@ -3172,7 +3434,9 @@
    "city_position": [
     4254.12,
     5910.000000000001
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Bedford"
   },
   {
    "id": 133,
@@ -3194,7 +3458,9 @@
    "city_position": [
     933.6337181593392,
     5534.8169760011415
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Liberick"
   },
   {
    "id": 134,
@@ -3218,7 +3484,9 @@
    "city_position": [
     3229.8587999999995,
     4901.666666666666
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Southport"
   },
   {
    "id": 135,
@@ -3241,7 +3509,9 @@
    "city_position": [
     1648.0664764030078,
     5295.319945136405
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Kildare"
   },
   {
    "id": 136,
@@ -3264,7 +3534,9 @@
    "city_position": [
     4674,
     6765
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Hastings"
   },
   {
    "id": 137,
@@ -3286,7 +3558,9 @@
    "city_position": [
     1477.5768409130412,
     4889.392774179227
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Fore"
   },
   {
    "id": 138,
@@ -3311,7 +3585,9 @@
    "city_position": [
     3276.3188,
     5205.733333333332
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Chester"
   },
   {
    "id": 139,
@@ -3335,7 +3611,9 @@
    "city_position": [
     1562.8216586580245,
     4804.1480682782185
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Kells"
   },
   {
    "id": 140,
@@ -3358,7 +3636,9 @@
    "city_position": [
     4115.7904,
     6122.133333333333
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Aylesbury"
   },
   {
    "id": 141,
@@ -3384,7 +3664,9 @@
    "city_position": [
     4794.5104,
     6568.999999999998
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Ashford"
   },
   {
    "id": 142,
@@ -3408,7 +3690,9 @@
    "city_position": [
     4495.7119999999995,
     6147.333333333331
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Harlow"
   },
   {
    "id": 143,
@@ -3429,7 +3713,9 @@
    "city_position": [
     3662.9468000000006,
     5800.000000000002
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Redditch"
   },
   {
    "id": 144,
@@ -3456,7 +3742,9 @@
    "city_position": [
     4213.598800000001,
     6509
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Guildford"
   },
   {
    "id": 145,
@@ -3477,7 +3765,9 @@
    "city_position": [
     3257.6944000000008,
     4070.2
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Carlisle"
   },
   {
    "id": 146,
@@ -3501,7 +3791,9 @@
    "city_position": [
     3782.7732000000005,
     5465.399999999998
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Burton upon Trent"
   },
   {
    "id": 147,
@@ -3524,7 +3816,9 @@
    "city_position": [
     3822.7288,
     4672.066666666666
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Harrogate"
   },
   {
    "id": 148,
@@ -3548,7 +3842,9 @@
    "city_position": [
     2007.4759999999999,
     4325.333333333333
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Lisburn"
   },
   {
    "id": 149,
@@ -3574,7 +3870,9 @@
    "city_position": [
     3934.96,
     5753.333333333335
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Rugby"
   },
   {
    "id": 150,
@@ -3598,7 +3896,9 @@
    "city_position": [
     3588.7319999999995,
     5461.999999999999
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Stafford"
   },
   {
    "id": 151,
@@ -3624,7 +3924,9 @@
    "city_position": [
     3960.6544,
     5237.066666666668
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Mansfield"
   },
   {
    "id": 152,
@@ -3649,7 +3951,9 @@
    "city_position": [
     3956.0488,
     5484.999999999999
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Loughborough"
   },
   {
    "id": 153,
@@ -3673,7 +3977,9 @@
    "city_position": [
     4435.3544,
     5350.666666666669
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Boston"
   },
   {
    "id": 154,
@@ -3695,7 +4001,9 @@
    "city_position": [
     3004.75,
     7043.133333333334
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Paignton"
   },
   {
    "id": 155,
@@ -3720,7 +4028,9 @@
    "city_position": [
     3234.5855999999994,
     5302.199999999999
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Wrecsam"
   },
   {
    "id": 156,
@@ -3744,7 +4054,9 @@
    "city_position": [
     5003.055200000001,
     6410.000000000001
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Margate"
   },
   {
    "id": 157,
@@ -3765,7 +4077,9 @@
    "city_position": [
     2153.32,
     4226.666666666669
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Bangor"
   },
   {
    "id": 158,
@@ -3790,7 +4104,9 @@
    "city_position": [
     3191.6,
     6654.000000000001
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Taunton"
   },
   {
    "id": 159,
@@ -3818,7 +4134,9 @@
    "city_position": [
     4550.252,
     6578.666666666668
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Royal Tunbridge Wells"
   },
   {
    "id": 160,
@@ -3844,7 +4162,9 @@
    "city_position": [
     4151.9484,
     5737.933333333335
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Kettering"
   },
   {
    "id": 161,
@@ -3865,7 +4185,9 @@
    "city_position": [
     3535.4039999999995,
     5741
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Kidderminster"
   },
   {
    "id": 162,
@@ -3886,7 +4208,9 @@
    "city_position": [
     3140.6556,
     4592.800000000001
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Barrow in Furness"
   },
   {
    "id": 163,
@@ -3913,7 +4237,9 @@
    "city_position": [
     3458.2400000000002,
     5267.333333333336
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Crewe"
   },
   {
    "id": 164,
@@ -3936,7 +4262,9 @@
    "city_position": [
     3671.956,
     4755.333333333336
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Keighley"
   },
   {
    "id": 165,
@@ -3962,7 +4290,9 @@
    "city_position": [
     2812.244,
     3481.999999999999
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Hamilton"
   },
   {
    "id": 166,
@@ -3987,7 +4317,9 @@
    "city_position": [
     3054.5228,
     3285.4000000000005
-   ]
+   ],
+   "tier": 3,
+   "city_name": "Dunfermline"
   },
   {
    "id": 167,
@@ -4011,7 +4343,9 @@
    "city_position": [
     3312.2343999999994,
     4634.066666666665
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Lancaster"
   },
   {
    "id": 168,
@@ -4034,7 +4368,9 @@
    "city_position": [
     3583.4800000000005,
     5166.666666666667
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Macclesfield"
   },
   {
    "id": 169,
@@ -4057,7 +4393,9 @@
    "city_position": [
     3451,
     6926
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Weymouth"
   },
   {
    "id": 170,
@@ -4083,7 +4421,9 @@
    "city_position": [
     3846.0799999999995,
     6528.000000000001
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Andover"
   },
   {
    "id": 171,
@@ -4107,7 +4447,9 @@
    "city_position": [
     2830.424,
     3369.9999999999995
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Cumbernauld"
   },
   {
    "id": 172,
@@ -4131,7 +4473,9 @@
    "city_position": [
     4296.54,
     6420.599999999998
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Esher"
   },
   {
    "id": 173,
@@ -4156,7 +4500,9 @@
    "city_position": [
     3023.6572000000006,
     3411.0666666666652
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Livingston"
   },
   {
    "id": 174,
@@ -4181,7 +4527,9 @@
    "city_position": [
     3823.5368,
     5805.4000000000015
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Royal Leamington Spa"
   },
   {
    "id": 175,
@@ -4204,7 +4552,9 @@
    "city_position": [
     4906.8628,
     6138.799999999999
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Clacton-on-Sea"
   },
   {
    "id": 176,
@@ -4228,7 +4578,9 @@
    "city_position": [
     4282.4,
     4478.333333333334
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Scarborough"
   },
   {
    "id": 177,
@@ -4252,7 +4604,9 @@
    "city_position": [
     3163,
     3353
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Leith"
   },
   {
    "id": 178,
@@ -4275,7 +4629,9 @@
    "city_position": [
     2998.488,
     6328.666666666668
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Pen-y-Bont ar Ogwr"
   },
   {
    "id": 179,
@@ -4298,7 +4654,9 @@
    "city_position": [
     4365.9472000000005,
     6129.200000000002
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Welwyn Garden City"
   },
   {
    "id": 180,
@@ -4322,7 +4680,9 @@
    "city_position": [
     3808.3867999999998,
     4149.266666666666
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Durham"
   },
   {
    "id": 181,
@@ -4348,7 +4708,9 @@
    "city_position": [
     3056.9468,
     3069.466666666666
-   ]
+   ],
+   "tier": 4,
+   "city_name": "Perth"
   },
   {
    "id": 182,
@@ -4370,7 +4732,9 @@
    "city_position": [
     2737.2212,
     2348.133333333332
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Inverness"
   },
   {
    "id": 183,
@@ -4392,7 +4756,9 @@
    "city_position": [
     4920.477599999999,
     6613.866666666667
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Folkestone"
   },
   {
    "id": 184,
@@ -4416,7 +4782,9 @@
    "city_position": [
     3904.256,
     5959.333333333333
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Banbury"
   },
   {
    "id": 185,
@@ -4441,7 +4809,9 @@
    "city_position": [
     2573.8840000000005,
     3694.666666666668
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Ayr"
   },
   {
    "id": 186,
@@ -4464,7 +4834,9 @@
    "city_position": [
     2627.7372,
     3592.5999999999995
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Kilmarnock"
   },
   {
    "id": 187,
@@ -4487,7 +4859,9 @@
    "city_position": [
     3718.8199999999997,
     6620.200000000002
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Salisbury"
   },
   {
    "id": 188,
@@ -4509,7 +4883,9 @@
    "city_position": [
     3989.7424,
     5130.533333333332
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Worksop"
   },
   {
    "id": 189,
@@ -4533,7 +4909,9 @@
    "city_position": [
     4666.200000000001,
     6081.333333333333
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Braintree"
   },
   {
    "id": 190,
@@ -4554,7 +4932,9 @@
    "city_position": [
     2518.94,
     3366.6666666666647
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Greenock"
   },
   {
    "id": 191,
@@ -4576,7 +4956,9 @@
    "city_position": [
     4434,
     4964
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Cleethorpes"
   },
   {
    "id": 192,
@@ -4599,7 +4981,9 @@
    "city_position": [
     3160.088,
     3201.333333333333
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Glenrothes"
   },
   {
    "id": 193,
@@ -4621,7 +5005,9 @@
    "city_position": [
     4900.5199999999995,
     6420.000000000002
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Herne Bay"
   },
   {
    "id": 194,
@@ -4647,7 +5033,9 @@
    "city_position": [
     3953.1400000000003,
     5382.000000000001
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Beeston"
   },
   {
    "id": 195,
@@ -4669,7 +5057,9 @@
    "city_position": [
     3589.136,
     6360.666666666664
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Chippenham"
   },
   {
    "id": 196,
@@ -4692,7 +5082,9 @@
    "city_position": [
     3915.5679999999998,
     6624.533333333332
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Winchester"
   },
   {
    "id": 197,
@@ -4714,7 +5106,9 @@
    "city_position": [
     4366.3108,
     4612.066666666668
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Bridlington"
   },
   {
    "id": 198,
@@ -4738,7 +5132,9 @@
    "city_position": [
     4186.248,
     5388.000000000001
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Grantham"
   },
   {
    "id": 199,
@@ -4762,7 +5158,9 @@
    "city_position": [
     3909.508,
     6399.333333333331
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Newbury"
   },
   {
    "id": 200,
@@ -4784,7 +5182,9 @@
    "city_position": [
     3547.9280000000003,
     4776.9333333333325
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Nelson"
   },
   {
    "id": 201,
@@ -4806,7 +5206,9 @@
    "city_position": [
     3927.5668,
     6218.866666666666
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Abingdon"
   },
   {
    "id": 202,
@@ -4828,7 +5230,9 @@
    "city_position": [
     3705.084,
     5545.333333333332
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Lichfield"
   },
   {
    "id": 203,
@@ -4851,7 +5255,9 @@
    "city_position": [
     4393.0152,
     6697.666666666668
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Burgess Hill"
   },
   {
    "id": 204,
@@ -4874,7 +5280,9 @@
    "city_position": [
     2988.388,
     3953.333333333333
-   ]
+   ],
+   "tier": 2,
+   "city_name": "Dumfries"
   },
   {
    "id": 205,
@@ -4899,7 +5307,9 @@
    "city_position": [
     4002.428,
     5612.533333333332
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Wigston Magna"
   },
   {
    "id": 206,
@@ -4922,7 +5332,9 @@
    "city_position": [
     3378.6519999999996,
     6703.2
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Yeovil"
   },
   {
    "id": 207,
@@ -4945,7 +5357,9 @@
    "city_position": [
     4334.92,
     5847.999999999999
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Saint Neots"
   },
   {
    "id": 208,
@@ -4968,7 +5382,9 @@
    "city_position": [
     3913.952,
     4872.666666666665
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Pontefract"
   },
   {
    "id": 209,
@@ -4993,7 +5409,9 @@
    "city_position": [
     3979.3999999999996,
     6066.666666666667
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Bicester"
   },
   {
    "id": 210,
@@ -5015,7 +5433,9 @@
    "city_position": [
     4382.2284,
     5476.133333333332
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Spalding"
   },
   {
    "id": 211,
@@ -5039,7 +5459,9 @@
    "city_position": [
     4117.2044000000005,
     5281.866666666669
-   ]
+   ],
+   "tier": 1,
+   "city_name": "Newark upon Trent"
   }
  ]
 }

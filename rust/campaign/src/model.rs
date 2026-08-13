@@ -38,12 +38,33 @@ fn distance(a: (f32, f32), b: (f32, f32)) -> f32 {
 pub struct City {
     pub id: CityId,
     pub name: String,
+    /// Total money this city contributes to its owner each turn. Right now the
+    /// only source is Ordinary Tax (`ordinary_tax`), keyed off `tier`, so a
+    /// city built from a map package has `income == ordinary_tax(tier)`. Kept
+    /// as its own field (rather than always recomputing from `tier`) so future
+    /// income sources can be folded in here without every reader learning about
+    /// them.
     pub income: i32,
+    /// Settlement size class from the map's city layer (1 = smallest). Drives
+    /// the Ordinary Tax obligation via `ordinary_tax`; higher tiers owe more.
+    pub tier: u32,
     pub position: (f32, f32),
     pub owner: FactionId,
     /// The province this city sits in, when the campaign was built from a map
     /// package. Taking the city takes the province with it.
     pub province: Option<ProvinceId>,
+}
+
+/// Money a single unowned-of-source obligation - the "Ordinary Tax" the faction
+/// head levies on each settlement - is worth per tier level. Tier 1 owes this
+/// much, tier 2 twice as much, and so on, so bigger settlements shoulder a
+/// proportionally bigger share of the treasury.
+pub const ORDINARY_TAX_PER_TIER: i32 = 25;
+
+/// The Ordinary Tax a settlement of `tier` owes its faction each turn. A tier
+/// of 0 (an untiered settlement) owes nothing.
+pub fn ordinary_tax(tier: u32) -> i32 {
+    tier as i32 * ORDINARY_TAX_PER_TIER
 }
 
 /// A value read off a map layer, whatever that layer happens to describe.
@@ -1137,6 +1158,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 income: 10,
+                tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1145,12 +1167,107 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 income: 10,
+                tier: 1,
                 position: (1.0, 0.0),
                 owner: 1,
                 province: None,
             },
         ];
         Campaign::new(factions, cities, 10)
+    }
+
+    #[test]
+    fn ordinary_tax_scales_with_tier() {
+        assert_eq!(ordinary_tax(0), 0);
+        assert_eq!(ordinary_tax(1), ORDINARY_TAX_PER_TIER);
+        assert_eq!(ordinary_tax(4), 4 * ORDINARY_TAX_PER_TIER);
+        assert!(ordinary_tax(3) > ordinary_tax(2));
+    }
+
+    /// A faction's turn income is the sum of the Ordinary Tax owed by every
+    /// settlement it holds, so higher-tier cities pay proportionally more.
+    #[test]
+    fn faction_income_sums_ordinary_tax_across_cities() {
+        let factions = vec![Faction {
+            id: 0,
+            name: "Red".into(),
+            money: 0,
+            alive: true,
+        }];
+        let cities = vec![
+            City {
+                id: 0,
+                name: "Big".into(),
+                income: ordinary_tax(4),
+                tier: 4,
+                position: (0.0, 0.0),
+                owner: 0,
+                province: None,
+            },
+            City {
+                id: 1,
+                name: "Small".into(),
+                income: ordinary_tax(1),
+                tier: 1,
+                position: (100.0, 0.0),
+                owner: 0,
+                province: None,
+            },
+        ];
+        // Campaign::new credits the starting faction's income once.
+        let c = Campaign::new(factions, cities, 10);
+        assert_eq!(
+            c.faction(0).unwrap().money,
+            ordinary_tax(4) + ordinary_tax(1)
+        );
+    }
+
+    /// Ending a turn credits the next faction its Ordinary Tax, and doing so
+    /// again a full cycle later credits it a second time - i.e. the tax is a
+    /// recurring per-turn income, not a one-off at game start.
+    #[test]
+    fn ending_a_turn_credits_the_next_factions_ordinary_tax() {
+        let factions = vec![
+            Faction {
+                id: 0,
+                name: "Red".into(),
+                money: 0,
+                alive: true,
+            },
+            Faction {
+                id: 1,
+                name: "Blue".into(),
+                money: 0,
+                alive: true,
+            },
+        ];
+        let cities = vec![
+            City {
+                id: 0,
+                name: "Redhold".into(),
+                income: ordinary_tax(2),
+                tier: 2,
+                position: (0.0, 0.0),
+                owner: 0,
+                province: None,
+            },
+            City {
+                id: 1,
+                name: "Bluehold".into(),
+                income: ordinary_tax(3),
+                tier: 3,
+                position: (1.0, 0.0),
+                owner: 1,
+                province: None,
+            },
+        ];
+        let mut c = Campaign::new(factions, cities, 100);
+        // Red credited once at game start.
+        assert_eq!(c.faction(0).unwrap().money, ordinary_tax(2));
+        c.end_turn(); // Blue's turn: credit Blue.
+        assert_eq!(c.faction(1).unwrap().money, ordinary_tax(3));
+        c.end_turn(); // Back to Red: credit Red a second time.
+        assert_eq!(c.faction(0).unwrap().money, ordinary_tax(2) * 2);
     }
 
     #[test]
@@ -1202,6 +1319,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 income: 10,
+                tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1210,6 +1328,7 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 income: 10,
+                tier: 1,
                 position: (1.0, 0.0),
                 owner: 1,
                 province: None,
@@ -1218,6 +1337,7 @@ mod tests {
                 id: 2,
                 name: "Greenhold".into(),
                 income: 10,
+                tier: 1,
                 position: (2.0, 0.0),
                 owner: 2,
                 province: None,
@@ -1330,6 +1450,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 income: 10,
+                tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1338,6 +1459,7 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 income: 10,
+                tier: 1,
                 position: (1.0, 0.0),
                 owner: 1,
                 province: None,
@@ -1346,6 +1468,7 @@ mod tests {
                 id: 2,
                 name: "Greenhold".into(),
                 income: 10,
+                tier: 1,
                 position: (2.0, 0.0),
                 owner: 2,
                 province: None,
@@ -1422,6 +1545,7 @@ mod tests {
                 id: 0,
                 name: "A".into(),
                 income: 5,
+                tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1430,6 +1554,7 @@ mod tests {
                 id: 1,
                 name: "B".into(),
                 income: 5,
+                tier: 1,
                 position: (1.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1438,6 +1563,7 @@ mod tests {
                 id: 2,
                 name: "C".into(),
                 income: 5,
+                tier: 1,
                 position: (2.0, 0.0),
                 owner: 1,
                 province: None,
@@ -1478,6 +1604,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 income: 10,
+                tier: 1,
                 position: a,
                 owner: 0,
                 province: None,
@@ -1486,6 +1613,7 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 income: 10,
+                tier: 1,
                 position: b,
                 owner: 1,
                 province: None,
@@ -1750,6 +1878,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 income: 10,
+                tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
                 province: Some(1),
@@ -1758,6 +1887,7 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 income: 10,
+                tier: 1,
                 position: (100.0, 0.0),
                 owner: 1,
                 province: Some(2),
@@ -1875,6 +2005,7 @@ mod tests {
             id: 0,
             name: "Redhold".into(),
             income: 10,
+            tier: 1,
             position: (0.0, 0.0),
             owner: 0,
             province: Some(1),
@@ -1975,6 +2106,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 income: 10,
+                tier: 1,
                 position: (0.0, 0.0),
                 owner: 0,
                 province: Some(1),
