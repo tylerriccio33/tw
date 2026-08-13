@@ -22,6 +22,7 @@ extends RefCounted
 const MANIFEST_PATH := "map.json"
 const TABLE_PATH := "provinces.table.json"
 const GEO_PATH := "provinces.geo.json"
+const POINTS_PATH := "points.json"
 const LAYERS_DIR := "layers"
 
 var root: String = ""
@@ -31,6 +32,7 @@ var provinces: Array = []
 var province_by_id: Dictionary = {}
 var geometry: Dictionary = {}  ## province id -> Array of {points, hole}
 var layer_configs: Dictionary = {}
+var points_by_layer: Dictionary = {}  ## free-point layer name -> Array of point dicts
 var size: Vector2 = Vector2.ZERO
 var load_error: String = ""
 
@@ -63,6 +65,13 @@ func load_from(package_root: String) -> bool:
 		return false
 	for province in provinces:
 		province_by_id[int(province["id"])] = province
+
+	# Free-point layers (resources, ...) are authored as landmark points and
+	# exported to points.json. They're purely visual to the game - the
+	# simulation never sees them - so they load here for the UI to render and
+	# are optional (a package exported before points.json existed just has no
+	# landmarks).
+	points_by_layer = _read_json(root.path_join(POINTS_PATH), {}).get("layers", {})
 
 	for entry in _read_json(root.path_join(GEO_PATH), {}).get("provinces", []):
 		geometry[int(entry["id"])] = entry.get("rings", [])
@@ -124,6 +133,25 @@ func city_positions() -> Dictionary:
 		var point: Array = province.get("city_position", province.get("centroid", [0, 0]))
 		positions[int(province["id"])] = Vector2(point[0], point[1])
 	return positions
+
+
+## Landmark points authored on a free-point layer (e.g. "resources"), each a
+## dict with x/y in map pixel space plus the layer's own fields (kind, name).
+## Empty if the layer doesn't exist or the package predates points.json.
+func layer_points(layer_name: String) -> Array:
+	return points_by_layer.get(layer_name, [])
+
+
+## key (the legend entry's "key", e.g. a resource kind) -> Color, for a
+## `kind: class` layer. Lets a marker recolor itself from the same legend the
+## editor painted with, so adding a resource kind is data, not code.
+func layer_key_colors(layer_name: String) -> Dictionary:
+	var colors := {}
+	var legend: Dictionary = layer_config(layer_name).get("legend", {})
+	for hex in legend:
+		var entry: Dictionary = legend[hex]
+		colors[String(entry.get("key", ""))] = Color(hex)
+	return colors
 
 
 func _read_json(path: String, fallback: Variant) -> Variant:

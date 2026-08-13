@@ -1,16 +1,16 @@
 extends Node2D
 ## Thin GDScript glue: loads the region-polygon political map (province_map.gd,
-## a port of Thomas Holtvedt's grand-strategy-simple tutorial), derives one
-## city per map region for the Rust CampaignManager, and sets up a pannable/
-## zoomable 2D "camera" over it (WASD/edge pan, scroll zoom). City markers/
-## dropdown/end-turn button render state on every signal instead of polling -
-## unchanged from before this script also owned world/camera setup.
+## a port of Thomas Holtvedt's grand-strategy-simple tutorial), derives one city
+## per map region for the Rust CampaignManager, and sets up a pannable/zoomable
+## 2D "camera" over it (WASD/edge pan, scroll zoom). Markers/dropdown/end-turn
+## button render state on every signal instead of polling.
 
 const ArmyLayer := preload("res://campaign/army_layer.gd")
 const BattleUiController := preload("res://campaign/battle_ui_controller.gd")
 const HudBuilder := preload("res://campaign/campaign_hud_builder.gd")
 const ProvinceMap := preload("res://campaign/province_map.gd")
 const CityMarker := preload("res://campaign/city_marker.gd")
+const ResourceLayer := preload("res://campaign/resource_layer.gd")
 const MAX_TURNS := 10
 
 # The map is Thomas Holtvedt's grand-strategy-simple region bitmap (a
@@ -32,12 +32,10 @@ const ZOOM_STEP := 0.1  # per scroll-wheel notch
 const ZOOM_KEY_SPEED := 1.2  # zoom units/sec while Z/X is held
 # pixels_per_unit is _base_ppu / _cam_zoom, so _cam_zoom is an *inverse* zoom
 # factor - lower means more magnified. _base_ppu is a cover-fit (map exactly
-# fills the frame when _cam_zoom is 1.0), so 1.0 is as far as _cam_zoom can
-# rise: going past it shrinks pixels_per_unit below the cover-fit ratio and
-# reveals empty background past the map's edges (X, or scroll-down, raises
-# _cam_zoom - "zooming out" was doing exactly that before this was fixed).
-# The lower bound is how far in Z/scroll-up can magnify.
-const MIN_ZOOM := 1.0 / 2.2
+# fills the frame at _cam_zoom 1.0), so 1.0 is the highest _cam_zoom can go:
+# past it, pixels_per_unit drops below the cover-fit ratio and empty background
+# shows past the map's edges. The lower bound is how far Z/scroll-up magnifies.
+const MIN_ZOOM := 1.0 / 5.0
 const MAX_ZOOM := 1.0
 
 # Faction colors are declared by the map package (factions.json) and read in
@@ -54,11 +52,10 @@ const PLAYER_FACTION := 0
 const AI_STEP_SECONDS := 0.35  # pause between AI factions, so turns stay legible
 
 # Total War-style "watch the AI move" camera: while an AI faction's turn is
-# resolving, the camera pans/zooms in on each army_moved signal it produces in
-# turn, rather than sitting still while enemy armies teleport around
-# off-screen. AI_CAMERA_ZOOM is a _cam_zoom value (inverse magnification, see
-# the comment above _cam_zoom below) - lower than MAX_ZOOM (1.0) but not as
-# tight as MIN_ZOOM, so the move is legible without losing surrounding context.
+# resolving, the camera pans/zooms in on each army_moved signal rather than
+# sitting still while enemy armies teleport off-screen. AI_CAMERA_ZOOM is a
+# _cam_zoom value (inverse magnification) - lower than MAX_ZOOM but not as tight
+# as MIN_ZOOM, so the move is legible without losing surrounding context.
 const AI_CAMERA_ZOOM := 0.6
 const AI_CAMERA_PAN_SECONDS := 1.2
 
@@ -87,6 +84,7 @@ var end_turn_button: Button
 
 var city_markers: Dictionary = {}
 
+var _resource_layer: Control
 var _province_map: Node2D
 var _city_positions: PackedVector2Array = []
 ## Province ids, parallel to _city_positions.
@@ -95,13 +93,12 @@ var _faction_colors: Array[Color] = DEFAULT_FACTION_COLORS.duplicate()
 var _marker_positions: Dictionary = {}
 ## City id (as assigned by the Rust campaign state) -> world position, taken
 ## straight from state["cities"] each _refresh(). Provinces with no starting
-## owner get no city in Rust (start_game_from_provinces), so city ids are a
-## *compacted* subset of the province array's indices - keying marker
-## placement off the province-array loop index, as _project_markers() used
-## to, silently misaligns a marker's screen position (and therefore its
-## click target) the moment any province in the list is unowned. Populated
-## in _refresh(); read by _project_markers() and _ensure_city_marker() so
-## every marker is placed, and therefore clicked, by its own real city id.
+## owner get no city in Rust, so city ids are a *compacted* subset of the
+## province array's indices - keying marker placement off the province-array
+## loop index silently misaligns a marker's screen position (and its click
+## target) the moment any province is unowned. Populated in _refresh(); read
+## by _project_markers()/_ensure_city_marker() so every marker is placed, and
+## clicked, by its own real city id.
 var _city_world_positions: Dictionary = {}
 var _map_extent: float = 0.0
 ## True per-axis half-width/half-height of the map in world units - unlike
@@ -338,6 +335,12 @@ func _ready() -> void:
 	# own child markers keep taking clicks regardless of the container filter.
 	cities_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+	# Resource landmarks: a purely-visual layer under the city markers.
+	_resource_layer = ResourceLayer.new()
+	add_child(_resource_layer)
+	move_child(_resource_layer, cities_root.get_index())
+	_resource_layer.setup(_province_map.package, _world_to_screen, MAP_SCALE, half_size)
+
 	# $UI anchors BottomBanner/TopBar/TurnIndicator but has no visuals of its
 	# own; its default STOP mouse_filter was swallowing every click over the
 	# map. Child widgets keep their own STOP filter, so this is safe.
@@ -539,19 +542,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			pass
 
 
-## Screen position of every *actual* city, from its world position (as
-## reported by the Rust state, keyed by real city id in
-## _city_world_positions) through the current pan/zoom. Re-run whenever that
-## changes (see _process/_unhandled_input above) as well as once at startup
-## and on resize.
+## Screen position of every *actual* city, from its world position (Rust state,
+## keyed by real city id in _city_world_positions) through the current pan/zoom.
+## Re-run whenever that changes, at startup, and on resize.
 ##
 ## Deliberately iterates _city_world_positions/city_markers (real city ids)
-## rather than _city_positions (one entry per province, including unowned
-## ones with no city at all) - looping the latter by array index used to
-## hand marker #i the position belonging to province #i regardless of
-## whether city id i actually corresponded to it, which is what let a
-## marker drawn with one city's name sit at another city's screen position
-## and forward its click to the wrong id.
+## rather than _city_positions (one entry per province, unowned ones included) -
+## looping the latter by array index handed marker #i province #i's position
+## regardless of whether city id i matched it, which let a marker sit at the
+## wrong city and forward its click to the wrong id.
 func _project_markers() -> void:
 	for id in _city_world_positions:
 		var pos := _world_to_screen(_city_world_positions[id])
@@ -559,6 +558,8 @@ func _project_markers() -> void:
 		if city_markers.has(id):
 			var marker: CityMarker = city_markers[id]
 			marker.position = pos - marker.anchor_offset()
+	if _resource_layer != null:
+		_resource_layer.project()
 	if _army_layer != null:
 		_army_layer.project()
 

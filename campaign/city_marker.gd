@@ -19,12 +19,12 @@ const NAME_FONT_SIZE := 14
 
 ## The clickable plaque holding the keep. Everything else is drawn relative
 ## to it, and the control itself is wider to leave room for the crest.
-## Sized to hold its own next to ArmyMarker's ~52px-diameter disc
-## (army_marker.gd) rather than reading as a minor dot beside it.
-const KEEP_SIZE := Vector2(44, 44)
-const CREST_SIZE := Vector2(20, 25)
-const CREST_GAP := 5.0
-const NAME_GAP := 4.0
+## Kept compact so cities read as map labels rather than dominating the
+## province they sit in, especially now the camera can zoom in much closer.
+const KEEP_SIZE := Vector2(28, 28)
+const CREST_SIZE := Vector2(13, 16)
+const CREST_GAP := 3.0
+const NAME_GAP := 3.0
 
 const PLAQUE_COLOR := Color(0.93, 0.91, 0.84)
 const INK := Color(0.10, 0.08, 0.06)

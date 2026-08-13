@@ -58,6 +58,7 @@ def promote(dev_dir: Path, game_dir: Path) -> list[str]:
         mapfmt.GEO_NAME,
         package.manifest.get("factions", "factions.json"),
         package.manifest.get("backdrop", "backdrop.png"),
+        mapfmt.POINTS_NAME,
     ):
         source = dev_dir / name
         if source.is_file():
