@@ -194,11 +194,9 @@ def test_a_step_reveals_a_trip_and_advances_the_counter(package):
     assert result["painted_this_step"] == 1
     assert result["painted_trips"] == 1
     assert result["done"]
-    # It took 1 step to finish, so that same step also matures the
-    # network over 1 more round of traffic (see step()'s docstring) -
-    # the step counter reflects both.
-    assert result["matured_rounds"] == 1
-    assert result["step"] == 2
+    # One step revealed the only trip and the session ends - no extra
+    # maturation rounds, so the counter stops at the reveal step.
+    assert result["step"] == 1
 
 
 def test_a_farther_route_takes_more_steps_to_reveal_than_a_close_one(tmp_path):
@@ -280,13 +278,11 @@ def test_an_unfinished_trip_grows_and_reports_a_frontier_marker(tmp_path):
     assert second_pending_px > first_pending_px  # the trail grew longer
 
 
-def test_a_completed_network_matures_over_the_same_number_of_rounds(tmp_path):
+def test_a_completed_network_stops_the_instant_the_last_trip_reveals(tmp_path):
     # Two cities far enough apart that revealing their one trip takes
-    # several steps. Per step()'s docstring, the step that finishes the
-    # reveal should also replay that many more rounds of the same
-    # traffic onto the now-complete road ("finish in N steps, get N more
-    # rounds of traffic for free"), so busy roads keep climbing tiers
-    # instead of freezing the instant the network fully reveals itself.
+    # several steps. The session ends the moment the last trip lands -
+    # no extra maturation rounds - so the step counter equals exactly
+    # the number of reveal steps and no key advertises extra rounds.
     land_box = (5, 5, 195, 35)
     package = make_package(tmp_path, size=(200, 40), land_box=land_box)
     project = mapfmt.empty_project(package.size, package)
@@ -305,18 +301,15 @@ def test_a_completed_network_matures_over_the_same_number_of_rounds(tmp_path):
         result = roads.step(package, project)
         steps_to_finish += 1
 
-    assert result["matured_rounds"] == steps_to_finish
-    assert result["step"] == steps_to_finish + result["matured_rounds"]
-    # A tier-5/tier-5 pair pulls plenty of weight - several extra rounds
-    # of it should be enough to push the road all the way to tier 3.
-    assert result["tier3_px"] > 0
+    assert steps_to_finish > 1  # actually took several steps to reveal
+    assert "matured_rounds" not in result
+    assert result["step"] == steps_to_finish
 
 
-def test_finishing_a_multi_route_network_doubles_the_step_count(tmp_path):
+def test_finishing_a_multi_route_network_stops_at_the_last_reveal(tmp_path):
     # Three cities whose pairwise distances need different numbers of
-    # steps to reveal - the doubling promise only cares about the step
-    # that finishes the *last* trip, not any individual one, so this
-    # exercises that with a network rather than a single route.
+    # steps to reveal - the session ends on the step that finishes the
+    # *last* trip, with no post-completion rounds tacked on.
     land_box = (5, 5, 195, 65)
     package = make_package(tmp_path, size=(200, 70), land_box=land_box)
     project = mapfmt.empty_project(package.size, package)
@@ -338,8 +331,8 @@ def test_finishing_a_multi_route_network_doubles_the_step_count(tmp_path):
 
     assert steps_to_finish > 1  # actually took several steps to reveal it all
     assert result["painted_trips"] == result["total_trips"]
-    assert result["matured_rounds"] == steps_to_finish
-    assert result["step"] == 2 * steps_to_finish
+    assert "matured_rounds" not in result
+    assert result["step"] == steps_to_finish
 
 
 def test_start_over_resets_a_session_in_progress(package):
@@ -395,11 +388,11 @@ def test_step_survives_a_cold_cache(package):
     assert result["done"]
 
 
-def test_step_survives_a_cold_cache_after_maturation(package):
-    # A restart after the network already finished and matured has to
-    # replay both the reveal *and* the maturation rounds when rebuilding
-    # from a cold cache, or a step() right after a reload would silently
-    # lose all the post-completion traffic.
+def test_step_survives_a_cold_cache_after_completion(package):
+    # A restart after the network already finished has to replay the
+    # reveal when rebuilding from a cold cache and reproduce the same
+    # painted tiers - a step() right after a reload must not lose or
+    # double-count any traffic.
     project = _project(package)
     project["layers"]["cities"]["points"] = {
         "p1": _city(15, 20),
@@ -408,13 +401,11 @@ def test_step_survives_a_cold_cache_after_maturation(package):
     roads.start(package, project)
     finished = roads.step(package, project)
     assert finished["done"]
-    assert finished["matured_rounds"] > 0
 
     roads._trip_cache.clear()
     result = roads.step(package, project)
 
     assert result["done"]
-    assert result["matured_rounds"] == 0  # already matured, not matured again
     assert result["tier1_px"] + result["tier2_px"] + result["tier3_px"] == (
         finished["tier1_px"] + finished["tier2_px"] + finished["tier3_px"]
     )
@@ -483,16 +474,17 @@ def test_mountains_shrink_reach_even_when_pixel_distance_is_short(tmp_path):
 
 def test_a_resource_tile_pulls_a_road_from_a_city(package):
     project = _project(package)
-    gold = package.layers["resources"].color_for_key("gold")
-    paint(package, "resources", gold, (40, 18, 46, 22))  # a 6x4 blob, east of the city
+    # A resource landmark east of the city - one dot, one road target.
+    project["layers"]["resources"]["points"] = {
+        "r1": {"x": 43, "y": 20, "kind": "iron"}
+    }
     project["layers"]["cities"]["points"] = {"p1": _city(15, 20)}
 
     result = _run_to_completion(package, project)
 
     assert result["resource_targets"] == 1
     assert result["completed_trips"] == 1
-    # Which tier it lands on depends on the post-completion maturation
-    # rounds (see test_a_completed_network_matures_over_more_rounds) -
+    # Which tier it lands on depends on the accumulated traffic weight -
     # here just confirm a road actually got painted at all.
     assert result["tier1_px"] + result["tier2_px"] + result["tier3_px"] > 0
 
@@ -649,6 +641,54 @@ def test_a_bigger_city_reveals_the_same_route_in_fewer_steps(tmp_path, distance)
     high_tier_steps = steps_to_finish(5)
 
     assert high_tier_steps < low_tier_steps
+
+
+# ---------------------------------------------------------------------------
+# consolidation: near-parallel roads merge onto one centerline
+# ---------------------------------------------------------------------------
+
+
+def test_consolidate_merges_two_parallel_roads_onto_one_line():
+    # Two horizontal roads 3px apart, each carrying weight 5 - inside the
+    # consolidation radius, so they're really one corridor. After
+    # consolidation their traffic pools onto a single centerline: the
+    # merged pixels carry ~10, the network occupies fewer distinct rows,
+    # and the process neither creates nor loses any traffic.
+    traveled = np.zeros((20, 40), dtype=np.float32)
+    mask = np.ones((20, 40), dtype=bool)
+    traveled[8, 5:35] = 5.0
+    traveled[11, 5:35] = 5.0
+
+    out = roads._consolidate(traveled, mask, roads.CONSOLIDATE_RADIUS_PX)
+
+    assert out.sum() == pytest.approx(traveled.sum())  # traffic conserved
+    assert out.max() > traveled.max()  # two roads' weight stacked onto one
+    rows_before = np.count_nonzero(traveled.any(axis=1))
+    rows_after = np.count_nonzero(out.any(axis=1))
+    assert rows_after < rows_before  # collapsed toward a single centerline
+
+
+def test_consolidate_leaves_a_lone_road_traffic_intact():
+    # A single isolated road has nothing within radius to merge with, so
+    # consolidation must not invent or drop any of its traffic.
+    traveled = np.zeros((20, 40), dtype=np.float32)
+    mask = np.ones((20, 40), dtype=bool)
+    traveled[10, 5:35] = 3.0
+
+    out = roads._consolidate(traveled, mask, roads.CONSOLIDATE_RADIUS_PX)
+
+    assert out.sum() == pytest.approx(traveled.sum())
+
+
+def test_consolidate_radius_zero_is_a_no_op():
+    traveled = np.zeros((10, 10), dtype=np.float32)
+    mask = np.ones((10, 10), dtype=bool)
+    traveled[3, 2:8] = 2.0
+    traveled[5, 2:8] = 2.0
+
+    out = roads._consolidate(traveled, mask, 0)
+
+    assert np.array_equal(out, traveled)
 
 
 def test_build_speed_scales_with_tier():

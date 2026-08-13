@@ -62,14 +62,25 @@ CITY_TIER_LEGEND = {
     "#123b73": {"key": "5", "name": "Tier 5"},
 }
 
-# Whether these keys pull growth's frontier toward them is a global
-# constant too (growth.py's ATTRACTION_KEYS), for the same reason.
+# Resources are landmark points, not a painted region - one dot per
+# deposit, exactly like cities are one dot per town (see the resources
+# layer config below: input=point, a "kind" field of type=category picks
+# the color from this legend). Whether a key pulls growth's frontier and
+# roads toward it is a global constant (growth.py's ATTRACTION_KEYS), for
+# the same reason terrain's move costs live there: it can't drift between
+# map packages.
 RESOURCE_LEGEND = {
     "#9aa0a6": {"key": "iron", "name": "Iron"},
-    "#d4af37": {"key": "gold", "name": "Gold"},
     "#7b3f00": {"key": "timber", "name": "Timber"},
     "#8e2f4a": {"key": "wine", "name": "Wine"},
     "#e8e8e8": {"key": "salt", "name": "Salt"},
+    "#c9b79c": {"key": "wool", "name": "Wool"},
+    "#b5495b": {"key": "cloth", "name": "Cloth"},
+    "#6b8fa3": {"key": "tin", "name": "Tin"},
+    "#2b2b2b": {"key": "coal", "name": "Coal"},
+    "#4a5560": {"key": "lead", "name": "Lead"},
+    "#cfd8dc": {"key": "silver", "name": "Silver"},
+    "#4a7fa5": {"key": "fish", "name": "Fish"},
 }
 
 # Never hand-painted - roads.py writes this raster directly from its
@@ -183,15 +194,17 @@ def layer_configs() -> dict[str, dict]:
         "resources": {
             "name": "resources",
             "title": "Resources",
-            "input": "brush",
+            "input": "point",
             "kind": "class",
             "raster": "resources.png",
             "nodata_color": "#000000",
-            "default_key": "iron",
             "snap_source": False,
             "clip_to": "coastline:land",
+            "point_coupling": "free",
+            "point_fields": {
+                "kind": {"type": "category"},
+            },
             "legend": RESOURCE_LEGEND,
-            "reduce": {"into": "resources", "mode": "any"},
         },
         "roads": {
             "name": "roads",
@@ -432,7 +445,7 @@ def init_package(
             "coastline": {"features": coast_features},
             "provinces": {"features": provinces},
             "terrain": {},
-            "resources": {},
+            "resources": {"points": {}},
             "roads": {},
             "ownership": {
                 "assignments": {

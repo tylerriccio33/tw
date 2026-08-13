@@ -8,28 +8,68 @@
  "snap_source": false,
  "legend": {
   "#4363d8": {
-   "key": "england",
-   "name": "England"
-  },
-  "#f58231": {
-   "key": "wales",
-   "name": "Wales"
-  },
-  "#911eb4": {
-   "key": "alba",
-   "name": "Alba"
-  },
-  "#46f0f0": {
    "key": "norway",
    "name": "Norway"
   },
-  "#bfef45": {
-   "key": "ireland",
-   "name": "Ireland"
-  },
-  "#fabed4": {
+  "#f58231": {
    "key": "france",
    "name": "France"
+  },
+  "#911eb4": {
+   "key": "wessex",
+   "name": "Wessex"
+  },
+  "#46f0f0": {
+   "key": "essex",
+   "name": "Essex"
+  },
+  "#bfef45": {
+   "key": "east_anglia",
+   "name": "East Anglia"
+  },
+  "#fabed4": {
+   "key": "mercia",
+   "name": "Mercia"
+  },
+  "#469990": {
+   "key": "northumbria",
+   "name": "Northumbria"
+  },
+  "#dcbeff": {
+   "key": "gwent",
+   "name": "Gwent"
+  },
+  "#9a6324": {
+   "key": "dyfed",
+   "name": "Dyfed"
+  },
+  "#808000": {
+   "key": "gwynedd",
+   "name": "Gwynedd"
+  },
+  "#ffd8b1": {
+   "key": "alba",
+   "name": "Alba"
+  },
+  "#000075": {
+   "key": "dyflin",
+   "name": "Dyflin"
+  },
+  "#c65102": {
+   "key": "ulaid",
+   "name": "Ulaid"
+  },
+  "#c50202": {
+   "key": "galway",
+   "name": "Galway"
+  },
+  "#c5ab02": {
+   "key": "connacth",
+   "name": "Connacth"
+  },
+  "#3cb44b": {
+   "key": "cornwall",
+   "name": "Cornwall"
   }
  },
  "reduce": {

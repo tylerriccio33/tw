@@ -169,10 +169,11 @@ def _color_field_name(cfg: mapfmt.LayerConfig) -> str | None:
     """Whichever payload field colors this free-point layer's dots.
 
     The "faction" field wins if there is one (army starts, colored by
-    owner). Otherwise the "tier" field (cities, colored by growth speed).
+    owner). Failing that, the "tier" field (cities, colored by growth
+    speed), then a "category" field (resources, colored by resource kind).
     """
     fields = cfg.point_fields
-    for wanted in ("faction", "tier"):
+    for wanted in ("faction", "tier", "category"):
         for field_name, field_cfg in fields.items():
             if field_cfg.get("type") == wanted:
                 return field_name
@@ -843,6 +844,13 @@ def _validate_free_points(project: dict, package: mapfmt.Package) -> list[str]:
                             f"{name} point '{point_id}' has {field_name}="
                             f"{value!r}, which has no legend color in '{name}' - "
                             "add one so the layer can be rasterized"
+                        )
+                elif field_cfg["type"] == "category":
+                    if not isinstance(value, str) or value not in cfg.keys:
+                        problems.append(
+                            f"{name} point '{point_id}' has {field_name}="
+                            f"{value!r}, which has no legend color in '{name}' - "
+                            "pick one of its legend keys"
                         )
                 elif field_cfg["type"] == "name" and (
                     not isinstance(value, str) or not value.strip()

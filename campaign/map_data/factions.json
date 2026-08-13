@@ -1,38 +1,98 @@
 [
  {
-  "key": "england",
-  "name": "England",
-  "color": "#4363d8",
-  "money": 100
- },
- {
-  "key": "wales",
-  "name": "Wales",
-  "color": "#f58231",
-  "money": 100
- },
- {
-  "key": "alba",
-  "name": "Alba",
-  "color": "#911eb4",
-  "money": 100
- },
- {
   "key": "norway",
   "name": "Norway",
-  "color": "#46f0f0",
-  "money": 100
- },
- {
-  "key": "ireland",
-  "name": "Ireland",
-  "color": "#bfef45",
+  "color": "#4363d8",
   "money": 100
  },
  {
   "key": "france",
   "name": "France",
+  "color": "#f58231",
+  "money": 100
+ },
+ {
+  "key": "wessex",
+  "name": "Wessex",
+  "color": "#911eb4",
+  "money": 100
+ },
+ {
+  "key": "essex",
+  "name": "Essex",
+  "color": "#46f0f0",
+  "money": 100
+ },
+ {
+  "key": "east_anglia",
+  "name": "East Anglia",
+  "color": "#bfef45",
+  "money": 100
+ },
+ {
+  "key": "mercia",
+  "name": "Mercia",
   "color": "#fabed4",
+  "money": 100
+ },
+ {
+  "key": "northumbria",
+  "name": "Northumbria",
+  "color": "#469990",
+  "money": 100
+ },
+ {
+  "key": "gwent",
+  "name": "Gwent",
+  "color": "#dcbeff",
+  "money": 100
+ },
+ {
+  "key": "dyfed",
+  "name": "Dyfed",
+  "color": "#9a6324",
+  "money": 100
+ },
+ {
+  "key": "gwynedd",
+  "name": "Gwynedd",
+  "color": "#808000",
+  "money": 100
+ },
+ {
+  "key": "alba",
+  "name": "Alba",
+  "color": "#ffd8b1",
+  "money": 100
+ },
+ {
+  "key": "dyflin",
+  "name": "Dyflin",
+  "color": "#000075",
+  "money": 100
+ },
+ {
+  "key": "ulaid",
+  "name": "Ulaid",
+  "color": "#c65102",
+  "money": 100
+ },
+ {
+  "key": "galway",
+  "name": "Galway",
+  "color": "#c50202",
+  "money": 100
+ },
+ {
+  "key": "connacth",
+  "name": "Connacth",
+  "color": "#c5ab02",
+  "money": 100
+ },
+ {
+  "key": "cornwall",
+  "name": "Cornwall",
+  "color": "#3cb44b",
   "money": 100
  }
 ]

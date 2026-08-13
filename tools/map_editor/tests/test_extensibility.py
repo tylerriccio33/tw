@@ -98,7 +98,6 @@ def test_two_new_layers_coexist_without_interfering(tmp_path):
     table = {row["id"]: row for row in mapfmt.read_province_table(package.root)}
     assert table[1]["tags"] == {
         "terrain": "plains",  # nothing painted -> the layer's default_key
-        "resources": [],
         "trade_routes": ["paved"],
         "climate": "arctic",
     }

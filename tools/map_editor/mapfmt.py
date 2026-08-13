@@ -57,7 +57,7 @@ VALID_INPUTS = ("polygon", "brush", "assign", "point")
 VALID_KINDS = ("mask", "identity", "class")
 VALID_REDUCE_MODES = ("majority", "any")
 VALID_POINT_COUPLINGS = ("province", "free")
-VALID_POINT_FIELD_TYPES = ("faction", "counts", "tier", "name")
+VALID_POINT_FIELD_TYPES = ("faction", "counts", "tier", "name", "category")
 
 
 class PackageError(Exception):
@@ -366,6 +366,17 @@ class Package:
     @property
     def layer_order(self) -> list[str]:
         return list(self.manifest["layers"])
+
+    @property
+    def georef(self):
+        """The lon/lat <-> pixel calibration, or None if the map isn't
+        georeferenced. See geo.GeoRef. Imported lazily so mapfmt stays
+        usable without the geo stack (shapely/pyshp) installed."""
+        if "georef" not in self.manifest:
+            return None
+        from geo import GeoRef
+
+        return GeoRef.from_manifest(self.manifest, self.size)
 
     @property
     def province_layer(self) -> LayerConfig:

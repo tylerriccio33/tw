@@ -43,8 +43,9 @@ def test_render_preview_flags_a_self_intersecting_polygon(package):
 
 def test_render_preview_skips_layers_never_exported_to_a_raster(package):
     """Only coastline/provinces have geometry drawn in project_with. The
-    brush layers (terrain, resources, ownership) have no raster on disk
-    yet in a fresh package. render_preview must not crash on that."""
+    brush layer (terrain) and point layers (resources, cities) have no
+    raster on disk yet in a fresh package. render_preview must not crash
+    on that."""
     project = project_with(package, provinces=two_provinces())
     for layer in ("terrain", "resources"):
         raster = package.raster_path(layer)

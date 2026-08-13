@@ -36,6 +36,7 @@ import zipfile
 from pathlib import Path
 
 import shapefile  # pyshp
+from geo import GeoRef
 from PIL import Image, ImageDraw
 from shapely.geometry import box, shape
 from shapely.ops import transform as shapely_transform
@@ -88,16 +89,24 @@ def load_land_polygons(shp_path: Path, bbox: tuple[float, float, float, float]):
     return polygons
 
 
-def lonlat_to_pixel_transform(
-    bbox: tuple[float, float, float, float], size: tuple[int, int]
-):
-    lon_min, lat_min, lon_max, lat_max = bbox
-    w, h = size
+def resolve_georef(bbox, manifest, size: tuple[int, int]) -> GeoRef:
+    """Pick the calibration: an explicit --bbox wins; otherwise reuse the
+    georef already persisted in map.json. Error if neither is available."""
+    if bbox is not None:
+        return GeoRef(bbox=tuple(bbox), size=size)
+    if manifest is not None and manifest.get("georef"):
+        return GeoRef.from_manifest(manifest, size)
+    raise SystemExit(
+        "no --bbox given and map.json has no georef to reuse; pass --bbox "
+        "once to calibrate the map."
+    )
+
+
+def shapely_transform_fn(georef: GeoRef):
+    """Adapt GeoRef.lonlat_to_pixel to shapely's transform (which may pass z)."""
 
     def fn(lon, lat, z=None):
-        x = (lon - lon_min) / (lon_max - lon_min) * w
-        y = (lat_max - lat) / (lat_max - lat_min) * h  # image y grows downward
-        return x, y
+        return georef.lonlat_to_pixel(lon, lat)
 
     return fn
 
@@ -133,7 +142,9 @@ def main() -> None:
         nargs=4,
         type=float,
         metavar=("LON_MIN", "LAT_MIN", "LON_MAX", "LAT_MAX"),
-        required=True,
+        help="Lon/lat calibration box. If given, it is persisted into "
+        "map.json's georef block (the single source of truth every geo "
+        "layer reads). If omitted, the existing georef is reused.",
     )
     parser.add_argument(
         "--project", type=Path, default=Path("dev_map_data/project.json")
@@ -174,16 +185,27 @@ def main() -> None:
     parser.add_argument("--url", default=NE_LAND_URL)
     args = parser.parse_args()
 
-    size = (
-        tuple(args.size)
-        if args.size
-        else tuple(json.loads(args.map.read_text())["size"])
-    )
+    manifest = None
+    if args.map.is_file() and not args.size:
+        manifest = json.loads(args.map.read_text())
+        size = tuple(manifest["size"])
+    elif args.size:
+        size = tuple(args.size)
+    else:
+        raise SystemExit(f"no {args.map} to read canvas size from; pass --size")
+
+    georef = resolve_georef(args.bbox, manifest, size)
+
+    # Persist the calibration so every geo layer shares it (unless we're
+    # working off a bare --size with no map.json to write to).
+    if args.bbox is not None and manifest is not None:
+        manifest["georef"] = georef.to_manifest_block()
+        args.map.write_text(json.dumps(manifest, indent=1) + "\n")
+        print(f"Wrote georef {list(georef.bbox)} to {args.map}")
 
     shp_path = fetch_shapefile(args.url)
-    polygons = load_land_polygons(shp_path, tuple(args.bbox))
-    transform_fn = lonlat_to_pixel_transform(tuple(args.bbox), size)
-    rings = polygons_to_rings(polygons, transform_fn, args.simplify)
+    polygons = load_land_polygons(shp_path, georef.bbox)
+    rings = polygons_to_rings(polygons, shapely_transform_fn(georef), args.simplify)
 
     if not rings:
         raise SystemExit("No land polygons found in that bbox -- check --bbox order.")

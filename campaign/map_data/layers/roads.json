@@ -1,0 +1,28 @@
+{
+ "name": "roads",
+ "title": "Roads",
+ "input": "brush",
+ "kind": "class",
+ "raster": "roads.png",
+ "nodata_color": "#000000",
+ "snap_source": false,
+ "clip_to": "coastline:land",
+ "legend": {
+  "#c9a24d": {
+   "key": "road_t1",
+   "name": "Trail"
+  },
+  "#e8722c": {
+   "key": "road_t2",
+   "name": "Road"
+  },
+  "#d1272f": {
+   "key": "road_t3",
+   "name": "Highway"
+  },
+  "#39c8ff": {
+   "key": "road_pending",
+   "name": "Under Construction"
+  }
+ }
+}

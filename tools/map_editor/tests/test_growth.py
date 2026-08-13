@@ -304,13 +304,14 @@ def test_higher_move_cost_terrain_slows_the_front(package):
 
 
 def test_resource_tiles_pull_growth_toward_them(package):
-    # A resource painted off to one side (with "attracts": true, same as
-    # the real resources legend) should make a city's early growth reach
-    # farther toward it than in a plain direction the same distance away,
-    # because the discounted cost lets the frontier stretch there first.
+    # A resource landmark off to one side (an ATTRACTION_KEYS kind) should
+    # make a city's early growth reach farther toward it than in a plain
+    # direction the same distance away, because the discounted cost lets
+    # the frontier stretch there first.
     project = _project(package)
-    gold = package.layers["resources"].color_for_key("gold")
-    paint(package, "resources", gold, (46, 18, 50, 22))  # east edge, mid-height
+    project["layers"]["resources"]["points"] = {
+        "r1": {"x": 48, "y": 20, "kind": "iron"}
+    }
     project["layers"]["cities"]["points"] = {"p1": _city(20, 20, 1)}
     growth.start(package, project)
 
@@ -326,8 +327,8 @@ def test_resource_tiles_pull_growth_toward_them(package):
     claim = export.id_buffer(
         export.rasterize_polygon_layer(project, package.province_layer, package.size)
     )
-    # The claim should have reached farther east (toward gold, x=46-50)
-    # than an equal distance west (away from it) in the same step.
+    # The claim should have reached farther east (toward the resource at
+    # x=48) than an equal distance west (away from it) in the same step.
     east_reach = int((claim[20, 20:46] == 1).sum())
     west_reach = int((claim[20, 14:20] == 1).sum())
     assert east_reach > west_reach

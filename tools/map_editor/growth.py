@@ -75,7 +75,21 @@ TERRAIN_MOVE_COST: dict[str, float] = {
 # discounts a pixel's move cost, bottoming out at
 # (1 - ATTRACTION_STRENGTH) of normal cost right at the tile and
 # fading out linearly past this radius.
-ATTRACTION_KEYS: frozenset[str] = frozenset({"iron", "gold", "timber", "wine", "salt"})
+ATTRACTION_KEYS: frozenset[str] = frozenset(
+    {
+        "iron",
+        "timber",
+        "wine",
+        "salt",
+        "wool",
+        "cloth",
+        "tin",
+        "coal",
+        "lead",
+        "silver",
+        "fish",
+    }
+)
 ATTRACTION_RADIUS_PX = 60.0
 ATTRACTION_STRENGTH = 0.6
 

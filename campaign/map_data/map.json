@@ -4,16 +4,27 @@
   5656,
   8000
  ],
+ "georef": {
+  "projection": "equirectangular",
+  "bbox": [
+   -11,
+   49,
+   3,
+   61
+  ]
+ },
  "backdrop": "backdrop.png",
  "reference": "reference.png",
  "factions": "factions.json",
  "province_layer": "provinces",
  "city_layer": "cities",
+ "road_layer": "roads",
  "layers": [
   "coastline",
   "provinces",
   "terrain",
   "resources",
+  "roads",
   "ownership",
   "cities"
  ]

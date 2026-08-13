@@ -1,6 +1,6 @@
 GODOT ?= godot
 
-.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-test-full map-editor-js-check map-editor-preview map-package-init map-package-check promote-map gut gut-test render-shots render-test render-test-update
+.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-test-full map-editor-js-check map-editor-preview map-editor-add-cities map-package-init map-package-check promote-map gut gut-test render-shots render-test render-test-update
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -28,6 +28,7 @@ help:
 	@echo "make map-editor-test-full - run the map editor's full pytest suite, including slow/realistic-backdrop and browser-driven e2e tests (needs a one-time 'cd tools/map_editor && uv run playwright install chromium')"
 	@echo "make map-editor-js-check - eslint + prettier --check + tsc --noEmit + stylelint over tools/map_editor/static"
 	@echo "make map-editor-preview - composite the whole layer stack to one PNG (tools/map_editor/dev_map_data/preview.png), no browser needed"
+	@echo "make map-editor-add-cities - bulk-add cities from a gazetteer CSV via the map's georef (MIN_POP=N, TOP=N, DRY=1)"
 	@echo "make map-package-init - create a fresh map package from a backdrop (SEED=N for placeholder provinces)"
 	@echo "make map-package-check - validate the dev map package without exporting"
 	@echo "make promote-map   - copy the dev map package (tools/map_editor/dev_map_data) into campaign/map_data for the game to use"
@@ -174,6 +175,15 @@ map-editor-js-check:
 # province) gets outlined in red on the image and listed on stdout.
 map-editor-preview:
 	cd tools/map_editor && uv run preview.py
+
+# Bulk-adds cities from a lon/lat gazetteer CSV, projecting each through the
+# map's persisted georef (map.json) so they land on the coastline without
+# any visual placement. Idempotent: re-running rebuilds the managed set
+# (ids "ukc-*") and never touches hand-placed cities. Tune with MIN_POP / TOP.
+# The CSV is licensed and gitignored - see add_cities.py for where to put it.
+#   make map-editor-add-cities MIN_POP=30000
+map-editor-add-cities:
+	cd tools/map_editor && uv run add_cities.py $(if $(MIN_POP),--min-pop $(MIN_POP),) $(if $(TOP),--top $(TOP),) $(if $(DRY),--dry-run,)
 
 # Creates a fresh map package from a backdrop image: manifest, layer
 # configs, faction roster, a coastline traced from the line art, and a

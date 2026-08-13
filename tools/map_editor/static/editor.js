@@ -95,6 +95,8 @@ function defaultPointPayload(cfg) {
       payload[fieldName] = fieldCfg.min ?? 1;
     } else if (fieldCfg.type === "name") {
       payload[fieldName] = `New City ${Object.keys(points(cfg.name)).length + 1}`;
+    } else if (fieldCfg.type === "category") {
+      payload[fieldName] = legendEntries(cfg)[0]?.key ?? null;
     }
   }
   return payload;
@@ -108,10 +110,10 @@ function nameFieldName(cfg) {
 }
 
 // Whichever payload field colors a free-point layer's dots: "faction" if
-// it has one (army starts), otherwise "tier" (cities). Mirrors
-// export.py's _color_field_name.
+// it has one (army starts), then "tier" (cities), then "category"
+// (resources). Mirrors export.py's _color_field_name.
 function colorFieldName(cfg) {
-  for (const wanted of ["faction", "tier"]) {
+  for (const wanted of ["faction", "tier", "category"]) {
     const found = Object.entries(cfg.point_fields || {}).find(([, fc]) => fc.type === wanted);
     if (found) return found[0];
   }
@@ -609,9 +611,7 @@ async function runRoadsStep() {
   render();
   setStatus(
     result.done
-      ? `Step ${result.step}: every route is drawn, then matured over ` +
-          `${result.matured_rounds} more round(s) of traffic so busy roads ` +
-          "kept climbing tiers."
+      ? `Step ${result.step}: every route is drawn - the road network is complete.`
       : `Step ${result.step}: revealed ${result.painted_this_step} route(s), ` +
           `${result.total_trips - result.painted_trips} still to go.`,
   );
@@ -806,6 +806,24 @@ function freePointForm(cfg, pointId, payload) {
       }
       select.onchange = () => {
         payload[fieldName] = Number(select.value);
+        scheduleAutosave();
+        render();
+      };
+      label.appendChild(select);
+      form.appendChild(label);
+    } else if (fieldCfg.type === "category") {
+      const label = document.createElement("label");
+      label.textContent = fieldName;
+      const select = document.createElement("select");
+      for (const entry of legendEntries(cfg)) {
+        const option = document.createElement("option");
+        option.value = entry.key;
+        option.textContent = entry.name;
+        if (payload[fieldName] === entry.key) option.selected = true;
+        select.appendChild(option);
+      }
+      select.onchange = () => {
+        payload[fieldName] = select.value;
         scheduleAutosave();
         render();
       };

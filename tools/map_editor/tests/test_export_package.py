@@ -10,7 +10,7 @@ import mapfmt
 import numpy as np
 import pytest
 from PIL import Image
-from tests.conftest import box, paint, project_with
+from tests.conftest import box, make_package, paint, project_with
 
 PLAINS = "#7d9a4e"
 HILLS = "#8a7a5a"
@@ -18,6 +18,27 @@ IRON = "#9aa0a6"
 GOLD = "#d4af37"
 
 LAND = (10, 8, 50, 32)
+
+# A synthetic brush layer with an "any"-mode reduce, standing in for the
+# kind of painted deposit layer that reduce targets. (The real resources
+# layer is now landmark points, like cities, so it no longer reduces into
+# a per-province tag - see init_package.py.)
+ORE_LAYER = {
+    "name": "ore",
+    "title": "Ore",
+    "input": "brush",
+    "kind": "class",
+    "raster": "ore.png",
+    "nodata_color": "#000000",
+    "default_key": "iron",
+    "snap_source": False,
+    "clip_to": "coastline:land",
+    "legend": {
+        IRON: {"key": "iron", "name": "Iron"},
+        GOLD: {"key": "gold", "name": "Gold"},
+    },
+    "reduce": {"into": "ore", "mode": "any"},
+}
 
 
 def two_provinces():
@@ -240,28 +261,30 @@ def test_majority_reduce_tags_a_province_with_its_dominant_terrain(package):
     assert table[2]["tags"]["terrain"] == "plains"
 
 
-def test_any_reduce_lists_every_resource_present(package):
+def test_any_reduce_lists_every_resource_present(tmp_path):
+    package = make_package(tmp_path, extra_layers={"ore": ORE_LAYER})
     project = project_with(package, provinces=two_provinces())
-    paint(package, "resources", IRON, (12, 10, 22, 30))
-    paint(package, "resources", GOLD, (24, 10, 28, 30))
+    paint(package, "ore", IRON, (12, 10, 22, 30))
+    paint(package, "ore", GOLD, (24, 10, 28, 30))
 
     run_export(package, project)
     table = {row["id"]: row for row in mapfmt.read_province_table(package.root)}
 
-    assert table[1]["tags"]["resources"] == ["gold", "iron"]
-    assert table[2]["tags"]["resources"] == []
+    assert table[1]["tags"]["ore"] == ["gold", "iron"]
+    assert table[2]["tags"]["ore"] == []
 
 
-def test_any_reduce_ignores_a_few_pixels_bleeding_over_a_border(package):
+def test_any_reduce_ignores_a_few_pixels_bleeding_over_a_border(tmp_path):
+    package = make_package(tmp_path, extra_layers={"ore": ORE_LAYER})
     project = project_with(package, provinces=two_provinces())
-    paint(package, "resources", IRON, (12, 10, 22, 30))
-    paint(package, "resources", IRON, (30, 10, 31, 11))  # 1px spill into the east
+    paint(package, "ore", IRON, (12, 10, 22, 30))
+    paint(package, "ore", IRON, (30, 10, 31, 11))  # 1px spill into the east
 
     run_export(package, project)
     table = {row["id"]: row for row in mapfmt.read_province_table(package.root)}
 
-    assert table[1]["tags"]["resources"] == ["iron"]
-    assert table[2]["tags"]["resources"] == [], "a single stray pixel isn't a deposit"
+    assert table[1]["tags"]["ore"] == ["iron"]
+    assert table[2]["tags"]["ore"] == [], "a single stray pixel isn't a deposit"
 
 
 def test_starting_owner_comes_from_the_assign_layer_not_a_reduced_raster(package):

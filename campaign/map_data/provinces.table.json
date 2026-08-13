@@ -6,27 +6,22 @@
    "key": "province_1",
    "name": "Province 1",
    "centroid": [
-    4413.19,
-    6350.33
+    3579.08,
+    3549.87
    ],
-   "area_px": 720561,
+   "area_px": 95763,
    "neighbors": [
-    7,
-    15,
-    25,
-    27,
-    28,
-    29,
-    30
+    4,
+    65,
+    177
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "northumbria",
    "city_position": [
-    4555.018875221868,
-    6335
+    3636,
+    3486.67
    ]
   },
   {
@@ -34,22 +29,34 @@
    "key": "province_2",
    "name": "Province 2",
    "centroid": [
-    2736.71,
-    7022.3
+    4586.63,
+    6303.39
    ],
-   "area_px": 116856,
+   "area_px": 88726,
    "neighbors": [
-    16,
-    17
+    30,
+    39,
+    44,
+    69,
+    75,
+    81,
+    86,
+    104,
+    114,
+    141,
+    142,
+    156,
+    159,
+    189,
+    193
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "essex",
    "city_position": [
-    2814.8509091809633,
-    7072.980911068604
+    4555.018875221868,
+    6335
    ]
   },
   {
@@ -57,28 +64,33 @@
    "key": "province_3",
    "name": "Province 3",
    "centroid": [
-    1650.82,
-    4773.44
+    3656.85,
+    5713.67
    ],
-   "area_px": 815853,
+   "area_px": 83438,
    "neighbors": [
-    31,
-    37,
-    46,
-    48,
-    49,
     51,
-    52,
-    53
+    54,
+    63,
+    80,
+    89,
+    90,
+    112,
+    124,
+    143,
+    146,
+    150,
+    161,
+    174,
+    202
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "mountains"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "mercia",
    "city_position": [
-    1914.1041839427062,
-    5083.4916416989945
+    3675.39,
+    5680.000000000003
    ]
   },
   {
@@ -86,21 +98,187 @@
    "key": "province_4",
    "name": "Province 4",
    "centroid": [
-    2748.7,
-    3174.27
+    3380.74,
+    3667.88
    ],
-   "area_px": 1341911,
+   "area_px": 145605,
    "neighbors": [
-    22,
-    33,
-    41,
-    42,
-    43,
-    44
+    1,
+    65,
+    173,
+    177
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3454.2,
+    3613.33
+   ]
+  },
+  {
+   "id": 5,
+   "key": "province_5",
+   "name": "Province 5",
+   "centroid": [
+    2782.96,
+    7044.65
+   ],
+   "area_px": 19173,
+   "neighbors": [
+    154
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "cornwall",
+   "city_position": [
+    2814.8509091809633,
+    7072.980911068604
+   ]
+  },
+  {
+   "id": 6,
+   "key": "province_6",
+   "name": "Province 6",
+   "centroid": [
+    4067.91,
+    6690.22
+   ],
+   "area_px": 49796,
+   "neighbors": [
+    9,
+    27,
+    118,
+    144,
+    196
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    4004.7712000000006,
+    6796.133333333334
+   ]
+  },
+  {
+   "id": 7,
+   "key": "province_7",
+   "name": "Province 7",
+   "centroid": [
+    3267.26,
+    2967.43
+   ],
+   "area_px": 24335,
+   "neighbors": [
+    117,
+    119,
+    181
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3244,
+    3026
+   ]
+  },
+  {
+   "id": 8,
+   "key": "province_8",
+   "name": "Province 8",
+   "centroid": [
+    1816.97,
+    5133.38
+   ],
+   "area_px": 109701,
+   "neighbors": [
+    61,
+    73,
+    82,
+    135
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "dyflin",
+   "city_position": [
+    1914.1041839427062,
+    5083.4916416989945
+   ]
+  },
+  {
+   "id": 9,
+   "key": "province_9",
+   "name": "Province 9",
+   "centroid": [
+    3836.07,
+    6699.22
+   ],
+   "area_px": 51790,
+   "neighbors": [
+    6,
+    20,
+    78,
+    118,
+    170,
+    187,
+    196
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    3876.7032000000004,
+    6731.666666666664
+   ]
+  },
+  {
+   "id": 10,
+   "key": "province_10",
+   "name": "Province 10",
+   "centroid": [
+    2771.95,
+    3293.28
+   ],
+   "area_px": 45367,
+   "neighbors": [
+    11,
+    12,
+    166,
+    171,
+    173,
+    177
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    2852.24,
+    3253.33
+   ]
+  },
+  {
+   "id": 11,
+   "key": "province_11",
+   "name": "Province 11",
+   "centroid": [
+    2746.41,
+    3133.08
+   ],
+   "area_px": 105229,
+   "neighbors": [
+    10,
+    166,
+    181
+   ],
+   "tags": {
+    "terrain": "forest"
    },
    "starting_owner": "alba",
    "city_position": [
@@ -109,191 +287,583 @@
    ]
   },
   {
-   "id": 5,
-   "key": "province_5",
-   "name": "Province 5",
+   "id": 12,
+   "key": "province_12",
+   "name": "Province 12",
    "centroid": [
-    4077.64,
-    4892.04
+    2667.58,
+    3434.6
    ],
-   "area_px": 22148,
+   "area_px": 38071,
    "neighbors": [
-    20
+    10,
+    165,
+    171,
+    185,
+    186,
+    190
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "alba",
+   "city_position": [
+    2727,
+    3425.933333333333
+   ]
+  },
+  {
+   "id": 13,
+   "key": "province_13",
+   "name": "Province 13",
+   "centroid": [
+    3271.88,
+    3132.44
+   ],
+   "area_px": 25531,
+   "neighbors": [
+    166,
+    181,
+    192
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3316.84,
+    3106.67
+   ]
+  },
+  {
+   "id": 14,
+   "key": "province_14",
+   "name": "Province 14",
+   "centroid": [
+    4110.62,
+    4875.05
+   ],
+   "area_px": 14653,
+   "neighbors": [
+    18,
+    21,
+    59,
+    116
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
    "city_position": [
     4108.891669807765,
     4880.775717336765
    ]
   },
   {
-   "id": 6,
-   "key": "province_6",
-   "name": "Province 6",
+   "id": 15,
+   "key": "province_15",
+   "name": "Province 15",
    "centroid": [
-    2876.03,
-    5878.88
+    3561.45,
+    5003.44
    ],
-   "area_px": 562525,
+   "area_px": 86260,
    "neighbors": [
-    8,
-    17,
-    18,
-    19,
-    38
+    24,
+    84,
+    109,
+    110,
+    122,
+    163,
+    168
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "mountains"
    },
-   "starting_owner": "wales",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3536.9392,
+    5014
+   ]
+  },
+  {
+   "id": 16,
+   "key": "province_16",
+   "name": "Province 16",
+   "centroid": [
+    3099.16,
+    2301.33
+   ],
+   "area_px": 61856,
+   "neighbors": [
+    111,
+    119,
+    182
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3102.72,
+    2233.33
+   ]
+  },
+  {
+   "id": 17,
+   "key": "province_17",
+   "name": "Province 17",
+   "centroid": [
+    3059.03,
+    6213.86
+   ],
+   "area_px": 33086,
+   "neighbors": [
+    33,
+    57,
+    87,
+    178
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "gwent",
    "city_position": [
     3083.6179419525065,
     6241.311440460192
    ]
   },
   {
-   "id": 7,
-   "key": "province_7",
-   "name": "Province 7",
+   "id": 18,
+   "key": "province_18",
+   "name": "Province 18",
    "centroid": [
-    3647.5,
-    6700.23
+    3921.38,
+    4741.58
    ],
-   "area_px": 231014,
+   "area_px": 93507,
    "neighbors": [
-    1,
-    9,
-    17,
-    18,
-    30
+    14,
+    59,
+    60,
+    84,
+    96,
+    116,
+    147,
+    164,
+    176,
+    208
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "england",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3820.3856,
+    4801.666666666667
+   ]
+  },
+  {
+   "id": 19,
+   "key": "province_19",
+   "name": "Province 19",
+   "centroid": [
+    2813.73,
+    4100.5
+   ],
+   "area_px": 11636,
+   "neighbors": [
+    98,
+    123,
+    204
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    2807.8,
+    4106.67
+   ]
+  },
+  {
+   "id": 20,
+   "key": "province_20",
+   "name": "Province 20",
+   "centroid": [
+    3559.9,
+    6696.73
+   ],
+   "area_px": 76631,
+   "neighbors": [
+    9,
+    50,
+    66,
+    78,
+    128,
+    158,
+    169,
+    170,
+    187,
+    206
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
    "city_position": [
     3621.594270637015,
     6763.694784009015
    ]
   },
   {
-   "id": 8,
-   "key": "province_8",
-   "name": "Province 8",
+   "id": 21,
+   "key": "province_21",
+   "name": "Province 21",
    "centroid": [
-    3166.08,
-    5519.11
+    3993.38,
+    5068.9
    ],
-   "area_px": 276343,
+   "area_px": 110676,
    "neighbors": [
-    6,
-    19,
-    27,
-    38
+    14,
+    32,
+    51,
+    60,
+    63,
+    77,
+    116,
+    151,
+    188,
+    191
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "wales",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3849.9988,
+    5079.466666666666
+   ]
+  },
+  {
+   "id": 22,
+   "key": "province_22",
+   "name": "Province 22",
+   "centroid": [
+    2687.02,
+    5253.74
+   ],
+   "area_px": 54241,
+   "neighbors": [
+    25,
+    46,
+    49,
+    55
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "gwynedd",
+   "city_position": [
+    2714.88,
+    5240
+   ]
+  },
+  {
+   "id": 23,
+   "key": "province_23",
+   "name": "Province 23",
+   "centroid": [
+    3226.26,
+    5667.47
+   ],
+   "area_px": 94308,
+   "neighbors": [
+    40,
+    56,
+    155
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "gwynedd",
    "city_position": [
     3227.217602882633,
     5674.520806978994
    ]
   },
   {
-   "id": 9,
-   "key": "province_9",
-   "name": "Province 9",
+   "id": 24,
+   "key": "province_24",
+   "name": "Province 24",
    "centroid": [
-    3927.36,
-    6880.03
+    3268.23,
+    5045.4
    ],
-   "area_px": 13153,
+   "area_px": 30068,
    "neighbors": [
-    7
+    15,
+    109,
+    122,
+    134,
+    138
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3235,
+    5061
+   ]
+  },
+  {
+   "id": 25,
+   "key": "province_25",
+   "name": "Province 25",
+   "centroid": [
+    2907.85,
+    5218.52
+   ],
+   "area_px": 19851,
+   "neighbors": [
+    22,
+    46,
+    52,
+    55
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "gwynedd",
+   "city_position": [
+    2896.68,
+    5146.67
+   ]
+  },
+  {
+   "id": 26,
+   "key": "province_26",
+   "name": "Province 26",
+   "centroid": [
+    3923.17,
+    6879.77
+   ],
+   "area_px": 13792,
+   "neighbors": [],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
    "city_position": [
     3925.6678477195624,
     6876.747895672566
    ]
   },
   {
-   "id": 10,
-   "key": "province_10",
-   "name": "Province 10",
+   "id": 27,
+   "key": "province_27",
+   "name": "Province 27",
    "centroid": [
-    678.07,
-    5914.88
+    4291.28,
+    6718.65
    ],
-   "area_px": 411554,
+   "area_px": 40170,
    "neighbors": [
-    47,
-    48,
-    49,
-    50
+    6,
+    120,
+    126,
+    144,
+    159,
+    203
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "wessex",
+   "city_position": [
+    4293.9544000000005,
+    6790.199999999999
+   ]
+  },
+  {
+   "id": 28,
+   "key": "province_28",
+   "name": "Province 28",
+   "centroid": [
+    2739.29,
+    6036.66
+   ],
+   "area_px": 84767,
+   "neighbors": [
+    31,
+    34,
+    37,
+    43,
+    57
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "dyfed",
+   "city_position": [
+    2702.76,
+    6093.33
+   ]
+  },
+  {
+   "id": 29,
+   "key": "province_29",
+   "name": "Province 29",
+   "centroid": [
+    745.05,
+    5852.08
+   ],
+   "area_px": 123571,
+   "neighbors": [
+    133
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "connacth",
    "city_position": [
     783.5742178665661,
     5929.440787595223
    ]
   },
   {
-   "id": 11,
-   "key": "province_11",
-   "name": "Province 11",
+   "id": 30,
+   "key": "province_30",
+   "name": "Province 30",
    "centroid": [
-    3702.29,
-    5158.17
+    4348.26,
+    6218.89
    ],
-   "area_px": 224648,
+   "area_px": 24024,
    "neighbors": [
-    20,
-    26,
-    27,
-    38
+    2,
+    39,
+    42,
+    69,
+    108,
+    142,
+    179
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "essex",
+   "city_position": [
+    4363.321199999999,
+    6237.066666666668
+   ]
+  },
+  {
+   "id": 31,
+   "key": "province_31",
+   "name": "Province 31",
+   "centroid": [
+    2499.36,
+    6192.39
+   ],
+   "area_px": 13750,
+   "neighbors": [
+    28,
+    37
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "dyfed",
+   "city_position": [
+    2456.32,
+    6220
+   ]
+  },
+  {
+   "id": 32,
+   "key": "province_32",
+   "name": "Province 32",
+   "centroid": [
+    3760.86,
+    5291.21
+   ],
+   "area_px": 13629,
+   "neighbors": [
+    21,
+    51,
+    63
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
    "city_position": [
     3778.533943375083,
     5284.5655856463145
    ]
   },
   {
-   "id": 12,
-   "key": "province_12",
-   "name": "Province 12",
+   "id": 33,
+   "key": "province_33",
+   "name": "Province 33",
    "centroid": [
-    5402.14,
-    6914.67
+    3107.46,
+    6351.82
    ],
-   "area_px": 333988,
+   "area_px": 16147,
    "neighbors": [
-    14
+    17,
+    87,
+    178
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
+   },
+   "starting_owner": "gwent",
+   "city_position": [
+    3159.6032000000005,
+    6345.533333333336
+   ]
+  },
+  {
+   "id": 34,
+   "key": "province_34",
+   "name": "Province 34",
+   "centroid": [
+    2565.59,
+    5970.3
+   ],
+   "area_px": 21697,
+   "neighbors": [
+    28,
+    37
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "dyfed",
+   "city_position": [
+    2561.36,
+    5946.67
+   ]
+  },
+  {
+   "id": 35,
+   "key": "province_35",
+   "name": "Province 35",
+   "centroid": [
+    5285.23,
+    6795.33
+   ],
+   "area_px": 76103,
+   "neighbors": [
+    85
+   ],
+   "tags": {
+    "terrain": "plains"
    },
    "starting_owner": "france",
    "city_position": [
@@ -302,20 +872,73 @@
    ]
   },
   {
-   "id": 13,
-   "key": "province_13",
-   "name": "Province 13",
+   "id": 36,
+   "key": "province_36",
+   "name": "Province 36",
    "centroid": [
-    4801.69,
-    7776.87
+    4033.11,
+    6326.19
    ],
-   "area_px": 758417,
+   "area_px": 55262,
    "neighbors": [
-    14
+    42,
+    66,
+    89,
+    108,
+    118,
+    140,
+    144,
+    172,
+    199,
+    201,
+    209
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    4050.8675999999996,
+    6363.866666666667
+   ]
+  },
+  {
+   "id": 37,
+   "key": "province_37",
+   "name": "Province 37",
+   "centroid": [
+    2425.36,
+    6097.79
+   ],
+   "area_px": 27093,
+   "neighbors": [
+    28,
+    31,
+    34
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "dyfed",
+   "city_position": [
+    2440.16,
+    6133.33
+   ]
+  },
+  {
+   "id": 38,
+   "key": "province_38",
+   "name": "Province 38",
+   "centroid": [
+    5014.53,
+    7837.29
+   ],
+   "area_px": 166993,
+   "neighbors": [
+    41
+   ],
+   "tags": {
+    "terrain": "plains"
    },
    "starting_owner": "france",
    "city_position": [
@@ -324,21 +947,69 @@
    ]
   },
   {
-   "id": 14,
-   "key": "province_14",
-   "name": "Province 14",
+   "id": 39,
+   "key": "province_39",
+   "name": "Province 39",
    "centroid": [
-    5267.36,
-    7384.36
+    4417.67,
+    6317.98
    ],
-   "area_px": 248558,
+   "area_px": 12491,
    "neighbors": [
-    12,
-    13
+    2,
+    30,
+    42,
+    75
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    4429.3752,
+    6322.466666666666
+   ]
+  },
+  {
+   "id": 40,
+   "key": "province_40",
+   "name": "Province 40",
+   "centroid": [
+    3131.23,
+    6009.8
+   ],
+   "area_px": 41534,
+   "neighbors": [
+    23,
+    56,
+    87
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "gwent",
+   "city_position": [
+    3074.44,
+    6033.33
+   ]
+  },
+  {
+   "id": 41,
+   "key": "province_41",
+   "name": "Province 41",
+   "centroid": [
+    5148.46,
+    7410.39
+   ],
+   "area_px": 231707,
+   "neighbors": [
+    38,
+    85,
+    88,
+    97
+   ],
+   "tags": {
+    "terrain": "plains"
    },
    "starting_owner": "france",
    "city_position": [
@@ -347,486 +1018,1433 @@
    ]
   },
   {
-   "id": 15,
-   "key": "province_15",
-   "name": "Province 15",
+   "id": 42,
+   "key": "province_42",
+   "name": "Province 42",
    "centroid": [
-    4739.28,
-    6478.27
+    4245.51,
+    6328.16
    ],
-   "area_px": 17615,
+   "area_px": 21677,
    "neighbors": [
-    1
+    30,
+    36,
+    39,
+    75,
+    108,
+    172
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "essex",
+   "city_position": [
+    4260.18,
+    6311.4000000000015
+   ]
+  },
+  {
+   "id": 43,
+   "key": "province_43",
+   "name": "Province 43",
+   "centroid": [
+    2858.33,
+    5723.46
+   ],
+   "area_px": 48670,
+   "neighbors": [
+    28
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "dyfed",
+   "city_position": [
+    2795.68,
+    5726.67
+   ]
+  },
+  {
+   "id": 44,
+   "key": "province_44",
+   "name": "Province 44",
+   "centroid": [
+    4714.72,
+    6478.04
+   ],
+   "area_px": 13616,
+   "neighbors": [
+    2,
+    141
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
    "city_position": [
     4710.84125087451,
     6454.431249644353
    ]
   },
   {
-   "id": 16,
-   "key": "province_16",
-   "name": "Province 16",
+   "id": 45,
+   "key": "province_45",
+   "name": "Province 45",
    "centroid": [
-    2984.56,
-    6844.02
+    3874.41,
+    4111.73
    ],
-   "area_px": 65042,
+   "area_px": 13897,
    "neighbors": [
-    2,
-    17
+    65,
+    96,
+    180
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3886.076,
+    4062.666666666668
+   ]
+  },
+  {
+   "id": 46,
+   "key": "province_46",
+   "name": "Province 46",
+   "centroid": [
+    2834.54,
+    5418.3
+   ],
+   "area_px": 17262,
+   "neighbors": [
+    22,
+    25,
+    52
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "gwynedd",
+   "city_position": [
+    2783.56,
+    5426.67
+   ]
+  },
+  {
+   "id": 47,
+   "key": "province_47",
+   "name": "Province 47",
+   "centroid": [
+    3026.82,
+    6837.87
+   ],
+   "area_px": 29051,
+   "neighbors": [
+    154,
+    158
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "cornwall",
    "city_position": [
     3021.0342560317977,
     6839.904227053669
    ]
   },
   {
-   "id": 17,
-   "key": "province_17",
-   "name": "Province 17",
+   "id": 48,
+   "key": "province_48",
+   "name": "Province 48",
    "centroid": [
-    3034.47,
-    6662.01
+    4119.66,
+    5968.26
    ],
-   "area_px": 304664,
+   "area_px": 58836,
    "neighbors": [
-    2,
-    6,
-    7,
-    16,
-    18,
-    30
+    102,
+    132,
+    140,
+    149,
+    160,
+    184,
+    209
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "england",
+   "starting_owner": "mercia",
+   "city_position": [
+    4136.96,
+    5973.333333333334
+   ]
+  },
+  {
+   "id": 49,
+   "key": "province_49",
+   "name": "Province 49",
+   "centroid": [
+    2758.61,
+    5147.35
+   ],
+   "area_px": 3753,
+   "neighbors": [
+    22
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "gwynedd",
+   "city_position": [
+    2792,
+    5159
+   ]
+  },
+  {
+   "id": 50,
+   "key": "province_50",
+   "name": "Province 50",
+   "centroid": [
+    3351.91,
+    6498.95
+   ],
+   "area_px": 66710,
+   "neighbors": [
+    20,
+    53,
+    128,
+    158,
+    206
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
    "city_position": [
     3321.3447829667098,
     6458.9134935677175
    ]
   },
   {
-   "id": 18,
-   "key": "province_18",
-   "name": "Province 18",
+   "id": 51,
+   "key": "province_51",
+   "name": "Province 51",
    "centroid": [
-    3554.39,
-    6133.23
+    3841.21,
+    5385.94
    ],
-   "area_px": 137359,
+   "area_px": 34335,
    "neighbors": [
-    6,
-    7,
-    17,
-    19,
-    27,
-    30
+    3,
+    21,
+    32,
+    63,
+    80,
+    146,
+    151,
+    152,
+    194
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "mercia",
+   "city_position": [
+    3846.888,
+    5383.533333333333
+   ]
+  },
+  {
+   "id": 52,
+   "key": "province_52",
+   "name": "Province 52",
+   "centroid": [
+    3035.42,
+    5256.8
+   ],
+   "area_px": 50946,
+   "neighbors": [
+    25,
+    46,
+    138,
+    155
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "gwynedd",
+   "city_position": [
+    3062.32,
+    5213.33
+   ]
+  },
+  {
+   "id": 53,
+   "key": "province_53",
+   "name": "Province 53",
+   "centroid": [
+    3480.83,
+    6159.61
+   ],
+   "area_px": 76621,
+   "neighbors": [
+    50,
+    56,
+    66,
+    87,
+    89,
+    112,
+    124,
+    128
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "wessex",
    "city_position": [
     3527.528129817545,
     6158.60315070232
    ]
   },
   {
-   "id": 19,
-   "key": "province_19",
-   "name": "Province 19",
+   "id": 54,
+   "key": "province_54",
+   "name": "Province 54",
    "centroid": [
-    3391.0,
-    5889.88
+    3563.76,
+    5584.03
    ],
-   "area_px": 73222,
+   "area_px": 16977,
    "neighbors": [
-    6,
-    8,
-    18,
-    27
+    3,
+    90,
+    150
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "wales",
+   "starting_owner": "mercia",
+   "city_position": [
+    3582.1467999999995,
+    5611.133333333332
+   ]
+  },
+  {
+   "id": 55,
+   "key": "province_55",
+   "name": "Province 55",
+   "centroid": [
+    2818.78,
+    5184.06
+   ],
+   "area_px": 1502,
+   "neighbors": [
+    22,
+    25
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "gwynedd",
+   "city_position": [
+    2819.92,
+    5180
+   ]
+  },
+  {
+   "id": 56,
+   "key": "province_56",
+   "name": "Province 56",
+   "centroid": [
+    3371.3,
+    5903.33
+   ],
+   "area_px": 71365,
+   "neighbors": [
+    23,
+    40,
+    53,
+    87
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "gwent",
    "city_position": [
     3388.578483026765,
     5921.0442227640215
    ]
   },
   {
-   "id": 20,
-   "key": "province_20",
-   "name": "Province 20",
+   "id": 57,
+   "key": "province_57",
+   "name": "Province 57",
    "centroid": [
-    4029.37,
-    4721.93
+    2877.21,
+    6208.36
    ],
-   "area_px": 395515,
+   "area_px": 38510,
    "neighbors": [
-    5,
-    11,
-    21,
-    22,
-    26,
-    38
+    17,
+    28,
+    178
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "england",
+   "starting_owner": "gwent",
+   "city_position": [
+    2848,
+    6254
+   ]
+  },
+  {
+   "id": 58,
+   "key": "province_58",
+   "name": "Province 58",
+   "centroid": [
+    1529.07,
+    5826.39
+   ],
+   "area_px": 57818,
+   "neighbors": [
+    64,
+    67,
+    70,
+    131
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "dyflin",
+   "city_position": [
+    1571.56,
+    5826.67
+   ]
+  },
+  {
+   "id": 59,
+   "key": "province_59",
+   "name": "Province 59",
+   "centroid": [
+    4257.14,
+    4749.46
+   ],
+   "area_px": 67019,
+   "neighbors": [
+    14,
+    18,
+    62,
+    176,
+    197
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
    "city_position": [
     4329.850283867533,
     4796.000997999624
    ]
   },
   {
-   "id": 21,
-   "key": "province_21",
-   "name": "Province 21",
+   "id": 60,
+   "key": "province_60",
+   "name": "Province 60",
    "centroid": [
-    4414.91,
-    4874.42
+    3855.09,
+    4950.65
    ],
-   "area_px": 3201,
+   "area_px": 16682,
    "neighbors": [
-    20
+    18,
+    21,
+    116,
+    208
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "england",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3846.4435999999996,
+    4963.533333333336
+   ]
+  },
+  {
+   "id": 61,
+   "key": "province_61",
+   "name": "Province 61",
+   "centroid": [
+    1800.99,
+    4830.8
+   ],
+   "area_px": 40955,
+   "neighbors": [
+    8,
+    73,
+    79,
+    139
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "dyflin",
+   "city_position": [
+    1878.6,
+    4853.33
+   ]
+  },
+  {
+   "id": 62,
+   "key": "province_62",
+   "name": "Province 62",
+   "centroid": [
+    4414.67,
+    4873.86
+   ],
+   "area_px": 4716,
+   "neighbors": [
+    59
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
    "city_position": [
     4406.048477268928,
     4867.716900773449
    ]
   },
   {
-   "id": 22,
-   "key": "province_22",
-   "name": "Province 22",
+   "id": 63,
+   "key": "province_63",
+   "name": "Province 63",
    "centroid": [
-    3527.11,
-    4187.76
+    3585.7,
+    5320.31
    ],
-   "area_px": 797424,
+   "area_px": 38280,
    "neighbors": [
-    4,
-    20,
-    33,
-    38
+    3,
+    21,
+    32,
+    51,
+    90,
+    150,
+    163,
+    168
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "england",
+   "starting_owner": "mercia",
+   "city_position": [
+    3564.8556000000003,
+    5316.333333333333
+   ]
+  },
+  {
+   "id": 64,
+   "key": "province_64",
+   "name": "Province 64",
+   "centroid": [
+    1462.85,
+    5524.05
+   ],
+   "area_px": 138591,
+   "neighbors": [
+    58,
+    67,
+    131,
+    135
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "dyflin",
+   "city_position": [
+    1515,
+    5566.67
+   ]
+  },
+  {
+   "id": 65,
+   "key": "province_65",
+   "name": "Province 65",
+   "centroid": [
+    3664.48,
+    4047.73
+   ],
+   "area_px": 153293,
+   "neighbors": [
+    1,
+    4,
+    45,
+    130,
+    180
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "northumbria",
    "city_position": [
     3796.4629300577644,
     3989.1970917940794
    ]
   },
   {
-   "id": 23,
-   "key": "province_23",
-   "name": "Province 23",
+   "id": 66,
+   "key": "province_66",
+   "name": "Province 66",
    "centroid": [
-    5102.64,
-    5674.16
+    3725.54,
+    6342.08
    ],
-   "area_px": 16502,
+   "area_px": 63232,
    "neighbors": [
-    24
+    20,
+    36,
+    53,
+    89,
+    128,
+    170,
+    195,
+    199
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "wessex",
+   "city_position": [
+    3724.88,
+    6293.333333333332
+   ]
+  },
+  {
+   "id": 67,
+   "key": "province_67",
+   "name": "Province 67",
+   "centroid": [
+    1650.37,
+    5695.3
+   ],
+   "area_px": 24563,
+   "neighbors": [
+    58,
+    64,
+    131
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "dyflin",
+   "city_position": [
+    1640.24,
+    5733.33
+   ]
+  },
+  {
+   "id": 68,
+   "key": "province_68",
+   "name": "Province 68",
+   "centroid": [
+    5103.98,
+    5680.37
+   ],
+   "area_px": 18510,
+   "neighbors": [
+    71
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
    "city_position": [
     5109.761204564169,
     5661.074075208901
    ]
   },
   {
-   "id": 24,
-   "key": "province_24",
-   "name": "Province 24",
+   "id": 69,
+   "key": "province_69",
+   "name": "Province 69",
    "centroid": [
-    4903.82,
-    5575.46
+    4304.09,
+    6094.91
    ],
-   "area_px": 150467,
+   "area_px": 23335,
    "neighbors": [
-    23,
-    25,
-    29
+    2,
+    30,
+    104,
+    108,
+    132,
+    142,
+    179
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "england",
+   "starting_owner": "essex",
+   "city_position": [
+    4276.4612,
+    6081.133333333331
+   ]
+  },
+  {
+   "id": 70,
+   "key": "province_70",
+   "name": "Province 70",
+   "centroid": [
+    1264.86,
+    5983.02
+   ],
+   "area_px": 25961,
+   "neighbors": [
+    58,
+    127
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "connacth",
+   "city_position": [
+    1271,
+    6033
+   ]
+  },
+  {
+   "id": 71,
+   "key": "province_71",
+   "name": "Province 71",
+   "centroid": [
+    4908.97,
+    5562.15
+   ],
+   "area_px": 132190,
+   "neighbors": [
+    68,
+    74,
+    86
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
    "city_position": [
     4863.237637677301,
     5535.571245354706
    ]
   },
   {
-   "id": 25,
-   "key": "province_25",
-   "name": "Province 25",
+   "id": 72,
+   "key": "province_72",
+   "name": "Province 72",
    "centroid": [
-    4483.19,
-    5599.27
+    4286.38,
+    5598.04
    ],
-   "area_px": 162332,
+   "area_px": 113680,
    "neighbors": [
-    1,
-    24,
-    26,
-    27,
-    29
+    74,
+    77,
+    104,
+    152,
+    153,
+    160,
+    194,
+    198,
+    205,
+    207,
+    210
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4348.4944,
+    5622.600000000001
+   ]
+  },
+  {
+   "id": 73,
+   "key": "province_73",
+   "name": "Province 73",
+   "centroid": [
+    1635.3,
+    4964.49
+   ],
+   "area_px": 55087,
+   "neighbors": [
+    8,
+    61,
+    137,
+    139
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "dyflin",
+   "city_position": [
+    1700.84,
+    4966.67
+   ]
+  },
+  {
+   "id": 74,
+   "key": "province_74",
+   "name": "Province 74",
+   "centroid": [
+    4603.3,
+    5571.63
+   ],
+   "area_px": 85531,
+   "neighbors": [
+    71,
+    72,
+    86,
+    104,
+    153
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
    "city_position": [
     4594.3028374370815,
     5540.05348927807
    ]
   },
   {
-   "id": 26,
-   "key": "province_26",
-   "name": "Province 26",
+   "id": 75,
+   "key": "province_75",
+   "name": "Province 75",
    "centroid": [
-    4230.01,
-    5244.81
+    4399.29,
+    6453.2
    ],
-   "area_px": 268475,
+   "area_px": 25757,
    "neighbors": [
-    11,
-    20,
-    25,
-    27
+    2,
+    39,
+    42,
+    120,
+    144,
+    159,
+    172
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "essex",
+   "city_position": [
+    4399.6004,
+    6418.199999999999
+   ]
+  },
+  {
+   "id": 76,
+   "key": "province_76",
+   "name": "Province 76",
+   "centroid": [
+    1988.51,
+    4141.2
+   ],
+   "area_px": 46235,
+   "neighbors": [
+    107,
+    148
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "ulaid",
+   "city_position": [
+    2096.76,
+    4186.67
+   ]
+  },
+  {
+   "id": 77,
+   "key": "province_77",
+   "name": "Province 77",
+   "centroid": [
+    4303.35,
+    5188.48
+   ],
+   "area_px": 116771,
+   "neighbors": [
+    21,
+    72,
+    151,
+    153,
+    191,
+    198,
+    211
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
    "city_position": [
     4285.027817160829,
     5235.260902489308
    ]
   },
   {
-   "id": 27,
-   "key": "province_27",
-   "name": "Province 27",
+   "id": 78,
+   "key": "province_78",
+   "name": "Province 78",
    "centroid": [
-    3792.88,
-    5636.01
+    3649.44,
+    6853.07
    ],
-   "area_px": 356601,
+   "area_px": 17055,
    "neighbors": [
-    1,
-    8,
-    11,
-    18,
-    19,
-    25,
-    26,
-    30,
-    38
+    9,
+    20,
+    169
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "wessex",
+   "city_position": [
+    3684,
+    6852
+   ]
+  },
+  {
+   "id": 79,
+   "key": "province_79",
+   "name": "Province 79",
+   "centroid": [
+    1807.04,
+    4609.6
+   ],
+   "area_px": 83410,
+   "neighbors": [
+    61,
+    139,
+    148
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "dyflin",
+   "city_position": [
+    1858.4,
+    4666.67
+   ]
+  },
+  {
+   "id": 80,
+   "key": "province_80",
+   "name": "Province 80",
+   "centroid": [
+    3849.06,
+    5628.13
+   ],
+   "area_px": 33654,
+   "neighbors": [
+    3,
+    51,
+    146,
+    149,
+    152,
+    174,
+    205
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
    "city_position": [
     3818.874163411116,
     5652.109587362173
    ]
   },
   {
-   "id": 28,
-   "key": "province_28",
-   "name": "Province 28",
+   "id": 81,
+   "key": "province_81",
+   "name": "Province 81",
    "centroid": [
-    4895.11,
-    6007.08
+    4715.11,
+    6241.33
    ],
-   "area_px": 9231,
+   "area_px": 29568,
    "neighbors": [
-    1,
-    29
+    2,
+    106,
+    114,
+    175
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "england",
+   "starting_owner": "essex",
+   "city_position": [
+    4641.96,
+    6280.000000000001
+   ]
+  },
+  {
+   "id": 82,
+   "key": "province_82",
+   "name": "Province 82",
+   "centroid": [
+    1965.41,
+    5372.27
+   ],
+   "area_px": 9461,
+   "neighbors": [
+    8,
+    131
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "dyflin",
+   "city_position": [
+    2003.84,
+    5346.67
+   ]
+  },
+  {
+   "id": 83,
+   "key": "province_83",
+   "name": "Province 83",
+   "centroid": [
+    4920.28,
+    5976.12
+   ],
+   "area_px": 13190,
+   "neighbors": [
+    86,
+    106,
+    175
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
    "city_position": [
     4881.166624359982,
     5997.242369461212
    ]
   },
   {
-   "id": 29,
-   "key": "province_29",
-   "name": "Province 29",
+   "id": 84,
+   "key": "province_84",
+   "name": "Province 84",
    "centroid": [
-    4775.85,
-    5894.5
+    3722.26,
+    4904.69
    ],
-   "area_px": 144890,
+   "area_px": 1910,
    "neighbors": [
-    1,
-    24,
-    25,
-    28
+    15,
+    18
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "mountains"
    },
-   "starting_owner": "england",
+   "starting_owner": null,
+   "city_position": [
+    3724.9608000000003,
+    4903.333333333331
+   ]
+  },
+  {
+   "id": 85,
+   "key": "province_85",
+   "name": "Province 85",
+   "centroid": [
+    5169.27,
+    6963.25
+   ],
+   "area_px": 43261,
+   "neighbors": [
+    35,
+    41
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "france",
+   "city_position": [
+    5094.44,
+    6846.67
+   ]
+  },
+  {
+   "id": 86,
+   "key": "province_86",
+   "name": "Province 86",
+   "centroid": [
+    4779.98,
+    5866.85
+   ],
+   "area_px": 110675,
+   "neighbors": [
+    2,
+    71,
+    74,
+    83,
+    104,
+    106,
+    189
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
    "city_position": [
     4737.734730898532,
     5903.115247070565
    ]
   },
   {
-   "id": 30,
-   "key": "province_30",
-   "name": "Province 30",
+   "id": 87,
+   "key": "province_87",
+   "name": "Province 87",
    "centroid": [
-    3877.08,
-    6196.73
+    3250.73,
+    6191.18
    ],
-   "area_px": 206958,
+   "area_px": 40468,
    "neighbors": [
-    1,
-    7,
     17,
-    18,
-    27
+    33,
+    40,
+    53,
+    56
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "england",
+   "starting_owner": "gwent",
+   "city_position": [
+    3232.8887999999997,
+    6274.266666666666
+   ]
+  },
+  {
+   "id": 88,
+   "key": "province_88",
+   "name": "Province 88",
+   "centroid": [
+    4824.17,
+    7453.7
+   ],
+   "area_px": 36636,
+   "neighbors": [
+    41,
+    100
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "france",
+   "city_position": [
+    4880.32,
+    7386.67
+   ]
+  },
+  {
+   "id": 89,
+   "key": "province_89",
+   "name": "Province 89",
+   "centroid": [
+    3818.63,
+    6107.76
+   ],
+   "area_px": 67933,
+   "neighbors": [
+    3,
+    36,
+    53,
+    66,
+    112,
+    174,
+    184,
+    201,
+    209
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
    "city_position": [
     3814.3919167404456,
     6176.532126395778
    ]
   },
   {
-   "id": 31,
-   "key": "province_31",
-   "name": "Province 31",
+   "id": 90,
+   "key": "province_90",
+   "name": "Province 90",
    "centroid": [
-    982.69,
-    4615.31
+    3430.87,
+    5498.21
    ],
-   "area_px": 276693,
+   "area_px": 30035,
    "neighbors": [
     3,
-    48
+    54,
+    63,
+    150,
+    155,
+    163
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "mercia",
+   "city_position": [
+    3455.4524000000006,
+    5548.933333333333
+   ]
+  },
+  {
+   "id": 91,
+   "key": "province_91",
+   "name": "Province 91",
+   "centroid": [
+    4165.07,
+    7869.16
+   ],
+   "area_px": 98777,
+   "neighbors": [
+    94
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "france",
+   "city_position": [
+    4161.2,
+    7813.33
+   ]
+  },
+  {
+   "id": 92,
+   "key": "province_92",
+   "name": "Province 92",
+   "centroid": [
+    985.22,
+    4681.69
+   ],
+   "area_px": 97610,
+   "neighbors": [],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "galway",
    "city_position": [
     995.73641523169,
     4666.183885116209
    ]
   },
   {
-   "id": 32,
-   "key": "province_32",
-   "name": "Province 32",
+   "id": 93,
+   "key": "province_93",
+   "name": "Province 93",
    "centroid": [
-    3057.72,
-    1622.47
+    3343.04,
+    4786.12
    ],
-   "area_px": 16007,
+   "area_px": 15132,
    "neighbors": [
-    40
+    99,
+    110,
+    122,
+    134,
+    167
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "alba",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3339.0600000000004,
+    4780.000000000001
+   ]
+  },
+  {
+   "id": 94,
+   "key": "province_94",
+   "name": "Province 94",
+   "centroid": [
+    3821.87,
+    7656.08
+   ],
+   "area_px": 57224,
+   "neighbors": [
+    91
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "france",
+   "city_position": [
+    3789.52,
+    7580
+   ]
+  },
+  {
+   "id": 95,
+   "key": "province_95",
+   "name": "Province 95",
+   "centroid": [
+    3057.09,
+    1625.47
+   ],
+   "area_px": 21086,
+   "neighbors": [
+    113
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "norway",
    "city_position": [
     3046.4874151242784,
     1648.0643140861487
    ]
   },
   {
-   "id": 33,
-   "key": "province_33",
-   "name": "Province 33",
+   "id": 96,
+   "key": "province_96",
+   "name": "Province 96",
    "centroid": [
-    2808.19,
-    3930.1
+    3978.0,
+    4347.89
    ],
-   "area_px": 271512,
+   "area_px": 56552,
    "neighbors": [
-    4,
-    22,
-    45
+    18,
+    45,
+    130,
+    147,
+    176,
+    180
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "alba",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3944.858,
+    4282.199999999999
+   ]
+  },
+  {
+   "id": 97,
+   "key": "province_97",
+   "name": "Province 97",
+   "centroid": [
+    5464.31,
+    7412.28
+   ],
+   "area_px": 139222,
+   "neighbors": [
+    41
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "france",
+   "city_position": [
+    5373.2,
+    7406.67
+   ]
+  },
+  {
+   "id": 98,
+   "key": "province_98",
+   "name": "Province 98",
+   "centroid": [
+    2807.56,
+    3880.28
+   ],
+   "area_px": 72441,
+   "neighbors": [
+    19,
+    123,
+    165,
+    185,
+    204
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
    "city_position": [
     2835.4050092795587,
     3945.612101703784
    ]
   },
   {
-   "id": 34,
-   "key": "province_34",
-   "name": "Province 34",
+   "id": 99,
+   "key": "province_99",
+   "name": "Province 99",
    "centroid": [
-    3177.08,
-    1339.69
+    3245.9,
+    4776.56
    ],
-   "area_px": 29868,
+   "area_px": 8209,
+   "neighbors": [
+    93,
+    134,
+    167
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3211.6788,
+    4790.533333333334
+   ]
+  },
+  {
+   "id": 100,
+   "key": "province_100",
+   "name": "Province 100",
+   "centroid": [
+    4617.41,
+    7604.81
+   ],
+   "area_px": 50718,
+   "neighbors": [
+    88
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "france",
+   "city_position": [
+    4524.8,
+    7660
+   ]
+  },
+  {
+   "id": 101,
+   "key": "province_101",
+   "name": "Province 101",
+   "centroid": [
+    3179.28,
+    1320.1
+   ],
+   "area_px": 19927,
    "neighbors": [],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
    "starting_owner": "norway",
    "city_position": [
@@ -835,18 +2453,40 @@
    ]
   },
   {
-   "id": 35,
-   "key": "province_35",
-   "name": "Province 35",
+   "id": 102,
+   "key": "province_102",
+   "name": "Province 102",
    "centroid": [
-    3908.69,
-    474.42
+    4051.8,
+    5840.46
    ],
-   "area_px": 42941,
+   "area_px": 15800,
+   "neighbors": [
+    48,
+    149,
+    160
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    4082.9048,
+    5846.399999999998
+   ]
+  },
+  {
+   "id": 103,
+   "key": "province_103",
+   "name": "Province 103",
+   "centroid": [
+    3933.15,
+    453.2
+   ],
+   "area_px": 18581,
    "neighbors": [],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
    "starting_owner": "norway",
    "city_position": [
@@ -855,91 +2495,189 @@
    ]
   },
   {
-   "id": 36,
-   "key": "province_36",
-   "name": "Province 36",
+   "id": 104,
+   "key": "province_104",
+   "name": "Province 104",
    "centroid": [
-    2612.17,
-    4514.24
+    4489.73,
+    5866.98
    ],
-   "area_px": 21502,
+   "area_px": 41553,
+   "neighbors": [
+    2,
+    69,
+    72,
+    74,
+    86,
+    132,
+    207
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4493.49,
+    5863.333333333334
+   ]
+  },
+  {
+   "id": 105,
+   "key": "province_105",
+   "name": "Province 105",
+   "centroid": [
+    2618.0,
+    4507.4
+   ],
+   "area_px": 18209,
    "neighbors": [],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "alba",
+   "starting_owner": null,
    "city_position": [
     2616.2040493638874,
     4503.7619617699065
    ]
   },
   {
-   "id": 37,
-   "key": "province_37",
-   "name": "Province 37",
+   "id": 106,
+   "key": "province_106",
+   "name": "Province 106",
    "centroid": [
-    1775.81,
-    4302.02
+    4787.58,
+    6075.67
    ],
-   "area_px": 58364,
+   "area_px": 16749,
    "neighbors": [
-    3,
-    46
+    81,
+    83,
+    86,
+    114,
+    175,
+    189
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4808.812,
+    6072.2
+   ]
+  },
+  {
+   "id": 107,
+   "key": "province_107",
+   "name": "Province 107",
+   "centroid": [
+    1763.97,
+    4296.42
+   ],
+   "area_px": 33885,
+   "neighbors": [
+    76,
+    125,
+    148
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "ulaid",
    "city_position": [
     1763.7558719140563,
     4300.798376291315
    ]
   },
   {
-   "id": 38,
-   "key": "province_38",
-   "name": "Province 38",
+   "id": 108,
+   "key": "province_108",
+   "name": "Province 108",
    "centroid": [
-    3343.72,
-    5045.59
+    4154.19,
+    6228.67
    ],
-   "area_px": 136367,
+   "area_px": 16469,
    "neighbors": [
-    6,
-    8,
-    11,
-    20,
-    22,
-    27
+    30,
+    36,
+    42,
+    69
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "wales",
+   "starting_owner": "essex",
+   "city_position": [
+    4141.7272,
+    6247.533333333332
+   ]
+  },
+  {
+   "id": 109,
+   "key": "province_109",
+   "name": "Province 109",
+   "centroid": [
+    3371.64,
+    5117.85
+   ],
+   "area_px": 5376,
+   "neighbors": [
+    15,
+    24,
+    138,
+    163
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
    "city_position": [
     3367.1703009268344,
     5096.415631367388
    ]
   },
   {
-   "id": 39,
-   "key": "province_39",
-   "name": "Province 39",
+   "id": 110,
+   "key": "province_110",
+   "name": "Province 110",
    "centroid": [
-    3367.02,
-    2300.93
+    3460.85,
+    4773.41
    ],
-   "area_px": 101112,
+   "area_px": 29368,
    "neighbors": [
-    43,
-    44
+    15,
+    93,
+    122,
+    164,
+    167,
+    200
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3441.272,
+    4834.666666666668
+   ]
+  },
+  {
+   "id": 111,
+   "key": "province_111",
+   "name": "Province 111",
+   "centroid": [
+    3419.63,
+    2284.35
+   ],
+   "area_px": 48246,
+   "neighbors": [
+    16,
+    119
+   ],
+   "tags": {
+    "terrain": "plains"
    },
    "starting_owner": "alba",
    "city_position": [
@@ -948,21 +2686,43 @@
    ]
   },
   {
-   "id": 40,
-   "key": "province_40",
-   "name": "Province 40",
+   "id": 112,
+   "key": "province_112",
+   "name": "Province 112",
    "centroid": [
-    2874.68,
-    1751.75
+    3632.86,
+    6033.92
    ],
-   "area_px": 149949,
+   "area_px": 23252,
    "neighbors": [
-    32,
-    44
+    3,
+    53,
+    89,
+    124
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3609.0532,
+    6066.666666666667
+   ]
+  },
+  {
+   "id": 113,
+   "key": "province_113",
+   "name": "Province 113",
+   "centroid": [
+    2953.9,
+    1771.59
+   ],
+   "area_px": 101581,
+   "neighbors": [
+    95
+   ],
+   "tags": {
+    "terrain": "plains"
    },
    "starting_owner": "alba",
    "city_position": [
@@ -971,43 +2731,88 @@
    ]
   },
   {
-   "id": 41,
-   "key": "province_41",
-   "name": "Province 41",
+   "id": 114,
+   "key": "province_114",
+   "name": "Province 114",
    "centroid": [
-    2028.02,
-    3014.99
+    4641.98,
+    6153.67
    ],
-   "area_px": 43601,
+   "area_px": 10556,
    "neighbors": [
-    4
+    2,
+    81,
+    106,
+    189
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "alba",
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4637.92,
+    6180.000000000003
+   ]
+  },
+  {
+   "id": 115,
+   "key": "province_115",
+   "name": "Province 115",
+   "centroid": [
+    2030.97,
+    3055.85
+   ],
+   "area_px": 20271,
+   "neighbors": [],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": null,
    "city_position": [
     2015.43104811353,
     3062.720504871919
    ]
   },
   {
-   "id": 42,
-   "key": "province_42",
-   "name": "Province 42",
+   "id": 116,
+   "key": "province_116",
+   "name": "Province 116",
    "centroid": [
-    3304.57,
-    2942.81
+    4008.54,
+    4961.16
    ],
-   "area_px": 24440,
+   "area_px": 20913,
    "neighbors": [
-    4,
-    43
+    14,
+    18,
+    21,
+    60,
+    208
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3986.4700000000003,
+    4984.800000000003
+   ]
+  },
+  {
+   "id": 117,
+   "key": "province_117",
+   "name": "Province 117",
+   "centroid": [
+    3319.05,
+    2938.38
+   ],
+   "area_px": 5464,
+   "neighbors": [
+    7,
+    119
+   ],
+   "tags": {
+    "terrain": "plains"
    },
    "starting_owner": "alba",
    "city_position": [
@@ -1016,23 +2821,50 @@
    ]
   },
   {
-   "id": 43,
-   "key": "province_43",
-   "name": "Province 43",
+   "id": 118,
+   "key": "province_118",
+   "name": "Province 118",
    "centroid": [
-    3383.17,
-    2582.27
+    4016.75,
+    6507.69
    ],
-   "area_px": 220223,
+   "area_px": 23254,
    "neighbors": [
-    4,
-    39,
-    42,
-    44
+    6,
+    9,
+    36,
+    144,
+    170,
+    196,
+    199
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    4004.6096000000002,
+    6488.866666666667
+   ]
+  },
+  {
+   "id": 119,
+   "key": "province_119",
+   "name": "Province 119",
+   "centroid": [
+    3423.44,
+    2561.28
+   ],
+   "area_px": 211822,
+   "neighbors": [
+    7,
+    16,
+    111,
+    117,
+    181
+   ],
+   "tags": {
+    "terrain": "forest"
    },
    "starting_owner": "alba",
    "city_position": [
@@ -1041,23 +2873,44 @@
    ]
   },
   {
-   "id": 44,
-   "key": "province_44",
-   "name": "Province 44",
+   "id": 120,
+   "key": "province_120",
+   "name": "Province 120",
    "centroid": [
-    2490.13,
-    2236.14
+    4367.13,
+    6590.77
    ],
-   "area_px": 658407,
+   "area_px": 20068,
    "neighbors": [
-    4,
-    39,
-    40,
-    43
+    27,
+    75,
+    144,
+    159,
+    203
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    4368.3712,
+    6593.866666666666
+   ]
+  },
+  {
+   "id": 121,
+   "key": "province_121",
+   "name": "Province 121",
+   "centroid": [
+    2615.16,
+    2116.44
+   ],
+   "area_px": 161408,
+   "neighbors": [
+    182
+   ],
+   "tags": {
+    "terrain": "forest"
    },
    "starting_owner": "alba",
    "city_position": [
@@ -1066,217 +2919,2126 @@
    ]
   },
   {
-   "id": 45,
-   "key": "province_45",
-   "name": "Province 45",
+   "id": 122,
+   "key": "province_122",
+   "name": "Province 122",
    "centroid": [
-    2593.46,
-    4105.28
+    3360.73,
+    4944.46
    ],
-   "area_px": 22759,
+   "area_px": 13404,
    "neighbors": [
-    33
+    15,
+    24,
+    93,
+    110,
+    134
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "alba",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3380.7527999999998,
+    4970.133333333332
+   ]
+  },
+  {
+   "id": 123,
+   "key": "province_123",
+   "name": "Province 123",
+   "centroid": [
+    2611.7,
+    4046.09
+   ],
+   "area_px": 48940,
+   "neighbors": [
+    19,
+    98,
+    185
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
    "city_position": [
     2640.55971157674,
     4142.486779618016
    ]
   },
   {
-   "id": 46,
-   "key": "province_46",
-   "name": "Province 46",
+   "id": 124,
+   "key": "province_124",
+   "name": "Province 124",
    "centroid": [
-    1514.9,
-    4057.28
+    3563.03,
+    5915.52
    ],
-   "area_px": 354418,
+   "area_px": 6718,
    "neighbors": [
     3,
-    37
+    53,
+    112
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "mountains"
    },
-   "starting_owner": "ireland",
+   "starting_owner": null,
+   "city_position": [
+    3546.8775999999993,
+    5872.600000000001
+   ]
+  },
+  {
+   "id": 125,
+   "key": "province_125",
+   "name": "Province 125",
+   "centroid": [
+    1587.06,
+    4057.64
+   ],
+   "area_px": 109278,
+   "neighbors": [
+    107
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "ulaid",
    "city_position": [
     1570.9402127289752,
     4028.827171750006
    ]
   },
   {
-   "id": 47,
-   "key": "province_47",
-   "name": "Province 47",
+   "id": 126,
+   "key": "province_126",
+   "name": "Province 126",
    "centroid": [
-    1109.7,
-    5960.57
+    4530.87,
+    6767.16
    ],
-   "area_px": 173671,
+   "area_px": 15154,
    "neighbors": [
-    10,
-    48,
-    49
+    27,
+    136,
+    159
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "essex",
+   "city_position": [
+    4557.12,
+    6819.999999999997
+   ]
+  },
+  {
+   "id": 127,
+   "key": "province_127",
+   "name": "Province 127",
+   "centroid": [
+    993.19,
+    6069.36
+   ],
+   "area_px": 102638,
+   "neighbors": [
+    70
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "connacth",
    "city_position": [
     1051.3527521881256,
     6058.463026535903
    ]
   },
   {
-   "id": 48,
-   "key": "province_48",
-   "name": "Province 48",
+   "id": 128,
+   "key": "province_128",
+   "name": "Province 128",
    "centroid": [
-    830.36,
-    5086.79
+    3522.92,
+    6437.01
    ],
-   "area_px": 518207,
+   "area_px": 36124,
    "neighbors": [
-    3,
-    10,
-    31,
-    47,
-    49,
-    50
+    20,
+    50,
+    53,
+    66,
+    195
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "wessex",
+   "city_position": [
+    3490.6812,
+    6412.400000000001
+   ]
+  },
+  {
+   "id": 129,
+   "key": "province_129",
+   "name": "Province 129",
+   "centroid": [
+    890.67,
+    5137.98
+   ],
+   "area_px": 181911,
+   "neighbors": [
+    133
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "connacth",
    "city_position": [
     876.8038396626838,
     5177.601065558823
    ]
   },
   {
-   "id": 49,
-   "key": "province_49",
-   "name": "Province 49",
+   "id": 130,
+   "key": "province_130",
+   "name": "Province 130",
    "centroid": [
-    1576.4,
-    5656.8
+    3749.25,
+    4372.68
    ],
-   "area_px": 291864,
+   "area_px": 69640,
    "neighbors": [
-    3,
-    10,
-    47,
-    48,
-    51
+    65,
+    96,
+    147,
+    180
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3816.7496,
+    4315.333333333332
+   ]
+  },
+  {
+   "id": 131,
+   "key": "province_131",
+   "name": "Province 131",
+   "centroid": [
+    1827.37,
+    5612.08
+   ],
+   "area_px": 85101,
+   "neighbors": [
+    58,
+    64,
+    67,
+    82,
+    135
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "dyflin",
    "city_position": [
     1822.6153889284494,
     5717.484202931872
    ]
   },
   {
-   "id": 50,
-   "key": "province_50",
-   "name": "Province 50",
+   "id": 132,
+   "key": "province_132",
+   "name": "Province 132",
    "centroid": [
-    948.88,
-    5543.31
+    4292.46,
+    5912.28
    ],
-   "area_px": 35225,
+   "area_px": 25690,
    "neighbors": [
-    10,
-    48
+    48,
+    69,
+    104,
+    160,
+    207
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "forest"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4254.12,
+    5910.000000000001
+   ]
+  },
+  {
+   "id": 133,
+   "key": "province_133",
+   "name": "Province 133",
+   "centroid": [
+    903.79,
+    5558.85
+   ],
+   "area_px": 163139,
+   "neighbors": [
+    29,
+    129
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "connacth",
    "city_position": [
     933.6337181593392,
     5534.8169760011415
    ]
   },
   {
-   "id": 51,
-   "key": "province_51",
-   "name": "Province 51",
+   "id": 134,
+   "key": "province_134",
+   "name": "Province 134",
    "centroid": [
-    1596.15,
-    5325.73
+    3264.64,
+    4893.33
    ],
-   "area_px": 62741,
+   "area_px": 8077,
    "neighbors": [
-    3,
-    49
+    24,
+    93,
+    99,
+    122
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3229.8587999999995,
+    4901.666666666666
+   ]
+  },
+  {
+   "id": 135,
+   "key": "province_135",
+   "name": "Province 135",
+   "centroid": [
+    1642.15,
+    5297.08
+   ],
+   "area_px": 72746,
+   "neighbors": [
+    8,
+    64,
+    131
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "dyflin",
    "city_position": [
     1648.0664764030078,
     5295.319945136405
    ]
   },
   {
-   "id": 52,
-   "key": "province_52",
-   "name": "Province 52",
+   "id": 136,
+   "key": "province_136",
+   "name": "Province 136",
    "centroid": [
-    1450.44,
-    4877.64
+    4686.87,
+    6704.03
    ],
-   "area_px": 28242,
+   "area_px": 19737,
    "neighbors": [
-    3,
-    53
+    126,
+    141,
+    159
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "essex",
+   "city_position": [
+    4674,
+    6765
+   ]
+  },
+  {
+   "id": 137,
+   "key": "province_137",
+   "name": "Province 137",
+   "centroid": [
+    1459.74,
+    4891.76
+   ],
+   "area_px": 24486,
+   "neighbors": [
+    73,
+    139
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "dyflin",
    "city_position": [
     1477.5768409130412,
     4889.392774179227
    ]
   },
   {
-   "id": 53,
-   "key": "province_53",
-   "name": "Province 53",
+   "id": 138,
+   "key": "province_138",
+   "name": "Province 138",
    "centroid": [
-    1554.31,
-    4785.44
+    3286.09,
+    5206.1
    ],
-   "area_px": 21951,
+   "area_px": 22265,
    "neighbors": [
-    3,
-    52
+    24,
+    52,
+    109,
+    155,
+    163
    ],
    "tags": {
-    "terrain": "plains",
-    "resources": []
+    "terrain": "plains"
    },
-   "starting_owner": "ireland",
+   "starting_owner": "northumbria",
+   "city_position": [
+    3276.3188,
+    5205.733333333332
+   ]
+  },
+  {
+   "id": 139,
+   "key": "province_139",
+   "name": "Province 139",
+   "centroid": [
+    1561.66,
+    4780.61
+   ],
+   "area_px": 23359,
+   "neighbors": [
+    61,
+    73,
+    79,
+    137
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "dyflin",
    "city_position": [
     1562.8216586580245,
     4804.1480682782185
+   ]
+  },
+  {
+   "id": 140,
+   "key": "province_140",
+   "name": "Province 140",
+   "centroid": [
+    4078.73,
+    6110.36
+   ],
+   "area_px": 11536,
+   "neighbors": [
+    36,
+    48,
+    209
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    4115.7904,
+    6122.133333333333
+   ]
+  },
+  {
+   "id": 141,
+   "key": "province_141",
+   "name": "Province 141",
+   "centroid": [
+    4789.07,
+    6585.28
+   ],
+   "area_px": 32510,
+   "neighbors": [
+    2,
+    44,
+    136,
+    156,
+    159,
+    183
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    4794.5104,
+    6568.999999999998
+   ]
+  },
+  {
+   "id": 142,
+   "key": "province_142",
+   "name": "Province 142",
+   "centroid": [
+    4475.32,
+    6118.26
+   ],
+   "area_px": 19147,
+   "neighbors": [
+    2,
+    30,
+    69,
+    179
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    4495.7119999999995,
+    6147.333333333331
+   ]
+  },
+  {
+   "id": 143,
+   "key": "province_143",
+   "name": "Province 143",
+   "centroid": [
+    3673.09,
+    5829.2
+   ],
+   "area_px": 10544,
+   "neighbors": [
+    3
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": null,
+   "city_position": [
+    3662.9468000000006,
+    5800.000000000002
+   ]
+  },
+  {
+   "id": 144,
+   "key": "province_144",
+   "name": "Province 144",
+   "centroid": [
+    4203.87,
+    6525.42
+   ],
+   "area_px": 26342,
+   "neighbors": [
+    6,
+    27,
+    36,
+    75,
+    118,
+    120,
+    172
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    4213.598800000001,
+    6509
+   ]
+  },
+  {
+   "id": 145,
+   "key": "province_145",
+   "name": "Province 145",
+   "centroid": [
+    3253.52,
+    4070.46
+   ],
+   "area_px": 95233,
+   "neighbors": [
+    204
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3257.6944000000008,
+    4070.2
+   ]
+  },
+  {
+   "id": 146,
+   "key": "province_146",
+   "name": "Province 146",
+   "centroid": [
+    3769.9,
+    5472.2
+   ],
+   "area_px": 12735,
+   "neighbors": [
+    3,
+    51,
+    80,
+    202
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3782.7732000000005,
+    5465.399999999998
+   ]
+  },
+  {
+   "id": 147,
+   "key": "province_147",
+   "name": "Province 147",
+   "centroid": [
+    3805.0,
+    4579.73
+   ],
+   "area_px": 61555,
+   "neighbors": [
+    18,
+    96,
+    130
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3822.7288,
+    4672.066666666666
+   ]
+  },
+  {
+   "id": 148,
+   "key": "province_148",
+   "name": "Province 148",
+   "centroid": [
+    1982.83,
+    4372.2
+   ],
+   "area_px": 76159,
+   "neighbors": [
+    76,
+    79,
+    107,
+    157
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "ulaid",
+   "city_position": [
+    2007.4759999999999,
+    4325.333333333333
+   ]
+  },
+  {
+   "id": 149,
+   "key": "province_149",
+   "name": "Province 149",
+   "centroid": [
+    3954.71,
+    5761.57
+   ],
+   "area_px": 27250,
+   "neighbors": [
+    48,
+    80,
+    102,
+    160,
+    174,
+    205
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3934.96,
+    5753.333333333335
+   ]
+  },
+  {
+   "id": 150,
+   "key": "province_150",
+   "name": "Province 150",
+   "centroid": [
+    3579.03,
+    5455.66
+   ],
+   "area_px": 14528,
+   "neighbors": [
+    3,
+    54,
+    63,
+    90
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3588.7319999999995,
+    5461.999999999999
+   ]
+  },
+  {
+   "id": 151,
+   "key": "province_151",
+   "name": "Province 151",
+   "centroid": [
+    3987.64,
+    5254.9
+   ],
+   "area_px": 25709,
+   "neighbors": [
+    21,
+    51,
+    77,
+    188,
+    194,
+    211
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3960.6544,
+    5237.066666666668
+   ]
+  },
+  {
+   "id": 152,
+   "key": "province_152",
+   "name": "Province 152",
+   "centroid": [
+    3996.02,
+    5491.39
+   ],
+   "area_px": 30472,
+   "neighbors": [
+    51,
+    72,
+    80,
+    194,
+    205
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3956.0488,
+    5484.999999999999
+   ]
+  },
+  {
+   "id": 153,
+   "key": "province_153",
+   "name": "Province 153",
+   "centroid": [
+    4461.45,
+    5313.0
+   ],
+   "area_px": 36359,
+   "neighbors": [
+    72,
+    74,
+    77,
+    210
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4435.3544,
+    5350.666666666669
+   ]
+  },
+  {
+   "id": 154,
+   "key": "province_154",
+   "name": "Province 154",
+   "centroid": [
+    2948.09,
+    7024.21
+   ],
+   "area_px": 40177,
+   "neighbors": [
+    5,
+    47
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "cornwall",
+   "city_position": [
+    3004.75,
+    7043.133333333334
+   ]
+  },
+  {
+   "id": 155,
+   "key": "province_155",
+   "name": "Province 155",
+   "centroid": [
+    3230.63,
+    5366.6
+   ],
+   "area_px": 48595,
+   "neighbors": [
+    23,
+    52,
+    90,
+    138,
+    163
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "gwynedd",
+   "city_position": [
+    3234.5855999999994,
+    5302.199999999999
+   ]
+  },
+  {
+   "id": 156,
+   "key": "province_156",
+   "name": "Province 156",
+   "centroid": [
+    4962.53,
+    6485.99
+   ],
+   "area_px": 15503,
+   "neighbors": [
+    2,
+    141,
+    183,
+    193
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    5003.055200000001,
+    6410.000000000001
+   ]
+  },
+  {
+   "id": 157,
+   "key": "province_157",
+   "name": "Province 157",
+   "centroid": [
+    2164.44,
+    4291.87
+   ],
+   "area_px": 17447,
+   "neighbors": [
+    148
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "ulaid",
+   "city_position": [
+    2153.32,
+    4226.666666666669
+   ]
+  },
+  {
+   "id": 158,
+   "key": "province_158",
+   "name": "Province 158",
+   "centroid": [
+    3157.52,
+    6687.42
+   ],
+   "area_px": 77970,
+   "neighbors": [
+    20,
+    47,
+    50,
+    169,
+    206
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    3191.6,
+    6654.000000000001
+   ]
+  },
+  {
+   "id": 159,
+   "key": "province_159",
+   "name": "Province 159",
+   "centroid": [
+    4547.97,
+    6609.2
+   ],
+   "area_px": 33183,
+   "neighbors": [
+    2,
+    27,
+    75,
+    120,
+    126,
+    136,
+    141,
+    203
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    4550.252,
+    6578.666666666668
+   ]
+  },
+  {
+   "id": 160,
+   "key": "province_160",
+   "name": "Province 160",
+   "centroid": [
+    4143.4,
+    5727.35
+   ],
+   "area_px": 28915,
+   "neighbors": [
+    48,
+    72,
+    102,
+    132,
+    149,
+    205
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    4151.9484,
+    5737.933333333335
+   ]
+  },
+  {
+   "id": 161,
+   "key": "province_161",
+   "name": "Province 161",
+   "centroid": [
+    3536.95,
+    5755.52
+   ],
+   "area_px": 9297,
+   "neighbors": [
+    3
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3535.4039999999995,
+    5741
+   ]
+  },
+  {
+   "id": 162,
+   "key": "province_162",
+   "name": "Province 162",
+   "centroid": [
+    3165.63,
+    4489.92
+   ],
+   "area_px": 25128,
+   "neighbors": [
+    167
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3140.6556,
+    4592.800000000001
+   ]
+  },
+  {
+   "id": 163,
+   "key": "province_163",
+   "name": "Province 163",
+   "centroid": [
+    3427.96,
+    5275.35
+   ],
+   "area_px": 27341,
+   "neighbors": [
+    15,
+    63,
+    90,
+    109,
+    138,
+    155,
+    168
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3458.2400000000002,
+    5267.333333333336
+   ]
+  },
+  {
+   "id": 164,
+   "key": "province_164",
+   "name": "Province 164",
+   "centroid": [
+    3627.97,
+    4724.39
+   ],
+   "area_px": 27595,
+   "neighbors": [
+    18,
+    110,
+    200
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3671.956,
+    4755.333333333336
+   ]
+  },
+  {
+   "id": 165,
+   "key": "province_165",
+   "name": "Province 165",
+   "centroid": [
+    2834.84,
+    3565.41
+   ],
+   "area_px": 57016,
+   "neighbors": [
+    12,
+    98,
+    171,
+    173,
+    185,
+    186
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    2812.244,
+    3481.999999999999
+   ]
+  },
+  {
+   "id": 166,
+   "key": "province_166",
+   "name": "Province 166",
+   "centroid": [
+    3070.44,
+    3255.17
+   ],
+   "area_px": 21442,
+   "neighbors": [
+    10,
+    11,
+    13,
+    181,
+    192
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3054.5228,
+    3285.4000000000005
+   ]
+  },
+  {
+   "id": 167,
+   "key": "province_167",
+   "name": "Province 167",
+   "centroid": [
+    3371.35,
+    4565.41
+   ],
+   "area_px": 63511,
+   "neighbors": [
+    93,
+    99,
+    110,
+    162
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3312.2343999999994,
+    4634.066666666665
+   ]
+  },
+  {
+   "id": 168,
+   "key": "province_168",
+   "name": "Province 168",
+   "centroid": [
+    3567.38,
+    5172.98
+   ],
+   "area_px": 13651,
+   "neighbors": [
+    15,
+    63,
+    163
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3583.4800000000005,
+    5166.666666666667
+   ]
+  },
+  {
+   "id": 169,
+   "key": "province_169",
+   "name": "Province 169",
+   "centroid": [
+    3397.27,
+    6857.07
+   ],
+   "area_px": 23228,
+   "neighbors": [
+    20,
+    78,
+    158
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    3451,
+    6926
+   ]
+  },
+  {
+   "id": 170,
+   "key": "province_170",
+   "name": "Province 170",
+   "centroid": [
+    3821.17,
+    6504.51
+   ],
+   "area_px": 28316,
+   "neighbors": [
+    9,
+    20,
+    66,
+    118,
+    187,
+    199
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    3846.0799999999995,
+    6528.000000000001
+   ]
+  },
+  {
+   "id": 171,
+   "key": "province_171",
+   "name": "Province 171",
+   "centroid": [
+    2847.92,
+    3376.79
+   ],
+   "area_px": 9958,
+   "neighbors": [
+    10,
+    12,
+    165,
+    173
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    2830.424,
+    3369.9999999999995
+   ]
+  },
+  {
+   "id": 172,
+   "key": "province_172",
+   "name": "Province 172",
+   "centroid": [
+    4280.71,
+    6428.93
+   ],
+   "area_px": 9291,
+   "neighbors": [
+    36,
+    42,
+    75,
+    144
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    4296.54,
+    6420.599999999998
+   ]
+  },
+  {
+   "id": 173,
+   "key": "province_173",
+   "name": "Province 173",
+   "centroid": [
+    3018.15,
+    3485.53
+   ],
+   "area_px": 44451,
+   "neighbors": [
+    4,
+    10,
+    165,
+    171,
+    177
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3023.6572000000006,
+    3411.0666666666652
+   ]
+  },
+  {
+   "id": 174,
+   "key": "province_174",
+   "name": "Province 174",
+   "centroid": [
+    3836.82,
+    5850.4
+   ],
+   "area_px": 22784,
+   "neighbors": [
+    3,
+    80,
+    89,
+    149,
+    184
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3823.5368,
+    5805.4000000000015
+   ]
+  },
+  {
+   "id": 175,
+   "key": "province_175",
+   "name": "Province 175",
+   "centroid": [
+    4892.53,
+    6096.64
+   ],
+   "area_px": 10427,
+   "neighbors": [
+    81,
+    83,
+    106
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4906.8628,
+    6138.799999999999
+   ]
+  },
+  {
+   "id": 176,
+   "key": "province_176",
+   "name": "Province 176",
+   "centroid": [
+    4186.13,
+    4497.06
+   ],
+   "area_px": 59159,
+   "neighbors": [
+    18,
+    59,
+    96,
+    197
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    4282.4,
+    4478.333333333334
+   ]
+  },
+  {
+   "id": 177,
+   "key": "province_177",
+   "name": "Province 177",
+   "centroid": [
+    3192.51,
+    3418.03
+   ],
+   "area_px": 35416,
+   "neighbors": [
+    1,
+    4,
+    10,
+    173
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3163,
+    3353
+   ]
+  },
+  {
+   "id": 178,
+   "key": "province_178",
+   "name": "Province 178",
+   "centroid": [
+    2999.48,
+    6335.8
+   ],
+   "area_px": 4065,
+   "neighbors": [
+    17,
+    33,
+    57
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "gwent",
+   "city_position": [
+    2998.488,
+    6328.666666666668
+   ]
+  },
+  {
+   "id": 179,
+   "key": "province_179",
+   "name": "Province 179",
+   "centroid": [
+    4373.82,
+    6123.89
+   ],
+   "area_px": 4473,
+   "neighbors": [
+    30,
+    69,
+    142
+   ],
+   "tags": {
+    "terrain": "mountains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    4365.9472000000005,
+    6129.200000000002
+   ]
+  },
+  {
+   "id": 180,
+   "key": "province_180",
+   "name": "Province 180",
+   "centroid": [
+    3807.36,
+    4162.1
+   ],
+   "area_px": 5106,
+   "neighbors": [
+    45,
+    65,
+    96,
+    130
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3808.3867999999998,
+    4149.266666666666
+   ]
+  },
+  {
+   "id": 181,
+   "key": "province_181",
+   "name": "Province 181",
+   "centroid": [
+    3042.16,
+    2925.54
+   ],
+   "area_px": 139140,
+   "neighbors": [
+    7,
+    11,
+    13,
+    119,
+    166,
+    192
+   ],
+   "tags": {
+    "terrain": "mountains"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3056.9468,
+    3069.466666666666
+   ]
+  },
+  {
+   "id": 182,
+   "key": "province_182",
+   "name": "Province 182",
+   "centroid": [
+    2761.2,
+    2378.24
+   ],
+   "area_px": 66913,
+   "neighbors": [
+    16,
+    121
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    2737.2212,
+    2348.133333333332
+   ]
+  },
+  {
+   "id": 183,
+   "key": "province_183",
+   "name": "Province 183",
+   "centroid": [
+    4925.77,
+    6583.82
+   ],
+   "area_px": 4939,
+   "neighbors": [
+    141,
+    156
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    4920.477599999999,
+    6613.866666666667
+   ]
+  },
+  {
+   "id": 184,
+   "key": "province_184",
+   "name": "Province 184",
+   "centroid": [
+    3907.36,
+    5956.61
+   ],
+   "area_px": 8749,
+   "neighbors": [
+    48,
+    89,
+    174,
+    209
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3904.256,
+    5959.333333333333
+   ]
+  },
+  {
+   "id": 185,
+   "key": "province_185",
+   "name": "Province 185",
+   "centroid": [
+    2610.24,
+    3717.99
+   ],
+   "area_px": 67462,
+   "neighbors": [
+    12,
+    98,
+    123,
+    165,
+    186
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    2573.8840000000005,
+    3694.666666666668
+   ]
+  },
+  {
+   "id": 186,
+   "key": "province_186",
+   "name": "Province 186",
+   "centroid": [
+    2642.37,
+    3580.91
+   ],
+   "area_px": 10258,
+   "neighbors": [
+    12,
+    165,
+    185
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    2627.7372,
+    3592.5999999999995
+   ]
+  },
+  {
+   "id": 187,
+   "key": "province_187",
+   "name": "Province 187",
+   "centroid": [
+    3714.97,
+    6600.63
+   ],
+   "area_px": 8221,
+   "neighbors": [
+    9,
+    20,
+    170
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    3718.8199999999997,
+    6620.200000000002
+   ]
+  },
+  {
+   "id": 188,
+   "key": "province_188",
+   "name": "Province 188",
+   "centroid": [
+    3995.21,
+    5140.63
+   ],
+   "area_px": 4359,
+   "neighbors": [
+    21,
+    151
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3989.7424,
+    5130.533333333332
+   ]
+  },
+  {
+   "id": 189,
+   "key": "province_189",
+   "name": "Province 189",
+   "centroid": [
+    4660.36,
+    6072.2
+   ],
+   "area_px": 5731,
+   "neighbors": [
+    2,
+    86,
+    106,
+    114
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4666.200000000001,
+    6081.333333333333
+   ]
+  },
+  {
+   "id": 190,
+   "key": "province_190",
+   "name": "Province 190",
+   "centroid": [
+    2524.51,
+    3408.79
+   ],
+   "area_px": 9096,
+   "neighbors": [
+    12
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    2518.94,
+    3366.6666666666647
+   ]
+  },
+  {
+   "id": 191,
+   "key": "province_191",
+   "name": "Province 191",
+   "centroid": [
+    4409.57,
+    4991.45
+   ],
+   "area_px": 14036,
+   "neighbors": [
+    21,
+    77
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    4434,
+    4964
+   ]
+  },
+  {
+   "id": 192,
+   "key": "province_192",
+   "name": "Province 192",
+   "centroid": [
+    3164.05,
+    3193.83
+   ],
+   "area_px": 4020,
+   "neighbors": [
+    13,
+    166,
+    181
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "alba",
+   "city_position": [
+    3160.088,
+    3201.333333333333
+   ]
+  },
+  {
+   "id": 193,
+   "key": "province_193",
+   "name": "Province 193",
+   "centroid": [
+    4888.92,
+    6443.45
+   ],
+   "area_px": 3821,
+   "neighbors": [
+    2,
+    156
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    4900.5199999999995,
+    6420.000000000002
+   ]
+  },
+  {
+   "id": 194,
+   "key": "province_194",
+   "name": "Province 194",
+   "centroid": [
+    4008.49,
+    5376.59
+   ],
+   "area_px": 9408,
+   "neighbors": [
+    51,
+    72,
+    151,
+    152,
+    198,
+    211
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3953.1400000000003,
+    5382.000000000001
+   ]
+  },
+  {
+   "id": 195,
+   "key": "province_195",
+   "name": "Province 195",
+   "centroid": [
+    3598.55,
+    6371.12
+   ],
+   "area_px": 5136,
+   "neighbors": [
+    66,
+    128
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    3589.136,
+    6360.666666666664
+   ]
+  },
+  {
+   "id": 196,
+   "key": "province_196",
+   "name": "Province 196",
+   "centroid": [
+    3927.0,
+    6616.4
+   ],
+   "area_px": 2418,
+   "neighbors": [
+    6,
+    9,
+    118
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    3915.5679999999998,
+    6624.533333333332
+   ]
+  },
+  {
+   "id": 197,
+   "key": "province_197",
+   "name": "Province 197",
+   "centroid": [
+    4352.0,
+    4606.88
+   ],
+   "area_px": 5476,
+   "neighbors": [
+    59,
+    176
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    4366.3108,
+    4612.066666666668
+   ]
+  },
+  {
+   "id": 198,
+   "key": "province_198",
+   "name": "Province 198",
+   "centroid": [
+    4172.08,
+    5389.97
+   ],
+   "area_px": 10735,
+   "neighbors": [
+    72,
+    77,
+    194,
+    211
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4186.248,
+    5388.000000000001
+   ]
+  },
+  {
+   "id": 199,
+   "key": "province_199",
+   "name": "Province 199",
+   "centroid": [
+    3902.84,
+    6401.31
+   ],
+   "area_px": 6082,
+   "neighbors": [
+    36,
+    66,
+    118,
+    170
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    3909.508,
+    6399.333333333331
+   ]
+  },
+  {
+   "id": 200,
+   "key": "province_200",
+   "name": "Province 200",
+   "centroid": [
+    3542.92,
+    4760.69
+   ],
+   "area_px": 3724,
+   "neighbors": [
+    110,
+    164
+   ],
+   "tags": {
+    "terrain": "forest"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3547.9280000000003,
+    4776.9333333333325
+   ]
+  },
+  {
+   "id": 201,
+   "key": "province_201",
+   "name": "Province 201",
+   "centroid": [
+    3929.91,
+    6220.44
+   ],
+   "area_px": 3765,
+   "neighbors": [
+    36,
+    89
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3927.5668,
+    6218.866666666666
+   ]
+  },
+  {
+   "id": 202,
+   "key": "province_202",
+   "name": "Province 202",
+   "centroid": [
+    3712.0,
+    5542.84
+   ],
+   "area_px": 2675,
+   "neighbors": [
+    3,
+    146
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": null,
+   "city_position": [
+    3705.084,
+    5545.333333333332
+   ]
+  },
+  {
+   "id": 203,
+   "key": "province_203",
+   "name": "Province 203",
+   "centroid": [
+    4411.04,
+    6690.35
+   ],
+   "area_px": 6865,
+   "neighbors": [
+    27,
+    120,
+    159
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "essex",
+   "city_position": [
+    4393.0152,
+    6697.666666666668
+   ]
+  },
+  {
+   "id": 204,
+   "key": "province_204",
+   "name": "Province 204",
+   "centroid": [
+    3018.28,
+    3919.95
+   ],
+   "area_px": 64241,
+   "neighbors": [
+    19,
+    98,
+    145
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    2988.388,
+    3953.333333333333
+   ]
+  },
+  {
+   "id": 205,
+   "key": "province_205",
+   "name": "Province 205",
+   "centroid": [
+    4013.07,
+    5612.37
+   ],
+   "area_px": 8959,
+   "neighbors": [
+    72,
+    80,
+    149,
+    152,
+    160
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    4002.428,
+    5612.533333333332
+   ]
+  },
+  {
+   "id": 206,
+   "key": "province_206",
+   "name": "Province 206",
+   "centroid": [
+    3377.09,
+    6701.64
+   ],
+   "area_px": 11907,
+   "neighbors": [
+    20,
+    50,
+    158
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "wessex",
+   "city_position": [
+    3378.6519999999996,
+    6703.2
+   ]
+  },
+  {
+   "id": 207,
+   "key": "province_207",
+   "name": "Province 207",
+   "centroid": [
+    4342.43,
+    5845.52
+   ],
+   "area_px": 8308,
+   "neighbors": [
+    72,
+    104,
+    132
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4334.92,
+    5847.999999999999
+   ]
+  },
+  {
+   "id": 208,
+   "key": "province_208",
+   "name": "Province 208",
+   "centroid": [
+    3929.47,
+    4877.64
+   ],
+   "area_px": 3883,
+   "neighbors": [
+    18,
+    60,
+    116
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "northumbria",
+   "city_position": [
+    3913.952,
+    4872.666666666665
+   ]
+  },
+  {
+   "id": 209,
+   "key": "province_209",
+   "name": "Province 209",
+   "centroid": [
+    3977.7,
+    6066.89
+   ],
+   "area_px": 7540,
+   "neighbors": [
+    36,
+    48,
+    89,
+    140,
+    184
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    3979.3999999999996,
+    6066.666666666667
+   ]
+  },
+  {
+   "id": 210,
+   "key": "province_210",
+   "name": "Province 210",
+   "centroid": [
+    4389.18,
+    5474.55
+   ],
+   "area_px": 4718,
+   "neighbors": [
+    72,
+    153
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "east_anglia",
+   "city_position": [
+    4382.2284,
+    5476.133333333332
+   ]
+  },
+  {
+   "id": 211,
+   "key": "province_211",
+   "name": "Province 211",
+   "centroid": [
+    4104.45,
+    5305.11
+   ],
+   "area_px": 10361,
+   "neighbors": [
+    77,
+    151,
+    194,
+    198
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "mercia",
+   "city_position": [
+    4117.2044000000005,
+    5281.866666666669
    ]
   }
  ]

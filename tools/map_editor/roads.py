@@ -45,6 +45,7 @@ import export
 import growth
 import mapfmt
 import numpy as np
+import scipy.ndimage as ndi
 from PIL import Image
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import dijkstra as sparse_dijkstra
@@ -85,15 +86,30 @@ TIER_WIDTH_PX = {1: 4, 2: 7, 3: 12}
 # committed tier - see "road_pending" in the legend.
 PENDING_WIDTH_PX = 3
 
+# Two roads whose centerlines run within this many pixels of each other
+# are really one corridor - the traffic sim just happens to have routed
+# their cheapest paths a few pixels apart (a river valley one trip hugs
+# the near bank of and another the far bank, say). Consolidation snaps
+# such near-parallel roads onto a single shared centerline and adds their
+# traffic together, so what would render as two thin trails becomes one
+# busier - and therefore higher-tier, thicker - road. Set to 0 to disable.
+CONSOLIDATE_RADIUS_PX = 6
+
 # A resource's intrinsic pull as a road target, independent of any city's
 # tier. Not every ATTRACTION_KEYS entry needs an explicit weight - an
 # unlisted one just falls back to 1.0, same as growth.py's unlisted
 # terrain falls back to move_cost 1.0.
 RESOURCE_TARGET_WEIGHT: dict[str, float] = {
-    "gold": 3.0,
+    "silver": 3.0,
+    "tin": 2.5,
     "wine": 2.0,
+    "wool": 2.0,
+    "cloth": 2.0,
     "iron": 2.0,
+    "coal": 1.5,
     "timber": 1.5,
+    "lead": 1.5,
+    "fish": 1.0,
     "salt": 1.0,
 }
 
@@ -311,12 +327,96 @@ def _trips(weight: float, cost: float) -> float:
     return min(BASE_TRIP_SCALE * weight / (1.0 + cost / COST_NORM), MAX_TRIPS_PER_PAIR)
 
 
+def _thin(mask: np.ndarray) -> np.ndarray:
+    """One-pixel-wide centerline of a boolean blob, via Zhang-Suen
+    thinning. cv2's thinning lives in the optional ximgproc contrib
+    module (absent here) and skimage isn't a dependency. Hence this
+    compact vectorized reimplementation. Each pass tests every
+    foreground pixel's 8-neighborhood and peels boundary pixels that
+    keep connectivity intact. The two Zhang-Suen subiterations alternate
+    until no pixel remains to peel."""
+    img = mask.astype(np.uint8)
+    changed = True
+    while changed:
+        changed = False
+        for subiter in (0, 1):
+            p = np.pad(img, 1)
+            # P2..P9 clockwise from north, per the Zhang-Suen convention.
+            neigh = [
+                p[:-2, 1:-1],  # P2 N
+                p[:-2, 2:],  # P3 NE
+                p[1:-1, 2:],  # P4 E
+                p[2:, 2:],  # P5 SE
+                p[2:, 1:-1],  # P6 S
+                p[2:, :-2],  # P7 SW
+                p[1:-1, :-2],  # P8 W
+                p[:-2, :-2],  # P9 NW
+            ]
+            b = sum(neigh)  # count of nonzero neighbors
+            a = np.zeros_like(b)  # 0->1 transitions around the ring
+            for i in range(8):
+                a += ((neigh[i] == 0) & (neigh[(i + 1) % 8] == 1)).astype(np.uint8)
+            p2, p4, p6, p8 = neigh[0], neigh[2], neigh[4], neigh[6]
+            cond = (img == 1) & (b >= 2) & (b <= 6) & (a == 1)
+            if subiter == 0:
+                cond &= (p2 * p4 * p6 == 0) & (p4 * p6 * p8 == 0)
+            else:
+                cond &= (p2 * p4 * p8 == 0) & (p2 * p6 * p8 == 0)
+            if cond.any():
+                img[cond] = 0
+                changed = True
+    return img.astype(bool)
+
+
+def _consolidate(traveled: np.ndarray, mask: np.ndarray, radius: int) -> np.ndarray:
+    """Merge near-parallel roads onto shared centerlines, summing their
+    traffic. A morphological close with `radius` bridges the gap between
+    any two roads within 2*radius of each other into one blob. Thinning
+    that blob yields a single centerline down the merged corridor. Then
+    every original weighted pixel hands its traffic to the nearest
+    centerline pixel. Two parallel trails thus pool onto one line whose
+    combined weight can climb a tier neither reaches alone. This conserves
+    total traffic - weight only moves sideways onto the centerline, so the
+    MAX_TRAVELED cap still bounds it."""
+    if radius <= 0:
+        return traveled
+    road = traveled > 0
+    if not road.any():
+        return traveled
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+    )
+    closed = (
+        cv2.morphologyEx(road.astype(np.uint8), cv2.MORPH_CLOSE, kernel).astype(bool)
+        & mask
+    )
+    # Thin only the corridor's bounding box - Zhang-Suen sweeps the whole
+    # array each pass, and the road network is a thin sliver of a big map.
+    ys, xs = np.nonzero(closed)
+    y0, y1 = int(ys.min()), int(ys.max()) + 1
+    x0, x1 = int(xs.min()), int(xs.max()) + 1
+    skel = _thin(closed[y0:y1, x0:x1])
+    if not skel.any():
+        return traveled
+
+    # For each pixel in the box, the coordinates of its nearest centerline
+    # pixel. road is a subset of closed, so every weighted pixel lies in
+    # the box and lands on some centerline.
+    _dist, (iy, ix) = ndi.distance_transform_edt(~skel, return_indices=True)
+    out = np.zeros_like(traveled)
+    rys, rxs = np.nonzero(road)
+    ly, lx = rys - y0, rxs - x0
+    np.add.at(out, (iy[ly, lx] + y0, ix[ly, lx] + x0), traveled[rys, rxs])
+    return out
+
+
 def _paint_raster(
     traveled: np.ndarray,
     road_cfg: mapfmt.LayerConfig,
     mask: np.ndarray,
     pending_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
+    traveled = _consolidate(traveled, mask, CONSOLIDATE_RADIUS_PX)
     height, width = traveled.shape
     canvas = np.empty((height, width, 3), dtype=np.uint8)
     canvas[:] = np.array(road_cfg.nodata_rgb, dtype=np.uint8)
@@ -564,8 +664,6 @@ def start(package: mapfmt.Package, project: dict) -> dict:
         "discarded_trips": discarded,
         "cities": len(cities),
         "resource_targets": resources_n,
-        "matured": False,
-        "maturation_rounds": 0,
         "search_zones": search_zones,
     }
     project.setdefault("layers", {}).setdefault(road_cfg.name, {})["build"] = meta
@@ -581,33 +679,13 @@ def start(package: mapfmt.Package, project: dict) -> dict:
     return {**meta, "done": not trips, "frontier": frontier, **_tier_stats(tier_buf)}
 
 
-def _apply_maturation(
-    trips: list[_Trip], traveled: np.ndarray, rounds: int
-) -> np.ndarray:
-    """Re-drive `rounds` more full rounds of traffic across every
-    already-committed trip, as if travelers made that many more
-    trips. "The more roundtrips, the more traveled it is"
-    keeps applying past the point every road exists. So busy
-    corridors keep climbing tiers, instead of freezing the moment the
-    network reveals itself."""
-    for _ in range(rounds):
-        for _cost, weight, ys, xs, _costs, _tier in trips:
-            traveled[ys, xs] += weight
-        traveled = np.minimum(traveled, MAX_TRAVELED)
-    return traveled
-
-
 def step(package: mapfmt.Package, project: dict) -> dict:
     """Raise the cost ceiling by STEP_COST_BUDGET and paint every trip
-    that now falls under it, cheapest first.
-
-    The step that finishes revealing every trip also matures the
-    network. It re-runs the same number of rounds it took to build.
-    Finish in 10 steps, get 10 more rounds of traffic for free. That
-    way busy shared corridors keep climbing toward tier 3, instead of
-    stopping dead the instant the last route lands. It's the same
-    "keeps stacking" idea that makes trunk roads emerge in the first
-    place. Just carried a bit further before the session ends."""
+    that now falls under it, cheapest first. The session ends the step
+    that reveals the last trip. Each trip gets one round of traffic, with
+    no extra maturation rounds. Busy shared corridors still climb tiers.
+    Every trip stacks its own weight on the shared pixels, and that
+    stacking is all that ever drove trunk roads."""
     road_cfg = package.road_layer
     if road_cfg is None:
         raise RoadsError("this package has no road_layer configured")
@@ -640,10 +718,6 @@ def step(package: mapfmt.Package, project: dict) -> dict:
                 break
             traveled[ys, xs] += weight
             next_index += 1
-        if meta.get("matured"):
-            traveled = _apply_maturation(
-                trips, traveled, meta.get("maturation_rounds", 0)
-            )
         cached = {
             "trips": trips,
             "mask": mask,
@@ -672,14 +746,6 @@ def step(package: mapfmt.Package, project: dict) -> dict:
     meta["painted_trips"] = next_index
     done = next_index >= len(trips)
 
-    matured_rounds = 0
-    if done and not meta.get("matured"):
-        matured_rounds = meta["step"]  # same number of steps it took to finish
-        traveled = _apply_maturation(trips, traveled, matured_rounds)
-        meta["matured"] = True
-        meta["maturation_rounds"] = matured_rounds
-        meta["step"] += matured_rounds
-
     pending_mask, frontier = _pending_state(trips, next_index, ceiling, mask.shape)
     tier_buf = _write_raster(package, road_cfg, traveled, mask, pending_mask)
 
@@ -691,21 +757,14 @@ def step(package: mapfmt.Package, project: dict) -> dict:
         "ceiling": ceiling,
     }
 
-    if matured_rounds:
-        print(
-            f"roads step {meta['step']}: network complete, matured over "
-            f"{matured_rounds} more round(s) of traffic"
-        )
-    else:
-        print(
-            f"roads step {meta['step']}: {painted_this_step} trip(s) revealed "
-            f"({next_index}/{len(trips)} total, {meta['discarded_trips']} out of reach)"
-        )
+    print(
+        f"roads step {meta['step']}: {painted_this_step} trip(s) revealed "
+        f"({next_index}/{len(trips)} total, {meta['discarded_trips']} out of reach)"
+    )
 
     return {
         **meta,
         "painted_this_step": painted_this_step,
-        "matured_rounds": matured_rounds,
         "done": done,
         "frontier": frontier,
         **_tier_stats(tier_buf),
