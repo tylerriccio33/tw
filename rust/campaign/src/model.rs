@@ -261,7 +261,8 @@ pub struct Campaign {
     pub map_extent: f32,
     next_army_id: ArmyId,
     /// Count of individual faction-turns played so far, starting at 1 for the
-    /// first faction's first turn. The game ends once this exceeds `max_turns`.
+    /// first faction's first turn. Distinct from `round` (see below); the game
+    /// ends on `round`, not this.
     pub turn: u32,
     /// Count of full cycles through every alive faction, starting at 1.
     /// Increments once per `end_turn()` call that wraps back around to the
@@ -272,6 +273,10 @@ pub struct Campaign {
     /// which internally calls `end_turn()` once for the player and once per
     /// AI faction — advances `turn` by 4 but `round` by exactly 1).
     pub round: u32,
+    /// The campaign ends once `round` exceeds this - i.e. it's a limit in
+    /// rounds (full cycles through the faction order), matching the number the
+    /// UI shows and what a player means by "a turn", not a count of individual
+    /// faction-turns.
     pub max_turns: u32,
     /// Index into `factions` for whoever acts next.
     pub current_faction: usize,
@@ -1124,7 +1129,8 @@ impl Campaign {
     }
 
     /// Advances to the next alive faction's turn, crediting its city income,
-    /// and counts one more faction-turn against `max_turns`.
+    /// and advancing the round counter when the order wraps (the round is what
+    /// `max_turns` is checked against).
     pub fn end_turn(&mut self) {
         if self.game_over {
             return;
@@ -1156,7 +1162,14 @@ impl Campaign {
         if self.game_over {
             return;
         }
-        if self.alive_count() <= 1 || self.turn > self.max_turns {
+        // `max_turns` is measured in rounds (full cycles through every alive
+        // faction), not individual faction-turns: that's the number the UI
+        // shows on the END TURN button, and the number a player means by "a
+        // turn". Checking `turn` here instead ended the game after
+        // `max_turns` faction-turns - i.e. before even one full round with
+        // more than `max_turns` factions - which surfaced as the campaign
+        // freezing partway through the very first round.
+        if self.alive_count() <= 1 || self.round > self.max_turns {
             self.game_over = true;
             self.winner = self.determine_winner();
         }
@@ -1718,7 +1731,9 @@ mod tests {
         ];
         let mut c = Campaign::new(factions, cities, 1);
         assert!(!c.game_over);
-        c.end_turn(); // turn -> 2, exceeds max_turns(1)
+        c.end_turn(); // -> Blue, round 1 still in progress
+        assert!(!c.game_over);
+        c.end_turn(); // wraps back to Red: round -> 2, exceeds max_turns(1)
         assert!(c.game_over);
         assert_eq!(c.winner, Some(0));
     }
