@@ -1,0 +1,13 @@
+{
+ "format_version": 1,
+ "size": [
+  2000,
+  2000
+ ],
+ "factions": "factions.json",
+ "province_layer": "provinces",
+ "city_layer": "cities",
+ "layers": [
+  "resources"
+ ]
+}

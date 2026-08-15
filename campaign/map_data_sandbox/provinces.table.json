@@ -1,0 +1,404 @@
+{
+ "provinces": [
+  {
+   "id": 1,
+   "key": "province_1",
+   "name": "Crimson Realm Province 1",
+   "centroid": [
+    250.0,
+    250.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    5,
+    2
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "crimson",
+   "city_position": [
+    250.0,
+    250.0
+   ],
+   "tier": 1,
+   "city_name": "Crimson Realm City 1"
+  },
+  {
+   "id": 2,
+   "key": "province_2",
+   "name": "Crimson Realm Province 2",
+   "centroid": [
+    750.0,
+    250.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    6,
+    1,
+    3
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "crimson",
+   "city_position": [
+    750.0,
+    250.0
+   ],
+   "tier": 2,
+   "city_name": "Crimson Realm City 2"
+  },
+  {
+   "id": 3,
+   "key": "province_3",
+   "name": "Azure Dominion Province 3",
+   "centroid": [
+    1250.0,
+    250.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    7,
+    2,
+    4
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "azure",
+   "city_position": [
+    1250.0,
+    250.0
+   ],
+   "tier": 1,
+   "city_name": "Azure Dominion City 1"
+  },
+  {
+   "id": 4,
+   "key": "province_4",
+   "name": "Azure Dominion Province 4",
+   "centroid": [
+    1750.0,
+    250.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    8,
+    3
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "azure",
+   "city_position": [
+    1750.0,
+    250.0
+   ],
+   "tier": 2,
+   "city_name": "Azure Dominion City 2"
+  },
+  {
+   "id": 5,
+   "key": "province_5",
+   "name": "Crimson Realm Province 5",
+   "centroid": [
+    250.0,
+    750.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    1,
+    9,
+    6
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "crimson",
+   "city_position": [
+    250.0,
+    750.0
+   ],
+   "tier": 3,
+   "city_name": "Crimson Realm City 3"
+  },
+  {
+   "id": 6,
+   "key": "province_6",
+   "name": "Crimson Realm Province 6",
+   "centroid": [
+    750.0,
+    750.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    2,
+    10,
+    5,
+    7
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "crimson",
+   "city_position": [
+    750.0,
+    750.0
+   ],
+   "tier": 5,
+   "city_name": "Crimson Realm City 4"
+  },
+  {
+   "id": 7,
+   "key": "province_7",
+   "name": "Azure Dominion Province 7",
+   "centroid": [
+    1250.0,
+    750.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    3,
+    11,
+    6,
+    8
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "azure",
+   "city_position": [
+    1250.0,
+    750.0
+   ],
+   "tier": 3,
+   "city_name": "Azure Dominion City 3"
+  },
+  {
+   "id": 8,
+   "key": "province_8",
+   "name": "Azure Dominion Province 8",
+   "centroid": [
+    1750.0,
+    750.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    4,
+    12,
+    7
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "azure",
+   "city_position": [
+    1750.0,
+    750.0
+   ],
+   "tier": 5,
+   "city_name": "Azure Dominion City 4"
+  },
+  {
+   "id": 9,
+   "key": "province_9",
+   "name": "Verdant League Province 9",
+   "centroid": [
+    250.0,
+    1250.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    5,
+    13,
+    10
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "verdant",
+   "city_position": [
+    250.0,
+    1250.0
+   ],
+   "tier": 1,
+   "city_name": "Verdant League City 1"
+  },
+  {
+   "id": 10,
+   "key": "province_10",
+   "name": "Verdant League Province 10",
+   "centroid": [
+    750.0,
+    1250.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    6,
+    14,
+    9,
+    11
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "verdant",
+   "city_position": [
+    750.0,
+    1250.0
+   ],
+   "tier": 2,
+   "city_name": "Verdant League City 2"
+  },
+  {
+   "id": 11,
+   "key": "province_11",
+   "name": "Amber Concord Province 11",
+   "centroid": [
+    1250.0,
+    1250.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    7,
+    15,
+    10,
+    12
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "amber",
+   "city_position": [
+    1250.0,
+    1250.0
+   ],
+   "tier": 1,
+   "city_name": "Amber Concord City 1"
+  },
+  {
+   "id": 12,
+   "key": "province_12",
+   "name": "Amber Concord Province 12",
+   "centroid": [
+    1750.0,
+    1250.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    8,
+    16,
+    11
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "amber",
+   "city_position": [
+    1750.0,
+    1250.0
+   ],
+   "tier": 2,
+   "city_name": "Amber Concord City 2"
+  },
+  {
+   "id": 13,
+   "key": "province_13",
+   "name": "Verdant League Province 13",
+   "centroid": [
+    250.0,
+    1750.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    9,
+    14
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "verdant",
+   "city_position": [
+    250.0,
+    1750.0
+   ],
+   "tier": 3,
+   "city_name": "Verdant League City 3"
+  },
+  {
+   "id": 14,
+   "key": "province_14",
+   "name": "Verdant League Province 14",
+   "centroid": [
+    750.0,
+    1750.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    10,
+    13,
+    15
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "verdant",
+   "city_position": [
+    750.0,
+    1750.0
+   ],
+   "tier": 5,
+   "city_name": "Verdant League City 4"
+  },
+  {
+   "id": 15,
+   "key": "province_15",
+   "name": "Amber Concord Province 15",
+   "centroid": [
+    1250.0,
+    1750.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    11,
+    14,
+    16
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "amber",
+   "city_position": [
+    1250.0,
+    1750.0
+   ],
+   "tier": 3,
+   "city_name": "Amber Concord City 3"
+  },
+  {
+   "id": 16,
+   "key": "province_16",
+   "name": "Amber Concord Province 16",
+   "centroid": [
+    1750.0,
+    1750.0
+   ],
+   "area_px": 250000,
+   "neighbors": [
+    12,
+    15
+   ],
+   "tags": {
+    "terrain": "plains"
+   },
+   "starting_owner": "amber",
+   "city_position": [
+    1750.0,
+    1750.0
+   ],
+   "tier": 5,
+   "city_name": "Amber Concord City 4"
+  }
+ ]
+}

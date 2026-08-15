@@ -1,6 +1,6 @@
 GODOT ?= godot
 
-.PHONY: help armies import campaign campaign-test campaign-smoke check play play-shot hud-shot clean-shots map-editor map-editor-test map-editor-test-full map-editor-js-check map-editor-preview map-editor-add-cities map-package-init map-package-check promote-map gut gut-test render-shots render-test render-test-update
+.PHONY: help armies import campaign campaign-test campaign-smoke check play play-sandbox play-shot hud-shot clean-shots map-editor map-editor-test map-editor-test-full map-editor-js-check map-editor-preview map-editor-add-cities map-package-init map-package-check promote-map gut gut-test render-shots render-test render-test-update
 
 ci: ## Commit everything and push straight to main
 	@echo "Staging everything"
@@ -21,6 +21,7 @@ help:
 	@echo "make campaign-test - run the Rust unit tests for the campaign-map game logic"
 	@echo "make campaign-smoke - headless smoke test that the campaign GDExtension loads"
 	@echo "make play          - build the extension and open the campaign map in a window"
+	@echo "make play-sandbox  - open a deterministic 4-faction 4x4 sandbox map for playtesting (regenerates campaign/map_data_sandbox/)"
 	@echo "make play-shot     - screenshot the whole campaign window to shots/play/play.png"
 	@echo "make hud-shot      - screenshot just the bottom HUD banner to shots/play/hud.png"
 	@echo "make map-editor    - launch the browser-based layered map editor (tools/map_editor)"
@@ -87,6 +88,15 @@ gut-test: gut
 
 play: campaign
 	$(GODOT) res://campaign/campaign.tscn --resolution $(or $(RESOLUTION),1280x800)
+
+# Regenerates the deterministic 4-faction sandbox package (campaign/map_data_sandbox/,
+# see tools/generate_sandbox_map.py) and opens the campaign scene against it via
+# CAMPAIGN_MAP_PACKAGE, instead of the live campaign/map_data/. A 4x4 grid of
+# square provinces split into four 2x2 quadrants, one per faction, each with
+# cities tiered 1/2/3/5 - meant for playtesting and manual QA, not for editing.
+play-sandbox: campaign
+	@uv run tools/generate_sandbox_map.py
+	CAMPAIGN_MAP_PACKAGE=res://campaign/map_data_sandbox $(GODOT) res://campaign/campaign.tscn --resolution $(or $(RESOLUTION),1280x800)
 
 # Launches `make play` windowed, waits for it to settle, and takes an
 # OS-level screenshot of the window to shots/play/play.png. macOS only.

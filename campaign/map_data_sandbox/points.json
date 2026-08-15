@@ -1,0 +1,77 @@
+{
+ "format_version": 1,
+ "layers": {
+  "resources": [
+   {
+    "id": "r1",
+    "x": 1463.16,
+    "y": 1546.05,
+    "kind": "iron",
+    "name": "Sandbox Iron 1"
+   },
+   {
+    "id": "r2",
+    "x": 1045.65,
+    "y": 67.77,
+    "kind": "timber",
+    "name": "Sandbox Timber 2"
+   },
+   {
+    "id": "r3",
+    "x": 1685.51,
+    "y": 1598.32,
+    "kind": "wine",
+    "name": "Sandbox Wine 3"
+   },
+   {
+    "id": "r4",
+    "x": 1282.04,
+    "y": 117.43,
+    "kind": "salt",
+    "name": "Sandbox Salt 4"
+   },
+   {
+    "id": "r5",
+    "x": 1168.95,
+    "y": 1392.48,
+    "kind": "wool",
+    "name": "Sandbox Wool 5"
+   },
+   {
+    "id": "r6",
+    "x": 235.98,
+    "y": 308.72,
+    "kind": "fish",
+    "name": "Sandbox Fish 6"
+   },
+   {
+    "id": "r7",
+    "x": 516.05,
+    "y": 78.64,
+    "kind": "iron",
+    "name": "Sandbox Iron 7"
+   },
+   {
+    "id": "r8",
+    "x": 267.97,
+    "y": 1794.12,
+    "kind": "timber",
+    "name": "Sandbox Timber 8"
+   },
+   {
+    "id": "r9",
+    "x": 458.53,
+    "y": 1276.17,
+    "kind": "wine",
+    "name": "Sandbox Wine 9"
+   },
+   {
+    "id": "r10",
+    "x": 1302.82,
+    "y": 1004.32,
+    "kind": "salt",
+    "name": "Sandbox Salt 10"
+   }
+  ]
+ }
+}

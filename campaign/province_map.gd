@@ -25,9 +25,18 @@ signal region_clicked(province_id: int)
 const RegionArea := preload("res://campaign/region_area.gd")
 const MapPackage := preload("res://campaign/map_package.gd")
 
-const PACKAGE_ROOT := "res://campaign/map_data"
+const DEFAULT_PACKAGE_ROOT := "res://campaign/map_data"
 ## Painted layers sit under the province fills but over the backdrop art.
 const LAYER_ALPHA := 0.55
+
+
+## Which package to load. Almost always the live map, but the CAMPAIGN_MAP_PACKAGE
+## env var (set by `make play-sandbox`) can point this at another package root
+## (e.g. res://campaign/map_data_sandbox) without touching source.
+static func _package_root() -> String:
+	var override := OS.get_environment("CAMPAIGN_MAP_PACKAGE")
+	return override if override != "" else DEFAULT_PACKAGE_ROOT
+
 
 # Widths are in map pixels; the whole node is scaled up by the caller, so
 # these stay proportional to the map rather than to the window.
@@ -67,7 +76,7 @@ var _border_ownership: Dictionary = {}
 
 func setup() -> bool:
 	package = MapPackage.new()
-	if not package.load_from(PACKAGE_ROOT):
+	if not package.load_from(_package_root()):
 		printerr("province_map: ", package.load_error)
 		return false
 
@@ -117,7 +126,7 @@ func _mask_color(key: String, fallback: Color) -> Color:
 
 
 func _add_backdrop() -> void:
-	var backdrop_path: String = PACKAGE_ROOT.path_join(
+	var backdrop_path: String = _package_root().path_join(
 		package.manifest.get("backdrop", "backdrop.png")
 	)
 	if not ResourceLoader.exists(backdrop_path):

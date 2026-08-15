@@ -1,0 +1,33 @@
+{
+ "name": "resources",
+ "title": "Resources",
+ "input": "point",
+ "kind": "class",
+ "point_coupling": "free",
+ "legend": {
+  "#9aa0a6": {
+   "key": "iron",
+   "name": "Iron"
+  },
+  "#7b3f00": {
+   "key": "timber",
+   "name": "Timber"
+  },
+  "#8e2f4a": {
+   "key": "wine",
+   "name": "Wine"
+  },
+  "#e8e8e8": {
+   "key": "salt",
+   "name": "Salt"
+  },
+  "#c9b79c": {
+   "key": "wool",
+   "name": "Wool"
+  },
+  "#4a7fb5": {
+   "key": "fish",
+   "name": "Fish"
+  }
+ }
+}
