@@ -170,11 +170,29 @@ var _buildings_panel: Control
 var _buildings_content: Control
 var _military_content: Control
 
-# Container the buildable/under-construction cards get rebuilt into on every
+# Container the owned-buildings cards get rebuilt into on every
 # _refresh_bottom_banner() call for the selected city - see
 # _refresh_buildings_cards(). Built once (empty) by
 # HudBuilder._build_buildings_content().
 var _buildings_cards_hbox: HBoxContainer
+
+# Recruitment/Construction modal (buildable buildings + stub troop rows) -
+# opened from a button on the city panel. Built once by
+# HudBuildingsBuilder.build_recruitment_modal(); populated for the currently
+# selected city each time it's opened - see campaign_bottom_banner.gd.
+var _recruitment_modal: Control
+var _recruitment_buildable_list: VBoxContainer
+var _recruitment_troops_list: VBoxContainer
+var recruitment_button: Button
+
+# Construction-completed alert (mirrors the battle-result modal pattern in
+# battle_ui_controller.gd, but self-dismisses on a timer instead of an OK
+# button): built once by HudBuilder.build_construction_alert_modal(), driven
+# by _on_construction_completed()'s queue below.
+var _construction_alert_modal: Control
+var _construction_alert_label: Label
+var _construction_alert_queue: Array = []
+var _construction_alert_processing := false
 
 # Military tab: stubbed unit rows, purely for visual layout - not backed by
 # any real army/garrison simulation state yet.
@@ -192,9 +210,12 @@ const GARRISON_UNITS := [
 
 const STAT_ROWS := [
 	# [state key, display label, icon glyph, per-income multiplier]
-	["nobles", "Nobles", "♛", 6],
-	["townsfolk", "Townsfolk", "☺", 180],
-	["peasants", "Peasants", "⚘", 2000],
+	# "population" is the exception: it's a real per-city value read straight
+	# off state["population"] (see BottomBanner.refresh_bottom_banner), not
+	# derived from income * multiplier like the placeholder rows below it -
+	# the multiplier slot is unused for it, kept at 1 only so every row is the
+	# same shape.
+	["population", "Population", "☺", 1],
 	["food", "Food", "☘", 200],
 	["region_wealth", "Region wea...", "◉", 100],
 	["income", "Income", "$", 5],
@@ -254,6 +275,12 @@ func _on_settlement_tab_selected(tab_name: String) -> void:
 	_military_content.visible = tab_name == "Military"
 
 
+## Toggles the Recruitment/Construction modal for the currently selected
+## city. Body lives in campaign_bottom_banner.gd.
+func _on_recruitment_button_pressed() -> void:
+	BottomBanner.toggle_recruitment_modal(self)
+
+
 ## Closes the settlement panel (back button in the city panel header):
 ## clears the selection and re-runs the banner refresh, which hides the
 ## city/buildings panels and leaves only the core HUD visible - see
@@ -297,6 +324,7 @@ func _ready() -> void:
 	HudBuilder.build_top_bar(self)
 	HudBuilder.build_bottom_banner(self)
 	HudBuilder.build_turn_indicator(self)
+	HudBuilder.build_construction_alert_modal(self)
 
 	_province_map = ProvinceMap.new()
 	_province_map.name = "ProvinceMap"
@@ -376,6 +404,7 @@ func _ready() -> void:
 	manager.army_moved.connect(_on_army_moved_for_camera)
 	manager.army_moved.connect(_battle_ui.on_army_moved)
 	manager.army_battle.connect(_battle_ui.on_army_battle)
+	manager.construction_completed.connect(_on_construction_completed)
 	log_button.pressed.connect(_on_log_button_pressed)
 
 	# Armies are clamped to the map extent, so a random AI walk can't march
@@ -792,6 +821,16 @@ func _on_battle_resolved(
 
 func _on_game_over(_winner_id: int) -> void:
 	_refresh()
+
+
+## Fires once per building that finished construction during the turn just
+## resolved (see rust/campaign/src/model.rs's end_turn). Body lives in
+## campaign_bottom_banner.gd (kept as a thin wrapper here, same convention as
+## _refresh_bottom_banner) to stay under the gdlint file line limit.
+func _on_construction_completed(
+	faction_id: int, city_id: int, city_name: String, building_name: String
+) -> void:
+	BottomBanner.on_construction_completed(self, faction_id, city_id, city_name, building_name)
 
 
 func _append_log(text: String) -> void:

@@ -48,6 +48,13 @@ static func refresh_bottom_banner(ui: Node, state: Dictionary) -> void:
 		var income: int = int(shown_city["income"])
 		for row_def in ui.STAT_ROWS:
 			var key: String = row_def[0]
+			if key == "population":
+				# Real per-city value from Rust (grows 5%/turn there), not a
+				# placeholder derived from income like the rows below it.
+				ui._city_stat_value_labels[key].text = (HudBuilder.format_stat(
+					int(shown_city.get("population", 0))
+				))
+				continue
 			var multiplier: int = row_def[3]
 			ui._city_stat_value_labels[key].text = HudBuilder.format_stat(income * multiplier)
 
@@ -134,43 +141,30 @@ static func refresh_bottom_banner(ui: Node, state: Dictionary) -> void:
 		ui._city_stat_value_labels[key].text = "-"
 
 
-## Rebuilds the Buildings tray for `city` from the real Rust catalog/state:
-## a progress card if `city` has a construction under way, otherwise one
-## clickable card per building `manager.available_buildings()` still allows,
-## each labelled with its cost/turns/population requirement and disabled if
-## the current faction can't afford it or doesn't meet the population gate.
+## Rebuilds the Buildings tray for `city`: one card per building the city
+## already has (city["buildings"], a plain array of building keys), plus a
+## progress card first if a project is currently under way. Buildable-but-
+## not-yet-built entries no longer show here - see the Recruitment/
+## Construction modal (populate_recruitment_modal below) for those.
 static func refresh_buildings_cards(ui: Node, city: Dictionary) -> void:
 	for child in ui._buildings_cards_hbox.get_children():
 		child.queue_free()
-
-	var city_id: int = int(city["id"])
-	var population: int = int(city.get("population", 0))
-	var money := 0
-	for faction in ui.manager.get_state().get("factions", []):
-		if int(faction["id"]) == int(city["owner"]):
-			money = int(faction["money"])
-			break
 
 	var construction: Variant = city.get("construction")
 	if construction != null:
 		ui._buildings_cards_hbox.add_child(
 			HudBuildingsBuilder.build_construction_progress_card(construction)
 		)
-		return
 
-	var available: Array = ui.manager.available_buildings(city_id)
-	if available.is_empty():
+	var built: Array = city.get("buildings", [])
+	if built.is_empty() and construction == null:
 		ui._buildings_cards_hbox.add_child(HudBuildingsBuilder.build_no_buildings_card())
 		return
 
-	for building in available:
-		var can_afford: bool = money >= int(building["gold_cost"])
-		var enough_population: bool = population >= int(building["required_population"])
-		var card := HudBuildingsBuilder.build_available_building_card(
-			building, can_afford and enough_population
+	for key in built:
+		ui._buildings_cards_hbox.add_child(
+			HudBuildingsBuilder.build_owned_building_card(String(key))
 		)
-		card.pressed.connect(ui._on_build_building_pressed.bind(city_id, String(building["key"])))
-		ui._buildings_cards_hbox.add_child(card)
 
 
 ## Buildings-tray card pressed: asks Rust to start construction, then
@@ -180,3 +174,111 @@ static func on_build_building_pressed(ui: Node, city_id: int, building_key: Stri
 	if ui.manager.start_construction(city_id, building_key):
 		ui._append_log("Construction of %s started." % building_key.capitalize())
 		ui._refresh()
+		# The modal's own buildable list is stale the instant this succeeds
+		# (the building just started is no longer available) - repopulate it
+		# in place rather than closing it, so the player can queue more than
+		# one city's worth of construction without reopening the modal.
+		if ui._recruitment_modal.visible:
+			populate_recruitment_modal(ui)
+
+
+## Toggles the Recruitment/Construction modal for whichever city is currently
+## selected - bound to the city panel's ⚒ button (RecruitmentButton).
+## Repopulates on every open so it always reflects live state (gold changes,
+## a construction just started elsewhere, etc).
+static func toggle_recruitment_modal(ui: Node) -> void:
+	if ui._selected_city_id == -1:
+		return
+	ui._recruitment_modal.visible = not ui._recruitment_modal.visible
+	if ui._recruitment_modal.visible:
+		populate_recruitment_modal(ui)
+
+
+## Rebuilds both columns of the Recruitment/Construction modal for the
+## currently selected city: buildable buildings (manager.available_buildings)
+## with a Build button per row, and the stub Army/Garrison troop rows (same
+## display-only lists the Military tab already uses - see ui.ARMY_UNITS/
+## ui.GARRISON_UNITS).
+static func populate_recruitment_modal(ui: Node) -> void:
+	var build_list: VBoxContainer = ui._recruitment_buildable_list
+	for child in build_list.get_children():
+		child.queue_free()
+
+	var city_id: int = ui._selected_city_id
+	var state: Dictionary = ui.manager.get_state()
+	var city: Dictionary = {}
+	for c in state.get("cities", []):
+		if int(c["id"]) == city_id:
+			city = c
+			break
+
+	var population: int = int(city.get("population", 0))
+	var money := 0
+	for faction in state.get("factions", []):
+		if int(faction["id"]) == int(city.get("owner", -1)):
+			money = int(faction["money"])
+			break
+
+	if city.get("construction") != null:
+		build_list.add_child(
+			HudBuildingsBuilder.build_construction_progress_card(city["construction"])
+		)
+	else:
+		var available: Array = ui.manager.available_buildings(city_id)
+		if available.is_empty():
+			build_list.add_child(HudBuildingsBuilder.build_no_buildings_card())
+		for building in available:
+			var can_afford: bool = money >= int(building["gold_cost"])
+			var enough_population: bool = population >= int(building["required_population"])
+			var key: String = String(building["key"])
+			build_list.add_child(
+				HudBuildingsBuilder.build_recruitment_buildable_row(
+					building,
+					can_afford and enough_population,
+					ui._on_build_building_pressed.bind(city_id, key)
+				)
+			)
+
+	var troop_list: VBoxContainer = ui._recruitment_troops_list
+	for child in troop_list.get_children():
+		child.queue_free()
+	for u in ui.ARMY_UNITS + ui.GARRISON_UNITS:
+		troop_list.add_child(
+			HudBuildingsBuilder.make_unit_row(
+				ui, String(u["name"]), String(u["icon"]), int(u["count"])
+			)
+		)
+
+
+## Fires once per building that finished construction during the turn just
+## resolved (see rust/campaign/src/model.rs's end_turn). Queues a short-lived
+## alert banner rather than showing one immediately, since several buildings
+## can complete across multiple factions/cities within the same end_turn()
+## call - mirrors battle_ui_controller.gd's queue-and-drain pattern, but
+## self-dismisses on a timer instead of waiting on an OK button.
+static func on_construction_completed(
+	ui: Node, faction_id: int, _city_id: int, city_name: String, building_name: String
+) -> void:
+	var faction_name := "Faction %d" % faction_id
+	for faction in ui.manager.get_state()["factions"]:
+		if int(faction["id"]) == faction_id:
+			faction_name = String(faction["name"])
+			break
+	var msg := "%s has constructed %s in %s." % [faction_name, building_name, city_name]
+	ui._construction_alert_queue.append(msg)
+	if not ui._construction_alert_processing:
+		_process_construction_alerts(ui)
+
+
+## Drains _construction_alert_queue one message at a time, showing each for a
+## few seconds before moving to the next (or hiding the modal if the queue is
+## now empty).
+static func _process_construction_alerts(ui: Node) -> void:
+	ui._construction_alert_processing = true
+	while not ui._construction_alert_queue.is_empty():
+		var msg: String = ui._construction_alert_queue.pop_front()
+		ui._construction_alert_label.text = msg
+		ui._construction_alert_modal.visible = true
+		await ui.get_tree().create_timer(3.0).timeout
+	ui._construction_alert_modal.visible = false
+	ui._construction_alert_processing = false

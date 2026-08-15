@@ -475,7 +475,10 @@ static func build_bottom_banner(ui: Node) -> void:
 static func _build_city_panel(ui: Node) -> void:
 	var panel := Control.new()
 	panel.name = "CityPanel"
-	anchor_rect(panel, 0.017, 0.617, 0.187, 0.99)
+	# Letterboxed layout (see target-phase3.png): a wide, short banner rather
+	# than a tall one - roughly half the old height (0.617-0.99 -> 0.80-0.99),
+	# with the buildings tray below picking up the freed-up width.
+	anchor_rect(panel, 0.017, 0.80, 0.187, 0.99)
 	panel.visible = false
 	# Army markers (campaign/army_layer.gd) are added to the scene tree after
 	# $UI, so within the shared canvas they'd draw over this panel by tree
@@ -494,7 +497,7 @@ static func _build_city_panel(ui: Node) -> void:
 	# Header: navy bar with the city name and a faction-colored tab.
 	var header := PanelContainer.new()
 	header.add_theme_stylebox_override("panel", style_box(ui.HUD_BLUE))
-	header.custom_minimum_size = Vector2(0, 40)
+	header.custom_minimum_size = Vector2(0, 30)
 	vbox.add_child(header)
 
 	var header_row := HBoxContainer.new()
@@ -514,9 +517,27 @@ static func _build_city_panel(ui: Node) -> void:
 	margin.add_child(ui._city_panel_name_label)
 
 	ui._city_panel_owner_tab = ColorRect.new()
-	ui._city_panel_owner_tab.custom_minimum_size = Vector2(36, 40)
+	ui._city_panel_owner_tab.custom_minimum_size = Vector2(28, 30)
 	ui._city_panel_owner_tab.color = Color.INDIAN_RED
 	header_row.add_child(ui._city_panel_owner_tab)
+
+	# Recruitment/Construction opener - sits on the right side of the header,
+	# next to the close button, and opens the modal built by
+	# HudBuildingsBuilder.build_recruitment_modal().
+	ui.recruitment_button = Button.new()
+	ui.recruitment_button.name = "RecruitmentButton"
+	ui.recruitment_button.text = "⚒"
+	ui.recruitment_button.tooltip_text = "Recruitment / Construction"
+	ui.recruitment_button.focus_mode = Control.FOCUS_NONE
+	ui.recruitment_button.custom_minimum_size = Vector2(28, 30)
+	set_font(ui.recruitment_button, ui.FONT_BOLD, 14)
+	ui.recruitment_button.add_theme_color_override("font_color", Color.WHITE)
+	ui.recruitment_button.add_theme_color_override("font_hover_color", Color.WHITE)
+	ui.recruitment_button.add_theme_stylebox_override("normal", style_box(ui.HUD_MAROON))
+	ui.recruitment_button.add_theme_stylebox_override("hover", style_box(Color(0.68, 0.16, 0.12)))
+	ui.recruitment_button.add_theme_stylebox_override("pressed", style_box(Color(0.4, 0.07, 0.05)))
+	ui.recruitment_button.pressed.connect(ui._on_recruitment_button_pressed)
+	header_row.add_child(ui.recruitment_button)
 
 	# Back/close button - collapses the settlement panel back to the core
 	# HUD and clears the selection, so it doesn't linger on the next click.
@@ -524,7 +545,7 @@ static func _build_city_panel(ui: Node) -> void:
 	close_button.name = "CloseButton"
 	close_button.text = "✕"
 	close_button.focus_mode = Control.FOCUS_NONE
-	close_button.custom_minimum_size = Vector2(32, 40)
+	close_button.custom_minimum_size = Vector2(28, 30)
 	set_font(close_button, ui.FONT_BOLD, 16)
 	close_button.add_theme_color_override("font_color", Color.WHITE)
 	close_button.add_theme_color_override("font_hover_color", Color.WHITE)
@@ -550,13 +571,13 @@ static func _build_city_panel(ui: Node) -> void:
 	body_margin.add_child(body_vbox)
 
 	var gov_row := HBoxContainer.new()
-	gov_row.add_theme_constant_override("separation", 10)
-	gov_row.custom_minimum_size = Vector2(0, 60)
+	gov_row.add_theme_constant_override("separation", 8)
+	gov_row.custom_minimum_size = Vector2(0, 34)
 	body_vbox.add_child(gov_row)
 
 	var gov_button := PanelContainer.new()
 	gov_button.add_theme_stylebox_override("panel", style_box(Color(0.6, 0.6, 0.58)))
-	gov_button.custom_minimum_size = Vector2(60, 60)
+	gov_button.custom_minimum_size = Vector2(34, 34)
 	gov_row.add_child(gov_button)
 
 	var gov_label := Label.new()
@@ -583,7 +604,7 @@ static func _build_city_panel(ui: Node) -> void:
 	pill_sb.corner_radius_bottom_left = 14
 	pill_sb.corner_radius_bottom_right = 14
 	menu_pill.add_theme_stylebox_override("panel", pill_sb)
-	menu_pill.custom_minimum_size = Vector2(36, 28)
+	menu_pill.custom_minimum_size = Vector2(30, 24)
 	var menu_label := Label.new()
 	menu_label.text = "☰"
 	menu_label.add_theme_color_override("font_color", Color.WHITE)
@@ -722,6 +743,41 @@ static func build_battle_modal(ui: Node) -> void:
 		"pressed", style_box(Color(0.45, 0.1, 0.04), Color(0.85, 0.45, 0.1), 2)
 	)
 	ok_wrap.add_child(ui._battle_modal_ok_button)
+
+
+## ---------------------------------------------------------------------------
+## Construction-completed alert: a short-lived banner near the top of the
+## screen, mirroring build_battle_modal below but self-dismissing on a timer
+## (campaign_ui._process_construction_alerts) instead of waiting on an OK
+## button - see campaign_ui._on_construction_completed.
+## ---------------------------------------------------------------------------
+
+
+static func build_construction_alert_modal(ui: Node) -> void:
+	var panel := PanelContainer.new()
+	panel.name = "ConstructionAlertModal"
+	panel.visible = false
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Above the top bar/turn indicator (and everything else), same reasoning
+	# as the Economy panel's z_index above.
+	panel.z_index = 110
+	panel.add_theme_stylebox_override("panel", style_box(ui.HUD_BLUE_DARK, ui.HUD_GOLD, 2))
+	anchor_rect(panel, 0.28, 0.02, 0.72, 0.1)
+	ui._ui.add_child(panel)
+	ui._construction_alert_modal = panel
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_%s" % side, 10)
+	panel.add_child(margin)
+
+	ui._construction_alert_label = Label.new()
+	set_font(ui._construction_alert_label, LOCAL_FONT_SEMIBOLD, 14)
+	ui._construction_alert_label.add_theme_color_override("font_color", ui.HUD_CREAM)
+	ui._construction_alert_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ui._construction_alert_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	ui._construction_alert_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	margin.add_child(ui._construction_alert_label)
 
 
 static func format_stat(n: int) -> String:

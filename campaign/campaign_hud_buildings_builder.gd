@@ -13,7 +13,10 @@ const HudBuilder := preload("res://campaign/campaign_hud_builder.gd")
 static func build_buildings_panel(ui: Node) -> void:
 	var panel := Control.new()
 	panel.name = "BuildingsPanel"
-	HudBuilder.anchor_rect(panel, 0.19, 0.617, 0.762, 0.99)
+	# Matches the city panel's shrink (0.617-0.99 -> 0.80-0.99) and widens
+	# into the extra horizontal room freed up by the shorter banner (right
+	# edge stops short of the END TURN button, anchored at x=0.89).
+	HudBuilder.anchor_rect(panel, 0.19, 0.80, 0.86, 0.99)
 	panel.visible = false
 	# See the matching comment in _build_city_panel: lift above the army layer.
 	panel.z_index = 50
@@ -48,6 +51,8 @@ static func build_buildings_panel(ui: Node) -> void:
 	ui._military_content.visible = false
 	content_area.add_child(ui._military_content)
 
+	build_recruitment_modal(ui)
+
 
 static func _build_buildings_content(ui: Node) -> Control:
 	var cards_row := PanelContainer.new()
@@ -60,12 +65,22 @@ static func _build_buildings_content(ui: Node) -> Control:
 		cards_margin.add_theme_constant_override("margin_%s" % side, 4)
 	cards_row.add_child(cards_margin)
 
+	# Horizontal-only scroll so a city with more owned buildings than fit the
+	# tray's width can be scrolled through rather than forcing the panel
+	# taller or the cards smaller (see the target-phase3 reference layout).
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cards_margin.add_child(scroll)
+
 	var cards_hbox := HBoxContainer.new()
 	cards_hbox.add_theme_constant_override("separation", 4)
-	cards_margin.add_child(cards_hbox)
+	scroll.add_child(cards_hbox)
 	# Populated per-selection by campaign_ui.gd::_refresh_buildings_cards()
-	# from the real Rust catalog/construction state - see that function
-	# rather than this builder for the actual card contents.
+	# from the city's real owned-buildings list - see that function rather
+	# than this builder for the actual card contents.
 	ui._buildings_cards_hbox = cards_hbox
 
 	var red_strip := PanelContainer.new()
@@ -193,6 +208,13 @@ static func _make_unit_column(
 	return col
 
 
+## Public wrapper around _make_unit_row for the Recruitment/Construction
+## modal (campaign_bottom_banner.gd), which lives in a different file and so
+## can't reach the underscore-prefixed helper directly.
+static func make_unit_row(ui: Node, unit_name: String, icon: String, count: int) -> PanelContainer:
+	return _make_unit_row(ui, unit_name, icon, count)
+
+
 static func _make_unit_row(ui: Node, unit_name: String, icon: String, count: int) -> PanelContainer:
 	var row := PanelContainer.new()
 	row.add_theme_stylebox_override("panel", HudBuilder.style_box(Color(1.0, 1.0, 1.0, 0.5)))
@@ -315,6 +337,41 @@ static func _make_building_card(name: String, level: int, locked: bool) -> VBoxC
 	return card
 
 
+## One card in the main buildings tray for a building the city already has -
+## `key` is a raw building key (e.g. "farm"), as stored in the city dict's
+## "buildings" array (godot_api.rs exposes only the key there, not a display
+## name), so this capitalizes it the same way the "Construction of %s
+## started" log line already does elsewhere.
+static func build_owned_building_card(key: String) -> VBoxContainer:
+	var card := VBoxContainer.new()
+	card.add_theme_constant_override("separation", 2)
+	card.custom_minimum_size = Vector2(84, 0)
+
+	var image_panel := PanelContainer.new()
+	image_panel.add_theme_stylebox_override(
+		"panel", HudBuilder.style_box(Color.WHITE, Color.BLACK, 1)
+	)
+	image_panel.custom_minimum_size = Vector2(0, 60)
+	card.add_child(image_panel)
+
+	var check_label := Label.new()
+	check_label.text = "✓"
+	HudBuilder.set_font(check_label, LOCAL_FONT_BOLD, 20)
+	check_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	check_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	check_label.add_theme_color_override("font_color", Color(0.15, 0.5, 0.15))
+	image_panel.add_child(check_label)
+
+	var caption := Label.new()
+	caption.text = key.capitalize()
+	HudBuilder.set_font(caption, LOCAL_FONT_SEMIBOLD)
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.add_theme_color_override("font_color", Color(0.15, 0.15, 0.15))
+	card.add_child(caption)
+
+	return card
+
+
 ## A clickable buildings-tray card for one entry from
 ## CampaignManager.available_buildings() - `building` is
 ## `{key, name, gold_cost, build_time_turns, required_population,
@@ -380,3 +437,187 @@ static func build_no_buildings_card() -> Label:
 	HudBuilder.set_font(label, LOCAL_FONT_SEMIBOLD, 12)
 	label.add_theme_color_override("font_color", Color(0.35, 0.35, 0.35))
 	return label
+
+
+## ---------------------------------------------------------------------------
+## Recruitment/Construction modal: opened from the city panel's ⚒ button
+## (campaign_ui._on_recruitment_button_pressed), lists buildable buildings
+## (CampaignManager.available_buildings(), with a build button per row) and
+## stub troop rows (ui.ARMY_UNITS/ui.GARRISON_UNITS - same display-only
+## caveat as the Military tab, no recruitment backend exists yet). Built
+## once, hidden by default; populated for whichever city is selected each
+## time it's opened - see campaign_bottom_banner.gd's
+## toggle_recruitment_modal/populate_recruitment_modal.
+## ---------------------------------------------------------------------------
+
+
+static func build_recruitment_modal(ui: Node) -> void:
+	var backdrop := ColorRect.new()
+	backdrop.name = "RecruitmentModalBackdrop"
+	backdrop.color = Color(0, 0, 0, 0.55)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	backdrop.z_index = 100
+	HudBuilder.anchor_rect(backdrop, 0.0, 0.0, 1.0, 1.0)
+	backdrop.visible = false
+	ui._ui.add_child(backdrop)
+	ui._recruitment_modal = backdrop
+
+	# Click-outside-to-close: the panel below has its own (default STOP)
+	# mouse_filter, so a click landing on it never reaches this handler -
+	# only a click on the dimmed backdrop itself does.
+	backdrop.gui_input.connect(
+		func(event: InputEvent):
+			if (
+				event is InputEventMouseButton
+				and event.pressed
+				and event.button_index == MOUSE_BUTTON_LEFT
+			):
+				backdrop.visible = false
+	)
+
+	var panel := PanelContainer.new()
+	panel.name = "RecruitmentPanel"
+	panel.add_theme_stylebox_override(
+		"panel", HudBuilder.style_box(ui.HUD_BLUE_DARK, ui.HUD_GOLD, 2)
+	)
+	HudBuilder.anchor_rect(panel, 0.22, 0.12, 0.78, 0.78)
+	backdrop.add_child(panel)
+
+	var outer_margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		outer_margin.add_theme_constant_override("margin_%s" % side, 14)
+	panel.add_child(outer_margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	outer_margin.add_child(vbox)
+
+	var header_row := HBoxContainer.new()
+	vbox.add_child(header_row)
+
+	var title := Label.new()
+	title.text = "Recruitment / Construction"
+	HudBuilder.set_font(title, LOCAL_FONT_BOLD, 20)
+	title.add_theme_color_override("font_color", ui.HUD_CREAM)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_row.add_child(title)
+
+	var close_button := Button.new()
+	close_button.text = "✕"
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.custom_minimum_size = Vector2(30, 30)
+	close_button.add_theme_color_override("font_color", Color.WHITE)
+	close_button.add_theme_stylebox_override("normal", HudBuilder.style_box(ui.HUD_MAROON))
+	close_button.add_theme_stylebox_override("hover", HudBuilder.style_box(Color(0.68, 0.16, 0.12)))
+	close_button.pressed.connect(func(): backdrop.visible = false)
+	header_row.add_child(close_button)
+
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation", 14)
+	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(columns)
+
+	# Left column: buildable buildings, one row per entry with a build button.
+	var build_col := VBoxContainer.new()
+	build_col.add_theme_constant_override("separation", 6)
+	build_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	columns.add_child(build_col)
+
+	var build_title := Label.new()
+	build_title.text = "Construction"
+	HudBuilder.set_font(build_title, LOCAL_FONT_SEMIBOLD, 15)
+	build_title.add_theme_color_override("font_color", ui.HUD_CREAM)
+	build_col.add_child(build_title)
+
+	var build_scroll := ScrollContainer.new()
+	build_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	build_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	build_col.add_child(build_scroll)
+
+	var build_list := VBoxContainer.new()
+	build_list.add_theme_constant_override("separation", 4)
+	build_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	build_scroll.add_child(build_list)
+	ui._recruitment_buildable_list = build_list
+
+	# Right column: stub troop rows, same display-only lists the Military tab
+	# already uses.
+	var troop_col := VBoxContainer.new()
+	troop_col.add_theme_constant_override("separation", 6)
+	troop_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	columns.add_child(troop_col)
+
+	var troop_title := Label.new()
+	troop_title.text = "Recruitment"
+	HudBuilder.set_font(troop_title, LOCAL_FONT_SEMIBOLD, 15)
+	troop_title.add_theme_color_override("font_color", ui.HUD_CREAM)
+	troop_col.add_child(troop_title)
+
+	var troop_scroll := ScrollContainer.new()
+	troop_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	troop_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	troop_col.add_child(troop_scroll)
+
+	var troop_list := VBoxContainer.new()
+	troop_list.add_theme_constant_override("separation", 4)
+	troop_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	troop_scroll.add_child(troop_list)
+	ui._recruitment_troops_list = troop_list
+
+
+## One buildable-building row for the Recruitment/Construction modal's left
+## column: name/cost/turns text plus a Build button wired to
+## campaign_ui._on_build_building_pressed. `building` is one entry from
+## CampaignManager.available_buildings() - see build_available_building_card
+## for its shape.
+static func build_recruitment_buildable_row(
+	building: Dictionary, enabled: bool, on_pressed: Callable
+) -> PanelContainer:
+	var row := PanelContainer.new()
+	row.add_theme_stylebox_override("panel", HudBuilder.style_box(Color(1.0, 1.0, 1.0, 0.08)))
+
+	var margin := MarginContainer.new()
+	for side in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_%s" % side, 6)
+	row.add_child(margin)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 8)
+	margin.add_child(hbox)
+
+	var text_vbox := VBoxContainer.new()
+	text_vbox.add_theme_constant_override("separation", 0)
+	text_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_child(text_vbox)
+
+	var name_label := Label.new()
+	name_label.text = String(building["name"])
+	HudBuilder.set_font(name_label, LOCAL_FONT_SEMIBOLD, 14)
+	name_label.add_theme_color_override("font_color", Color.WHITE)
+	text_vbox.add_child(name_label)
+
+	var turns: int = int(building["build_time_turns"])
+	var detail_label := Label.new()
+	detail_label.text = (
+		"%dg / %d turn%s / Pop %d"
+		% [
+			int(building["gold_cost"]),
+			turns,
+			"" if turns == 1 else "s",
+			int(building["required_population"]),
+		]
+	)
+	HudBuilder.set_font(detail_label, LOCAL_FONT_SEMIBOLD, 11)
+	detail_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+	text_vbox.add_child(detail_label)
+
+	var build_button := Button.new()
+	build_button.text = "Build"
+	build_button.disabled = not enabled
+	build_button.focus_mode = Control.FOCUS_NONE
+	build_button.custom_minimum_size = Vector2(64, 0)
+	HudBuilder.set_font(build_button, LOCAL_FONT_SEMIBOLD, 13)
+	build_button.pressed.connect(on_pressed)
+	hbox.add_child(build_button)
+
+	return row

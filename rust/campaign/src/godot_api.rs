@@ -7,7 +7,7 @@ use rand::thread_rng;
 
 use std::collections::HashMap;
 
-use crate::buildings::BuildingKind;
+use crate::buildings::{population_for_tier, BuildingKind};
 use crate::model::{
     ordinary_tax, ArmyId, BattleKind, BattleReport, Campaign, City, CityId, Faction, FactionId,
     MoveReport, Province, ProvinceId, TagValue, DEFAULT_MOVE_POINTS,
@@ -169,6 +169,18 @@ impl CampaignManager {
     #[signal]
     fn army_battle(report: VarDictionary);
 
+    /// Emitted once per building that finished construction during the
+    /// `end_turn()` call that just ran, after `turn_started` (and before
+    /// `game_over` if the same call also ended the campaign), so GDScript can
+    /// pop an alert modal for each.
+    #[signal]
+    fn construction_completed(
+        faction_id: i64,
+        city_id: i64,
+        city_name: GString,
+        building_name: GString,
+    );
+
     /// Move points every army starts each turn with, so the UI can draw a
     /// move-range ring without hardcoding the number.
     #[func]
@@ -323,6 +335,7 @@ impl CampaignManager {
                     position: def.city_position,
                     owner: owner_id,
                     province: Some(def.id),
+                    population: population_for_tier(def.tier),
                 });
             }
             provinces.push(Province {
@@ -709,13 +722,47 @@ impl CampaignManager {
         let winner = campaign.winner;
         let faction_id = campaign.current_faction_id() as i64;
         let turn = campaign.turn as i64;
+        let completions: Vec<(i64, i64, GString, GString)> = campaign
+            .last_completed_constructions
+            .iter()
+            .map(|(city_id, kind, completed_faction_id)| {
+                let city_name = campaign
+                    .cities
+                    .iter()
+                    .find(|c| c.id == *city_id)
+                    .map(|c| c.name.clone())
+                    .unwrap_or_default();
+                (
+                    *completed_faction_id as i64,
+                    *city_id as i64,
+                    GString::from(city_name.as_str()),
+                    GString::from(kind.spec().name),
+                )
+            })
+            .collect();
 
         if game_over {
+            for (faction_id, city_id, city_name, building_name) in completions {
+                self.signals().construction_completed().emit(
+                    faction_id,
+                    city_id,
+                    &city_name,
+                    &building_name,
+                );
+            }
             self.signals()
                 .game_over()
                 .emit(winner.map_or(-1, |w| w as i64));
         } else {
             self.signals().turn_started().emit(faction_id, turn);
+            for (faction_id, city_id, city_name, building_name) in completions {
+                self.signals().construction_completed().emit(
+                    faction_id,
+                    city_id,
+                    &city_name,
+                    &building_name,
+                );
+            }
         }
     }
 

@@ -3,7 +3,9 @@
 use rand::Rng;
 use std::collections::HashMap;
 
-use crate::buildings::{population_for_tier, BuildingKind, Construction, ResourceKind};
+#[cfg(test)]
+use crate::buildings::population_for_tier;
+use crate::buildings::{BuildingKind, Construction, ResourceKind};
 
 pub type FactionId = u32;
 pub type CityId = u32;
@@ -50,6 +52,11 @@ pub struct City {
     /// The province this city sits in, when the campaign was built from a map
     /// package. Taking the city takes the province with it.
     pub province: Option<ProvinceId>,
+    /// Stored population, initialized from `buildings::population_for_tier(tier)`
+    /// at construction time and then grown independently each turn by
+    /// `Campaign::grow_population` - tier no longer derives it live. See
+    /// `population_of`.
+    pub population: u32,
 }
 
 /// Money the "Ordinary Tax" - the levy the faction head places on each
@@ -299,6 +306,12 @@ pub struct Campaign {
     /// city - buildings are level-1-only, so there is no "build it again to
     /// upgrade it".
     pub buildings: HashMap<CityId, Vec<BuildingKind>>,
+    /// Constructions that finished during the most recent `end_turn()` call,
+    /// as (city, building, owning faction). Overwritten (not appended) at the
+    /// start of every `end_turn()`, so it always reflects only that call - the
+    /// GDExtension boundary reads this right after calling `end_turn()` to
+    /// emit `construction_completed` signals.
+    pub last_completed_constructions: Vec<(CityId, BuildingKind, FactionId)>,
 }
 
 impl Campaign {
@@ -319,6 +332,7 @@ impl Campaign {
             winner: None,
             constructions: HashMap::new(),
             buildings: HashMap::new(),
+            last_completed_constructions: Vec::new(),
         };
         campaign.collect_income(campaign.current_faction_id());
         campaign.check_game_over();
@@ -475,14 +489,25 @@ impl Campaign {
         }
     }
 
-    /// The population a city is assumed to have, derived from its tier. See
-    /// `buildings::population_for_tier` - there is no separate stored
-    /// population field, since level-1-only buildings never need it to grow.
+    /// Grows the population of every city owned by `faction_id` by 5%,
+    /// truncating towards zero (so a city under 20 population sees no visible
+    /// growth in a single turn - consistent with population being reported as
+    /// a whole number of people). Called once per faction-turn from
+    /// `end_turn`, in lockstep with `collect_income`/`progress_constructions`.
+    fn grow_population(&mut self, faction_id: FactionId) {
+        for city in self.cities.iter_mut().filter(|c| c.owner == faction_id) {
+            city.population += city.population / 20;
+        }
+    }
+
+    /// A city's current population: a stored value, initialized from
+    /// `buildings::population_for_tier(tier)` when the city is created and
+    /// grown 5% per turn thereafter by `grow_population`.
     pub fn population_of(&self, city_id: CityId) -> Option<u32> {
         self.cities
             .iter()
             .find(|c| c.id == city_id)
-            .map(|c| population_for_tier(c.tier))
+            .map(|c| c.population)
     }
 
     /// Every building type not yet built in `city_id` and not currently under
@@ -530,8 +555,7 @@ impl Campaign {
         }
 
         let spec = kind.spec();
-        let population = population_for_tier(city.tier);
-        if population < spec.required_population {
+        if city.population < spec.required_population {
             return Err("city population is too low for this building".into());
         }
 
@@ -579,6 +603,8 @@ impl Campaign {
         for (city_id, kind) in completed {
             self.constructions.remove(&city_id);
             self.buildings.entry(city_id).or_default().push(kind);
+            self.last_completed_constructions
+                .push((city_id, kind, faction_id));
         }
     }
 
@@ -1273,6 +1299,7 @@ impl Campaign {
         if self.game_over {
             return;
         }
+        self.last_completed_constructions.clear();
         self.turn += 1;
         let n = self.factions.len();
         let start = self.current_faction;
@@ -1293,6 +1320,7 @@ impl Campaign {
         let next = self.current_faction_id();
         self.progress_constructions(next);
         self.collect_income(next);
+        self.grow_population(next);
         self.refresh_movement(next);
         self.check_game_over();
     }
@@ -1349,6 +1377,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1357,6 +1386,7 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (1.0, 0.0),
                 owner: 1,
                 province: None,
@@ -1388,6 +1418,7 @@ mod tests {
                 id: 0,
                 name: "Big".into(),
                 tier: 4,
+                population: population_for_tier(4),
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1396,6 +1427,7 @@ mod tests {
                 id: 1,
                 name: "Small".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (100.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1433,6 +1465,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 tier: 2,
+                population: population_for_tier(2),
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1441,6 +1474,7 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 tier: 3,
+                population: population_for_tier(3),
                 position: (1.0, 0.0),
                 owner: 1,
                 province: None,
@@ -1478,6 +1512,7 @@ mod tests {
                 id: 0,
                 name: "Redcap".into(),
                 tier: 4,
+                population: population_for_tier(4),
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1486,6 +1521,7 @@ mod tests {
                 id: 1,
                 name: "Redtown".into(),
                 tier: 2,
+                population: population_for_tier(2),
                 position: (10.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1494,6 +1530,7 @@ mod tests {
                 id: 2,
                 name: "Bluecap".into(),
                 tier: 3,
+                population: population_for_tier(3),
                 position: (100.0, 0.0),
                 owner: 1,
                 province: None,
@@ -1627,6 +1664,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1635,6 +1673,7 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (1.0, 0.0),
                 owner: 1,
                 province: None,
@@ -1643,6 +1682,7 @@ mod tests {
                 id: 2,
                 name: "Greenhold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (2.0, 0.0),
                 owner: 2,
                 province: None,
@@ -1755,6 +1795,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1763,6 +1804,7 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (1.0, 0.0),
                 owner: 1,
                 province: None,
@@ -1771,12 +1813,49 @@ mod tests {
                 id: 2,
                 name: "Greenhold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (2.0, 0.0),
                 owner: 2,
                 province: None,
             },
         ];
         Campaign::new(factions, cities, 1000)
+    }
+
+    #[test]
+    fn end_turn_grows_owning_faction_population_by_five_percent() {
+        let mut c = end_turn_test_campaign();
+        let before = c.population_of(1).unwrap(); // Bluehold, owned by faction 1
+                                                  // current_faction starts at 0; the first end_turn() advances to
+                                                  // faction 1, whose city should grow.
+        c.end_turn();
+        let after = c.population_of(1).unwrap();
+        assert_eq!(after, before + before / 20, "population should grow ~5%");
+        // A city not owned by the faction whose turn it is must not grow.
+        assert_eq!(c.population_of(0).unwrap(), population_for_tier(1));
+    }
+
+    #[test]
+    fn end_turn_records_a_completed_construction_when_turns_remaining_hits_zero() {
+        let mut c = end_turn_test_campaign();
+        c.factions[1].money = 100_000;
+        c.start_construction(1, 1, BuildingKind::Farm).unwrap();
+        let build_time = BuildingKind::Farm.spec().build_time_turns;
+        assert!(c.last_completed_constructions.is_empty());
+        // Advance through faction 1's turns until the Farm finishes.
+        for _ in 0..build_time {
+            loop {
+                c.end_turn();
+                if c.current_faction_id() == 1 {
+                    break;
+                }
+            }
+        }
+        assert_eq!(
+            c.last_completed_constructions,
+            vec![(1, BuildingKind::Farm, 1)]
+        );
+        assert!(!c.constructions.contains_key(&1));
     }
 
     #[test]
@@ -1847,6 +1926,7 @@ mod tests {
                 id: 0,
                 name: "A".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (0.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1855,6 +1935,7 @@ mod tests {
                 id: 1,
                 name: "B".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (1.0, 0.0),
                 owner: 0,
                 province: None,
@@ -1863,6 +1944,7 @@ mod tests {
                 id: 2,
                 name: "C".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (2.0, 0.0),
                 owner: 1,
                 province: None,
@@ -1905,6 +1987,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: a,
                 owner: 0,
                 province: None,
@@ -1913,6 +1996,7 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: b,
                 owner: 1,
                 province: None,
@@ -2177,6 +2261,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (0.0, 0.0),
                 owner: 0,
                 province: Some(1),
@@ -2185,6 +2270,7 @@ mod tests {
                 id: 1,
                 name: "Bluehold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (100.0, 0.0),
                 owner: 1,
                 province: Some(2),
@@ -2302,6 +2388,7 @@ mod tests {
             id: 0,
             name: "Redhold".into(),
             tier: 1,
+            population: population_for_tier(1),
             position: (0.0, 0.0),
             owner: 0,
             province: Some(1),
@@ -2402,6 +2489,7 @@ mod tests {
                 id: 0,
                 name: "Redhold".into(),
                 tier: 1,
+                population: population_for_tier(1),
                 position: (0.0, 0.0),
                 owner: 0,
                 province: Some(1),
