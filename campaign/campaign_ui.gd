@@ -7,6 +7,7 @@ extends Node2D
 
 const ArmyLayer := preload("res://campaign/army_layer.gd")
 const BattleUiController := preload("res://campaign/battle_ui_controller.gd")
+const BottomBanner := preload("res://campaign/campaign_bottom_banner.gd")
 const HudBuilder := preload("res://campaign/campaign_hud_builder.gd")
 const ProvinceMap := preload("res://campaign/province_map.gd")
 const CityMarker := preload("res://campaign/city_marker.gd")
@@ -67,6 +68,10 @@ const HUD_BLUE := Color(0.247, 0.353, 0.51)
 const HUD_BLUE_DARK := Color(0.11, 0.15, 0.22)
 const HUD_CREAM := Color(0.95, 0.94, 0.88)
 const HUD_MAROON := Color(0.55, 0.1, 0.08)
+## Gilt border color for the ornate top-bar resource panel treatment (see
+## HudBuilder.build_top_bar), styled after the reference screenshot's framed
+## top-left resource cluster.
+const HUD_GOLD := Color(0.72, 0.58, 0.28)
 
 const FONT_MEDIUM := preload("res://assets/fonts/Baloo2-Medium.ttf")
 const FONT_SEMIBOLD := preload("res://assets/fonts/Baloo2-SemiBold.ttf")
@@ -164,6 +169,12 @@ var _buildings_panel: Control
 # HudBuilder.build_bottom_banner(), swapped in/out by _on_settlement_tab.
 var _buildings_content: Control
 var _military_content: Control
+
+# Container the buildable/under-construction cards get rebuilt into on every
+# _refresh_bottom_banner() call for the selected city - see
+# _refresh_buildings_cards(). Built once (empty) by
+# HudBuilder._build_buildings_content().
+var _buildings_cards_hbox: HBoxContainer
 
 # Military tab: stubbed unit rows, purely for visual layout - not backed by
 # any real army/garrison simulation state yet.
@@ -537,9 +548,13 @@ func _unhandled_input(event: InputEvent) -> void:
 					_selected_province_id = -1
 					_refresh_bottom_banner(manager.get_state())
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			# Right-click on open map does nothing; right-click only attacks
-			# via the marker handler in army_layer._on_marker_input.
-			pass
+			# Right-click on an army marker attacks/moves via the marker
+			# handler in army_layer._on_marker_input (resolved before this
+			# unhandled fallback runs); a right-click that reaches here missed
+			# every marker, so it just deselects whatever city/province/army
+			# is currently selected.
+			if _selected_city_id != -1 or _selected_province_id != -1 or _selected_army_id != -1:
+				_deselect_city()
 
 
 ## Screen position of every *actual* city, from its world position (Rust state,
@@ -574,6 +589,7 @@ func _ensure_city_marker(city: Dictionary) -> CityMarker:
 	var world_pos: Vector2 = _city_world_positions.get(id, Vector2.ZERO)
 	marker.position = _world_to_screen(world_pos) - marker.anchor_offset()
 	marker.clicked.connect(_on_city_marker_clicked.bind(id))
+	marker.right_clicked.connect(_deselect_city)
 	cities_root.add_child(marker)
 	city_markers[id] = marker
 
@@ -581,8 +597,24 @@ func _ensure_city_marker(city: Dictionary) -> CityMarker:
 
 
 ## Clicking a city marker selects it and shows it in the bottom info panel.
+## Clicking the already-selected city instead toggles it off (deselect),
+## matching the right-click deselect shortcut below.
 func _on_city_marker_clicked(city_id: int) -> void:
+	if _selected_city_id == city_id:
+		_deselect_city()
+		return
 	_selected_city_id = city_id
+	_selected_province_id = -1
+	_selected_army_id = -1
+	_army_layer.select(-1)
+	_refresh_bottom_banner(manager.get_state())
+
+
+## Clears whichever city/province/army is selected and hides the settlement
+## panel - shared by right-click-to-deselect (marker and open-map) and
+## left-clicking an already-selected city to toggle it off.
+func _deselect_city() -> void:
+	_selected_city_id = -1
 	_selected_province_id = -1
 	_selected_army_id = -1
 	_army_layer.select(-1)
@@ -873,115 +905,21 @@ func _set_cam_zoom(zoom: float) -> void:
 
 ## Refreshes the core HUD (always) and the settlement panel (only while a city
 ## is selected - hidden entirely otherwise, never falling back to a "current" city).
+## Body lives in campaign_bottom_banner.gd (kept as a thin wrapper here since
+## it's called by name and bound to signals across this file).
 func _refresh_bottom_banner(state: Dictionary) -> void:
-	end_turn_button.text = "END TURN %d" % int(state["round"])
-	end_turn_button.disabled = (
-		bool(state["game_over"]) or _ai_running or _player_defeated or _battle_ui.is_pending()
-	)
+	BottomBanner.refresh_bottom_banner(self, state)
 
-	var year_label: Label = _top_bar_stat_value_labels.get("Year")
-	if year_label != null:
-		var year: int = START_YEAR + (int(state["round"]) - 1) * YEARS_PER_TURN
-		year_label.text = "%d AD" % year
 
-	var shown_city: Dictionary = {}
-	if _selected_city_id != -1:
-		for city in state["cities"]:
-			if int(city["id"]) == _selected_city_id:
-				shown_city = city
-				break
-		# The selected city no longer exists (e.g. captured/eliminated) -
-		# clear the stale selection rather than silently showing nothing.
-		if shown_city.is_empty():
-			_selected_city_id = -1
+## Rebuilds the Buildings tray for `city` from the real Rust catalog/state.
+## Body lives in campaign_bottom_banner.gd.
+func _refresh_buildings_cards(city: Dictionary) -> void:
+	BottomBanner.refresh_buildings_cards(self, city)
 
-	if not shown_city.is_empty():
-		_city_panel.visible = true
-		_buildings_panel.visible = true
 
-		_city_panel_name_label.text = shown_city["name"]
-		_city_panel_owner_tab.color = (_faction_colors[
-			int(shown_city["owner"]) % _faction_colors.size()
-		])
-
-		var income: int = int(shown_city["income"])
-		for row_def in STAT_ROWS:
-			var key: String = row_def[0]
-			var multiplier: int = row_def[3]
-			_city_stat_value_labels[key].text = HudBuilder.format_stat(income * multiplier)
-		return
-
-	# An army marker was clicked: show its owner/movement/position in the same
-	# panel. Reuses the settlement panel's name label + owner tab + stat rows
-	# rather than adding new widgets, since there's no dedicated army panel;
-	# the stat rows don't semantically match army fields, so their labels are
-	# just repurposed to carry movement/position text.
-	var shown_army: Dictionary = {}
-	if _selected_army_id != -1:
-		for army in state.get("armies", []):
-			if int(army["id"]) == _selected_army_id:
-				shown_army = army
-				break
-		if shown_army.is_empty():
-			_selected_army_id = -1
-			_army_layer.select(-1)
-
-	if not shown_army.is_empty():
-		_city_panel.visible = true
-		_buildings_panel.visible = false
-
-		var owner_id: int = int(shown_army["owner"])
-		var faction_name := "Faction %d" % owner_id
-		for faction in state.get("factions", []):
-			if int(faction["id"]) == owner_id:
-				faction_name = String(faction["name"])
-				break
-
-		_city_panel_name_label.text = "%s (%s)" % [shown_army["name"], faction_name]
-		_city_panel_owner_tab.color = _faction_colors[owner_id % _faction_colors.size()]
-
-		for row_def in STAT_ROWS:
-			_city_stat_value_labels[row_def[0]].text = "-"
-		_city_stat_value_labels["income"].text = (
-			"%.1f / %.1f" % [float(shown_army["movement"]), float(shown_army["max_movement"])]
-		)
-		_city_stat_value_labels["food"].text = (
-			"(%.0f, %.0f)" % [float(shown_army["x"]), float(shown_army["y"])]
-		)
-		_city_stat_value_labels["region_wealth"].text = (
-			"Garrisoned" if int(shown_army["garrisoned"]) != -1 else "In the field"
-		)
-		return
-
-	# A province with no city of its own was clicked: show its name/owner in
-	# the same panel rather than nothing, but there's no settlement to run a
-	# buildings/military tray for.
-	var shown_province: Dictionary = {}
-	if _selected_province_id != -1:
-		for province in state.get("provinces", []):
-			if int(province["id"]) == _selected_province_id:
-				shown_province = province
-				break
-		if shown_province.is_empty():
-			_selected_province_id = -1
-
-	if shown_province.is_empty():
-		_city_panel.visible = false
-		_buildings_panel.visible = false
-		return
-
-	_city_panel.visible = true
-	_buildings_panel.visible = false
-
-	_city_panel_name_label.text = shown_province["name"]
-	var owner: int = int(shown_province["owner"])
-	_city_panel_owner_tab.color = (
-		_faction_colors[owner % _faction_colors.size()] if owner >= 0 else Color(0.5, 0.5, 0.5)
-	)
-
-	for row_def in STAT_ROWS:
-		var key: String = row_def[0]
-		_city_stat_value_labels[key].text = "-"
+## Buildings-tray card pressed. Body lives in campaign_bottom_banner.gd.
+func _on_build_building_pressed(city_id: int, building_key: String) -> void:
+	BottomBanner.on_build_building_pressed(self, city_id, building_key)
 
 
 ## Top-middle turn-order indicator: shows whichever faction is acting this

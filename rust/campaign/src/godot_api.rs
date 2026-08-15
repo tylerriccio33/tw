@@ -7,6 +7,7 @@ use rand::thread_rng;
 
 use std::collections::HashMap;
 
+use crate::buildings::BuildingKind;
 use crate::model::{
     ordinary_tax, ArmyId, BattleKind, BattleReport, Campaign, City, CityId, Faction, FactionId,
     MoveReport, Province, ProvinceId, TagValue, DEFAULT_MOVE_POINTS,
@@ -461,6 +462,19 @@ impl CampaignManager {
                 "garrison",
                 c.garrison_of(city.id).map_or(-1, |a| a.id as i64),
             );
+            cd.set("population", c.population_of(city.id).unwrap_or(0) as i64);
+            let mut built = VarArray::new();
+            for kind in c.buildings.get(&city.id).into_iter().flatten() {
+                built.push(&kind.key().to_variant());
+            }
+            cd.set("buildings", &built.to_variant());
+            if let Some(construction) = c.constructions.get(&city.id) {
+                let mut con = VarDictionary::new();
+                con.set("key", construction.kind.key());
+                con.set("name", construction.kind.spec().name);
+                con.set("turns_remaining", construction.turns_remaining as i64);
+                cd.set("construction", &con.to_variant());
+            }
             cities.push(&cd.to_variant());
         }
 
@@ -605,6 +619,63 @@ impl CampaignManager {
         let mut rng = thread_rng();
         campaign
             .recruit_at_city(city_id as CityId, &mut rng)
+            .is_ok()
+    }
+
+    /// Every building `city_id` could start constructing right now (not
+    /// already built there, and no other project already in progress), as an
+    /// array of `{key, name, gold_cost, build_time_turns, required_population,
+    /// production_resource, production_amount}` dicts. `production_resource`
+    /// is "" and `production_amount` is 0 for a building (like Barracks) that
+    /// produces nothing. Empty for an unknown city.
+    #[func]
+    fn available_buildings(&self, city_id: i64) -> VarArray {
+        let mut out = VarArray::new();
+        let Some(campaign) = self.campaign.as_ref() else {
+            return out;
+        };
+        for kind in campaign.available_buildings(city_id as CityId) {
+            let spec = kind.spec();
+            let mut bd = VarDictionary::new();
+            bd.set("key", kind.key());
+            bd.set("name", spec.name);
+            bd.set("gold_cost", spec.gold_cost as i64);
+            bd.set("build_time_turns", spec.build_time_turns as i64);
+            bd.set("required_population", spec.required_population as i64);
+            let (resource, amount) = spec
+                .production
+                .map(|(resource, amount)| {
+                    let name = match resource {
+                        crate::buildings::ResourceKind::Gold => "gold",
+                        crate::buildings::ResourceKind::Food => "food",
+                    };
+                    (name, amount)
+                })
+                .unwrap_or(("", 0));
+            bd.set("production_resource", resource);
+            bd.set("production_amount", amount as i64);
+            out.push(&bd.to_variant());
+        }
+        out
+    }
+
+    /// Starts building `building_key` (e.g. "farm", "mine", "market",
+    /// "barracks") in `city_id` on behalf of the current faction, deducting
+    /// its gold cost immediately. Returns true on success; false if the
+    /// faction doesn't own the city, a project is already in progress there,
+    /// the building is already built, the city's population is too low, the
+    /// faction can't afford it, or `building_key` isn't a real building.
+    #[func]
+    fn start_construction(&mut self, city_id: i64, building_key: GString) -> bool {
+        let Some(campaign) = self.campaign.as_mut() else {
+            return false;
+        };
+        let Some(kind) = BuildingKind::from_key(&building_key.to_string()) else {
+            return false;
+        };
+        let faction_id = campaign.current_faction_id();
+        campaign
+            .start_construction(faction_id, city_id as CityId, kind)
             .is_ok()
     }
 

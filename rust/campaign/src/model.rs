@@ -3,6 +3,8 @@
 use rand::Rng;
 use std::collections::HashMap;
 
+use crate::buildings::{population_for_tier, BuildingKind, Construction, ResourceKind};
+
 pub type FactionId = u32;
 pub type CityId = u32;
 pub type ArmyId = u32;
@@ -69,17 +71,23 @@ pub fn ordinary_tax(tier: u32) -> i32 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IncomeSource {
     OrdinaryTax,
+    /// Gold produced by completed buildings (see `buildings::ResourceKind::Gold`)
+    /// across every city the faction holds. Food-producing buildings don't
+    /// feed this - only gold output reaches the treasury.
+    BuildingProduction,
 }
 
 impl IncomeSource {
     /// Every income source, so callers (and `faction_income`) can iterate the
     /// full set without hardcoding which streams exist.
-    pub const ALL: [IncomeSource; 1] = [IncomeSource::OrdinaryTax];
+    pub const ALL: [IncomeSource; 2] =
+        [IncomeSource::OrdinaryTax, IncomeSource::BuildingProduction];
 
     /// Human-readable name, matching the "Ordinary Tax" label the UI shows.
     pub fn label(self) -> &'static str {
         match self {
             IncomeSource::OrdinaryTax => "Ordinary Tax",
+            IncomeSource::BuildingProduction => "Building Production",
         }
     }
 }
@@ -282,6 +290,15 @@ pub struct Campaign {
     pub current_faction: usize,
     pub game_over: bool,
     pub winner: Option<FactionId>,
+    /// At most one building project per city, keyed by city id. Progressed by
+    /// one turn each time that city's owner ends their turn (`end_turn` ->
+    /// `progress_constructions`); removed and folded into `buildings` on
+    /// completion.
+    pub constructions: HashMap<CityId, Construction>,
+    /// Completed buildings per city. A `BuildingKind` appears at most once per
+    /// city - buildings are level-1-only, so there is no "build it again to
+    /// upgrade it".
+    pub buildings: HashMap<CityId, Vec<BuildingKind>>,
 }
 
 impl Campaign {
@@ -300,6 +317,8 @@ impl Campaign {
             current_faction: 0,
             game_over: false,
             winner: None,
+            constructions: HashMap::new(),
+            buildings: HashMap::new(),
         };
         campaign.collect_income(campaign.current_faction_id());
         campaign.check_game_over();
@@ -425,6 +444,18 @@ impl Campaign {
                 .iter()
                 .map(|c| ordinary_tax(c.tier))
                 .sum(),
+            // Sum the gold output of every completed building in every city
+            // the faction holds. Food-producing buildings contribute nothing
+            // here - see `IncomeSource::BuildingProduction`.
+            IncomeSource::BuildingProduction => self
+                .cities_owned_by(faction_id)
+                .iter()
+                .flat_map(|c| self.buildings.get(&c.id))
+                .flatten()
+                .filter_map(|kind| kind.spec().production)
+                .filter(|(resource, _)| *resource == ResourceKind::Gold)
+                .map(|(_, amount)| amount)
+                .sum(),
         }
     }
 
@@ -441,6 +472,113 @@ impl Campaign {
         let income = self.faction_income(faction_id);
         if let Some(f) = self.faction_mut(faction_id) {
             f.money += income;
+        }
+    }
+
+    /// The population a city is assumed to have, derived from its tier. See
+    /// `buildings::population_for_tier` - there is no separate stored
+    /// population field, since level-1-only buildings never need it to grow.
+    pub fn population_of(&self, city_id: CityId) -> Option<u32> {
+        self.cities
+            .iter()
+            .find(|c| c.id == city_id)
+            .map(|c| population_for_tier(c.tier))
+    }
+
+    /// Every building type not yet built in `city_id` and not currently under
+    /// construction there. Empty (rather than erroring) for an unknown city,
+    /// same convention as `cities_owned_by`.
+    pub fn available_buildings(&self, city_id: CityId) -> Vec<BuildingKind> {
+        if self.constructions.contains_key(&city_id) {
+            return Vec::new();
+        }
+        let built = self.buildings.get(&city_id);
+        BuildingKind::ALL
+            .into_iter()
+            .filter(|k| built.is_none_or(|b| !b.contains(k)))
+            .collect()
+    }
+
+    /// Queues `kind` for construction in `city_id` on behalf of `faction_id`,
+    /// deducting its gold cost immediately. Rejected (with no state change)
+    /// unless: `faction_id` owns the city, the city isn't already building
+    /// something, `kind` isn't already built there, the city's population
+    /// meets `kind`'s requirement, and the faction can afford it.
+    pub fn start_construction(
+        &mut self,
+        faction_id: FactionId,
+        city_id: CityId,
+        kind: BuildingKind,
+    ) -> Result<(), String> {
+        let city = self
+            .cities
+            .iter()
+            .find(|c| c.id == city_id)
+            .ok_or_else(|| "no such city".to_string())?;
+        if city.owner != faction_id {
+            return Err("faction does not own this city".into());
+        }
+        if self.constructions.contains_key(&city_id) {
+            return Err("city already has a construction in progress".into());
+        }
+        if self
+            .buildings
+            .get(&city_id)
+            .is_some_and(|b| b.contains(&kind))
+        {
+            return Err("building already constructed in this city".into());
+        }
+
+        let spec = kind.spec();
+        let population = population_for_tier(city.tier);
+        if population < spec.required_population {
+            return Err("city population is too low for this building".into());
+        }
+
+        let faction = self
+            .factions
+            .iter_mut()
+            .find(|f| f.id == faction_id)
+            .ok_or_else(|| "no such faction".to_string())?;
+        if faction.money < spec.gold_cost {
+            return Err("not enough gold".into());
+        }
+        faction.money -= spec.gold_cost;
+
+        self.constructions.insert(
+            city_id,
+            Construction {
+                kind,
+                turns_remaining: spec.build_time_turns,
+            },
+        );
+        Ok(())
+    }
+
+    /// Advances every construction project owned by `faction_id` by one
+    /// turn, completing (and folding into `buildings`) any that reach zero.
+    /// Called from `end_turn` for whichever faction's turn is starting, so a
+    /// project only progresses on its owner's own turns.
+    fn progress_constructions(&mut self, faction_id: FactionId) {
+        let city_ids: Vec<CityId> = self
+            .cities
+            .iter()
+            .filter(|c| c.owner == faction_id)
+            .map(|c| c.id)
+            .collect();
+
+        let mut completed = Vec::new();
+        for city_id in city_ids {
+            if let Some(construction) = self.constructions.get_mut(&city_id) {
+                construction.turns_remaining = construction.turns_remaining.saturating_sub(1);
+                if construction.turns_remaining == 0 {
+                    completed.push((city_id, construction.kind));
+                }
+            }
+        }
+        for (city_id, kind) in completed {
+            self.constructions.remove(&city_id);
+            self.buildings.entry(city_id).or_default().push(kind);
         }
     }
 
@@ -1153,6 +1291,7 @@ impl Campaign {
             self.round += 1;
         }
         let next = self.current_faction_id();
+        self.progress_constructions(next);
         self.collect_income(next);
         self.refresh_movement(next);
         self.check_game_over();
@@ -2410,5 +2549,193 @@ mod tests {
         // March the garrison out of its city.
         c.move_army(0, (200.0, 0.0), &mut rng).unwrap();
         assert!(c.recruit_at_city(0, &mut rng).is_err());
+    }
+
+    // --- Buildings -----------------------------------------------------
+
+    #[test]
+    fn population_of_scales_with_city_tier() {
+        let c = sample_campaign();
+        // sample_campaign's cities are both tier 1.
+        assert_eq!(c.population_of(0), Some(population_for_tier(1)));
+        assert_eq!(c.population_of(1), Some(population_for_tier(1)));
+        assert_eq!(c.population_of(999), None);
+    }
+
+    #[test]
+    fn available_buildings_lists_the_full_catalog_before_anything_is_built() {
+        let c = sample_campaign();
+        let available = c.available_buildings(0);
+        assert_eq!(available.len(), BuildingKind::ALL.len());
+        for kind in BuildingKind::ALL {
+            assert!(available.contains(&kind));
+        }
+    }
+
+    #[test]
+    fn start_construction_deducts_gold_and_queues_the_project() {
+        let mut c = sample_campaign();
+        c.factions[0].money = 1000;
+        let spec = BuildingKind::Farm.spec();
+
+        c.start_construction(0, 0, BuildingKind::Farm).unwrap();
+
+        assert_eq!(c.factions[0].money, 1000 - spec.gold_cost);
+        let construction = c.constructions.get(&0).unwrap();
+        assert_eq!(construction.kind, BuildingKind::Farm);
+        assert_eq!(construction.turns_remaining, spec.build_time_turns);
+    }
+
+    #[test]
+    fn start_construction_fails_without_enough_gold() {
+        let mut c = sample_campaign();
+        c.factions[0].money = 0;
+        let err = c.start_construction(0, 0, BuildingKind::Farm).unwrap_err();
+        assert!(err.contains("gold"));
+        assert!(!c.constructions.contains_key(&0));
+    }
+
+    /// The Market requires a population of 500 (tier * 500), which a tier-1
+    /// city's assumed population exactly meets - but the Barracks requires
+    /// 800, which it does not, so it must be rejected even with unlimited
+    /// gold.
+    #[test]
+    fn start_construction_fails_below_the_required_population() {
+        let mut c = sample_campaign();
+        c.factions[0].money = 100_000;
+
+        let err = c
+            .start_construction(0, 0, BuildingKind::Barracks)
+            .unwrap_err();
+        assert!(err.contains("population"));
+        assert!(!c.constructions.contains_key(&0));
+        assert!(
+            c.factions[0].money == 100_000,
+            "rejected order must not spend gold"
+        );
+
+        // Market's requirement (500) is exactly met by a tier-1 city
+        // (population_for_tier(1) == 500), so it must succeed.
+        assert!(c.start_construction(0, 0, BuildingKind::Market).is_ok());
+    }
+
+    #[test]
+    fn start_construction_fails_for_a_city_the_faction_does_not_own() {
+        let mut c = sample_campaign();
+        c.factions[0].money = 1000;
+        // City 1 belongs to faction 1, not faction 0.
+        let err = c.start_construction(0, 1, BuildingKind::Farm).unwrap_err();
+        assert!(err.contains("own"));
+    }
+
+    #[test]
+    fn start_construction_fails_while_another_project_is_in_progress() {
+        let mut c = sample_campaign();
+        c.factions[0].money = 1000;
+        c.start_construction(0, 0, BuildingKind::Farm).unwrap();
+        let err = c.start_construction(0, 0, BuildingKind::Mine).unwrap_err();
+        assert!(err.contains("progress"));
+    }
+
+    #[test]
+    fn start_construction_fails_if_already_built() {
+        let mut c = sample_campaign();
+        c.factions[0].money = 1000;
+        c.start_construction(0, 0, BuildingKind::Farm).unwrap();
+        // Farm takes 1 turn; end this faction's turn twice to cycle back
+        // around to faction 0 and let it complete.
+        c.end_turn();
+        c.end_turn();
+        assert!(c
+            .buildings
+            .get(&0)
+            .is_some_and(|b| b.contains(&BuildingKind::Farm)));
+
+        let err = c.start_construction(0, 0, BuildingKind::Farm).unwrap_err();
+        assert!(err.contains("already"));
+    }
+
+    #[test]
+    fn construction_completes_after_its_build_time_and_not_before() {
+        let mut c = sample_campaign();
+        c.factions[0].money = 1000;
+        // Mine takes 2 turns.
+        c.start_construction(0, 0, BuildingKind::Mine).unwrap();
+
+        // First end_turn (faction 0 -> faction 1) does not progress faction
+        // 0's own construction - only the faction whose turn is *starting*
+        // gets progressed.
+        c.end_turn();
+        assert_eq!(c.constructions.get(&0).unwrap().turns_remaining, 2);
+
+        // Second end_turn (faction 1 -> faction 0) is faction 0's turn
+        // starting: one turn of progress.
+        c.end_turn();
+        assert_eq!(c.constructions.get(&0).unwrap().turns_remaining, 1);
+        assert!(!c.buildings.contains_key(&0));
+
+        // Third/fourth end_turn cycles back to faction 0 again: completes.
+        c.end_turn();
+        c.end_turn();
+        assert!(!c.constructions.contains_key(&0));
+        assert!(c
+            .buildings
+            .get(&0)
+            .is_some_and(|b| b.contains(&BuildingKind::Mine)));
+    }
+
+    #[test]
+    fn completed_building_gold_production_feeds_faction_income() {
+        let mut c = sample_campaign();
+        c.factions[0].money = 1000;
+        c.start_construction(0, 0, BuildingKind::Mine).unwrap();
+        // Cycle turns until the Mine (2-turn build) completes.
+        for _ in 0..4 {
+            c.end_turn();
+        }
+        assert!(c
+            .buildings
+            .get(&0)
+            .is_some_and(|b| b.contains(&BuildingKind::Mine)));
+
+        let (_, mine_gold) = BuildingKind::Mine.spec().production.unwrap();
+        assert_eq!(
+            c.income_from(0, IncomeSource::BuildingProduction),
+            mine_gold
+        );
+    }
+
+    #[test]
+    fn food_production_does_not_feed_faction_gold_income() {
+        let mut c = sample_campaign();
+        c.factions[0].money = 1000;
+        c.start_construction(0, 0, BuildingKind::Farm).unwrap();
+        // Farm (1-turn build) completes after one full round back to
+        // faction 0.
+        c.end_turn();
+        c.end_turn();
+        assert!(c
+            .buildings
+            .get(&0)
+            .is_some_and(|b| b.contains(&BuildingKind::Farm)));
+
+        assert_eq!(c.income_from(0, IncomeSource::BuildingProduction), 0);
+    }
+
+    #[test]
+    fn available_buildings_excludes_a_completed_or_in_progress_building() {
+        let mut c = sample_campaign();
+        c.factions[0].money = 1000;
+        c.start_construction(0, 0, BuildingKind::Farm).unwrap();
+        // While in progress, the whole catalog is unavailable (only one
+        // project per city at a time).
+        assert!(c.available_buildings(0).is_empty());
+
+        c.end_turn();
+        c.end_turn();
+        // Once complete, everything except the built Farm is available again.
+        let available = c.available_buildings(0);
+        assert!(!available.contains(&BuildingKind::Farm));
+        assert_eq!(available.len(), BuildingKind::ALL.len() - 1);
     }
 }

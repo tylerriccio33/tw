@@ -13,6 +13,11 @@ extends Control
 ## knows how to draw itself and to report a click.
 
 signal clicked
+## Right-click on the marker - used by the HUD owner to deselect the city
+## rather than issue a move order (armies attack/move on right-click via
+## army_layer.gd's own marker handler; cities have no such order, so their
+## right-click is repurposed as a deselect shortcut).
+signal right_clicked
 
 const FONT := preload("res://assets/fonts/Baloo2-SemiBold.ttf")
 const NAME_FONT_SIZE := 14
@@ -169,5 +174,8 @@ func _draw_name() -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		clicked.emit()
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			clicked.emit()
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			right_clicked.emit()
